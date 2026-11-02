@@ -11,6 +11,7 @@ TEST_DB = os.environ.get("TEST_DATABASE_URL", "postgresql+psycopg:///tikray_test
 os.environ["DATABASE_URL"] = TEST_DB
 os.environ["SECRET_KEY"] = "clave-de-pruebas-" + "x" * 32
 os.environ["DOMINIO_BASE"] = "tikray.test"
+os.environ["TAREAS_EN_FONDO"] = "false"
 os.environ["CARPETA_ARCHIVOS"] = tempfile.mkdtemp(prefix="tikray-archivos-")
 
 import pytest  # noqa: E402

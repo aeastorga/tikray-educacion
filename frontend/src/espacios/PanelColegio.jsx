@@ -1,19 +1,28 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
-import { api, guardarToken, leerToken } from '../api.js'
+import { api, descargar, ErrorApi, guardarToken, leerToken } from '../api.js'
 import { aplicarImagen } from '../App.jsx'
+import Asistencia from './Asistencia.jsx'
 import Cabecera from './Cabecera.jsx'
 import CambiarClave from './CambiarClave.jsx'
 import Padron from './Padron.jsx'
 
 const NIVEL = { ver: 1, editar: 2 }
 const puede = (yo, modulo, nivel = 'ver') => (NIVEL[yo.permisos[modulo]] || 0) >= NIVEL[nivel]
+const CLAVE_YO = 'tikray.yo'
+
+// Sin internet (portería) se usa la última sesión conocida; el servidor sigue validando el token al enviar.
+function yoGuardado() {
+  try { return JSON.parse(localStorage.getItem(CLAVE_YO)) } catch { return null }
+}
 
 export default function PanelColegio({ colegio, setColegio }) {
   const navegar = useNavigate()
   const [yo, setYo] = useState(null)
 
-  const cargar = useCallback(() => api('/api/auth/yo').then(setYo).catch(() => {}), [])
+  const cargar = useCallback(() => api('/api/auth/yo')
+    .then((y) => { setYo(y); try { localStorage.setItem(CLAVE_YO, JSON.stringify(y)) } catch { /* modo privado */ } })
+    .catch((e) => { if (!(e instanceof ErrorApi)) setYo((actual) => actual || yoGuardado()) }), [])
   useEffect(() => { if (leerToken()) cargar() }, [cargar])
   useEffect(() => {
     const salir = () => navegar('/personal', { replace: true })
@@ -29,6 +38,7 @@ export default function PanelColegio({ colegio, setColegio }) {
 
   function salir() {
     guardarToken(null)
+    try { localStorage.removeItem(CLAVE_YO) } catch { /* modo privado */ }
     navegar('/', { replace: true })
   }
 
@@ -42,6 +52,7 @@ export default function PanelColegio({ colegio, setColegio }) {
       </Cabecera>
       <nav className="pestanas">
         <NavLink to="/panel" end>Inicio</NavLink>
+        {puede(yo, 'asistencia') && <NavLink to="/panel/asistencia">Asistencia</NavLink>}
         {puede(yo, 'padron') && <NavLink to="/panel/padron">Padrón</NavLink>}
         {puede(yo, 'personal') && <NavLink to="/panel/personal">Personal</NavLink>}
         {puede(yo, 'roles') && <NavLink to="/panel/roles">Roles</NavLink>}
@@ -51,6 +62,8 @@ export default function PanelColegio({ colegio, setColegio }) {
       <main className="contenido">
         <Routes>
           <Route index element={<p>Bienvenido, {yo.nombres}.</p>} />
+          <Route path="asistencia/*" element={<Asistencia marcar={puede(yo, 'asistencia', 'editar')}
+            licencias={puede(yo, 'personal', 'editar')} reglas={puede(yo, 'configuracion', 'editar')} />} />
           <Route path="padron/*" element={<Padron editar={puede(yo, 'padron', 'editar')} />} />
           <Route path="personal" element={<Personal yo={yo} />} />
           <Route path="roles" element={<Roles yo={yo} />} />
@@ -65,6 +78,7 @@ export default function PanelColegio({ colegio, setColegio }) {
 function Personal({ yo }) {
   const [lista, setLista] = useState([])
   const [roles, setRoles] = useState([])
+  const [turnos, setTurnos] = useState([])
   const vacio = { tipo_documento: 'DNI', numero_documento: '', nombres: '', apellidos: '', rol_id: '' }
   const [nuevo, setNuevo] = useState(vacio)
   const [clave, setClave] = useState(null)
@@ -75,7 +89,23 @@ function Personal({ yo }) {
   useEffect(() => {
     cargar()
     if (puede(yo, 'roles')) api('/api/roles').then(setRoles)
+    if (puede(yo, 'padron')) api('/api/padron/estructura').then((e) => setTurnos(e.turnos))
   }, [cargar, yo])
+
+  async function cambiarTurno(p, turno) {
+    setError(null)
+    try {
+      await api(`/api/personal/${p.id}`, { metodo: 'PUT', datos: {
+        nombres: p.nombres, apellidos: p.apellidos, rol_id: p.rol_id, activo: p.activo,
+        turno_id: turno ? Number(turno) : null } })
+      cargar()
+    } catch (err) { setError(err.message) }
+  }
+
+  async function carnets() {
+    setError(null)
+    try { await descargar('/api/personal/carnets', 'carnets-personal.pdf') } catch (err) { setError(err.message) }
+  }
 
   async function crear(e) {
     e.preventDefault()
@@ -105,17 +135,31 @@ function Personal({ yo }) {
         </div>
       )}
       <table>
-        <thead><tr><th>Documento</th><th>Nombre</th><th>Rol</th><th>Estado</th>{editar && <th />}</tr></thead>
+        <thead><tr><th>Documento</th><th>Nombre</th><th>Rol</th><th>Turno</th><th>Estado</th>{editar && <th />}</tr></thead>
         <tbody>
           {lista.map((p) => (
             <tr key={p.id}>
               <td>{p.tipo_documento} {p.numero_documento}</td><td>{p.apellidos}, {p.nombres}</td><td>{p.rol}</td>
+              <td>
+                {editar && turnos.length > 0
+                  ? <select value={p.turno_id ?? ''} onChange={(e) => cambiarTurno(p, e.target.value)} aria-label="Turno">
+                      <option value="">Sin turno</option>
+                      {turnos.map((t) => <option key={t.id} value={t.id}>{t.nombre} ({t.hora_entrada})</option>)}
+                    </select>
+                  : turnos.find((t) => t.id === p.turno_id)?.nombre || (p.turno_id ? 'Con turno' : 'Sin turno')}
+              </td>
               <td>{!p.activo ? 'Inactivo' : p.debe_cambiar_clave ? 'Clave temporal' : 'Activo'}</td>
               {editar && <td><button className="enlace" onClick={() => reiniciar(p)}>Reiniciar clave</button></td>}
             </tr>
           ))}
         </tbody>
       </table>
+      {editar && (
+        <div className="fila-form">
+          <button className="boton secundario" onClick={carnets}>Carnets del personal (PDF)</button>
+          <span className="tenue">Con el turno asignado, la portería calcula su tardanza y su falta automática.</span>
+        </div>
+      )}
       {editar && roles.length > 0 && (
         <form className="fila-form" onSubmit={crear}>
           <select value={nuevo.tipo_documento} onChange={(e) => setNuevo({ ...nuevo, tipo_documento: e.target.value })}>

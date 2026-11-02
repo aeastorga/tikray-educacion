@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { api, esPlataforma } from './api.js'
+import { api, ErrorApi, esPlataforma } from './api.js'
 import Ingreso from './espacios/Ingreso.jsx'
 import IngresoPersonal from './espacios/IngresoPersonal.jsx'
 import Familia from './espacios/Familia.jsx'
@@ -21,8 +21,18 @@ export default function App() {
   useEffect(() => {
     if (esPlataforma) return
     api('/api/publico/colegio')
-      .then((c) => { setColegio(c); aplicarImagen(c) })
-      .catch((e) => setError(e.estado === 404 ? 'Esta dirección no corresponde a ningún colegio.' : e.message))
+      .then((c) => {
+        setColegio(c)
+        aplicarImagen(c)
+        try { localStorage.setItem('tikray.colegio', JSON.stringify(c)) } catch { /* modo privado */ }
+      })
+      .catch((e) => {
+        // Sin internet (portería): la última imagen conocida del colegio.
+        let guardado = null
+        try { guardado = !(e instanceof ErrorApi) && JSON.parse(localStorage.getItem('tikray.colegio')) } catch { /* nada */ }
+        if (guardado) { setColegio(guardado); aplicarImagen(guardado); return }
+        setError(e.estado === 404 ? 'Esta dirección no corresponde a ningún colegio.' : e.message)
+      })
     // 403 = colegio suspendido o vencido: el mensaje del servidor ya lo explica.
   }, [])
 

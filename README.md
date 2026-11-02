@@ -57,3 +57,17 @@ TEST_DATABASE_URL=postgresql+psycopg://usuario:clave@localhost/tikray_test .venv
 - **Carga masiva desde Excel**: plantilla con hojas Alumnos y Personal. La vista previa muestra los errores por hoja, fila y columna, y no se guarda nada hasta que no haya ninguno. Reimportar actualiza, no duplica.
 - **Carnets en PDF** (10 por hoja A4). El QR lleva un código aleatorio (`TK1:XXXXXXXX`), no el DNI, y se puede regenerar si se pierde el carnet.
 - **Cartas de acceso del personal** en PDF con usuario y clave temporal. Se generan solo al confirmar la carga y no se guardan.
+
+## Asistencia (paso 2)
+
+- **Portería** (`/panel/asistencia/porteria`): lee el carnet con la cámara del celular (QR) o con un lector USB, y permite marcar sin carnet buscando por nombre. Funciona sin internet: guarda el padrón (código, nombre, sección y turno; sin DNI) y las marcaciones en el celular, decide al instante entrada, salida, tardanza o doble marcación, y envía lo pendiente cuando vuelve la conexión.
+- **Receptor único** `POST /api/asistencia/marcaciones` (lotes de hasta 500): portería, marcación manual y, en la fase 2, los equipos de huella o facial. Cada marcación trae un `id_cliente` generado en el dispositivo: un reenvío no la duplica. Solo guarda y responde (unos 10 ms en local; hay una prueba que exige menos de 300 ms) y deja el aviso a la familia en `cola_aviso`, que se envía en segundo plano (paso 3).
+- **Reglas**: tardanza según la hora de entrada y tolerancia del turno de la sección (o del turno asignado a cada persona del personal); doble marcación dentro de N minutos (10 por defecto); falta automática N minutos después de la hora de entrada (90 por defecto), solo en días lectivos. El director cambia ambos valores en Asistencia → Reglas.
+- **Personal**: carnet con QR propio (`TK1P:XXXXXXXX`), turno, licencias (la licencia reemplaza la falta, también si se registra después).
+- **Reportes**: resumen del día por sección y detalle por alumno; personal del día; registro mensual en Excel (una hoja por sección) para alumnos y para el personal.
+
+Las faltas automáticas las marca un hilo del servidor cada minuto (`TAREAS_EN_FONDO=true`, por defecto). Si el servidor estuvo caído, se puede cerrar un día a mano sin avisar a las familias:
+
+```bash
+.venv/bin/python -m app.cli faltas 2026-11-02
+```
