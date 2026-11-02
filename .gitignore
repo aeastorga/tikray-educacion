@@ -25,3 +25,4 @@ backup_*.sql
 .vscode/
 .idea/
 .DS_Store
+archivos/
