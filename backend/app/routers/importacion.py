@@ -20,6 +20,14 @@ editar = requerir_permiso("padron", "editar")
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
+def direccion_publica(request: Request) -> str:
+    """Dirección del colegio para imprimir. Siempre https, salvo en local: detrás del proxy
+    (Render, Vercel) la petición llega por http aunque el usuario entró por https."""
+    host = request.headers.get("host", "")
+    local = host.split(":")[0] == "localhost" or host.split(":")[0].endswith(".localhost")
+    return f"{'http' if local else 'https'}://{host}"
+
+
 def imagen_pdf(colegio: Colegio) -> pdf.Imagen:
     logo = get_almacenamiento().leer(colegio.logo_clave) if colegio.logo_clave else None
     return pdf.Imagen(nombre=colegio.nombre, color_primario=colegio.color_primario, logo=logo)
@@ -82,7 +90,7 @@ def confirmar(request: Request, archivo: UploadFile = File(...), anio_id: int | 
     cartas = None
     if credenciales:
         # Las claves temporales solo existen en esta respuesta: no se guardan en ningún lado.
-        direccion = f"{request.url.scheme}://{request.headers.get('host', '')}"
+        direccion = direccion_publica(request)
         cartas = base64.b64encode(pdf.cartas_personal(imagen_pdf(s.colegio), direccion, [
             pdf.FilaCarta(c.nombres, c.apellidos, c.usuario, c.clave_temporal) for c in credenciales
         ])).decode("ascii")

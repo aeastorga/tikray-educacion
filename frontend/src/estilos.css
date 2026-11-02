@@ -65,7 +65,8 @@ input[type="radio"] { width: auto; }
 .pestanas a.active { color: var(--texto); border-color: var(--secundario); }
 .contenido { padding: 16px; max-width: 1000px; margin: 0 auto; }
 
-table { width: 100%; border-collapse: collapse; background: var(--superficie); display: block; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; background: var(--superficie); }
+.contenido { overflow-x: auto; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--borde); }
 .fila-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-top: 16px; }
 .fila-form > input, .fila-form > select { flex: 1 1 160px; }
@@ -89,3 +90,6 @@ code { font-size: 1.05em; padding: 1px 6px; border-radius: 4px; background: var(
 tr.clic { cursor: pointer; }
 tr.clic:hover { background: var(--fondo); }
 h3 { font-size: 1rem; }
+a { color: var(--primario); }
+@media (prefers-color-scheme: dark) { a { color: #9cc7f0; } }
+.tarjeta h2, .tarjeta h3 { margin: 0; }

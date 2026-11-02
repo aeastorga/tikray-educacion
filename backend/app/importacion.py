@@ -502,12 +502,13 @@ def plantilla(secciones: list[tuple[str, str, str]], roles: list[str]) -> bytes:
     tipos_pe = DataValidation(type="list", formula1='"DNI,CE"', allow_blank=True)
     pe.add_data_validation(tipos_pe)
     tipos_pe.add("A2:A3001")
-    # Documento y celular como texto, para que Excel no se coma los ceros.
+    # Documento y celular como texto, para que Excel no se coma los ceros. Se aplica a la
+    # columna entera (no celda por celda): así la hoja sigue terminando en la fila 1 y
+    # lo que se agregue al final empieza en la fila 2.
     for ws in (al, pe):
         for celda in ws[1]:
             if any(p in str(celda.value).lower() for p in ("documento", "celular")):
-                for fila in range(2, 3002):
-                    ws.cell(row=fila, column=celda.column).number_format = "@"
+                ws.column_dimensions[celda.column_letter].number_format = "@"
 
     ref = hoja("Secciones (referencia)", ["Nivel", "Grado", "Sección"])
     for fila in secciones:

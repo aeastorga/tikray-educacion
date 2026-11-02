@@ -59,6 +59,27 @@ def test_plantilla_trae_hojas_y_referencias(client, db):
     assert ("Primaria", "1°", "A") in secciones
 
 
+def test_plantilla_termina_en_la_fila_de_encabezados(client, db):
+    """Si la plantilla marcara miles de filas vacías, lo que se agregue al final caería en la fila 3002."""
+    crear_colegio(db, "alfa")
+    h, _ = armar(client)
+    libro = load_workbook(BytesIO(client.get("/api/padron/importacion/plantilla", headers=h).content))
+    assert libro["Alumnos"].max_row == 1 and libro["Personal"].max_row == 1
+    assert libro["Alumnos"].column_dimensions["B"].number_format == "@"  # documento como texto
+
+
+def test_direccion_de_la_carta_es_https_fuera_de_local():
+    from starlette.requests import Request
+
+    from app.routers.importacion import direccion_publica
+
+    def con_host(host):
+        return Request({"type": "http", "scheme": "http", "headers": [(b"host", host.encode())]})
+    assert direccion_publica(con_host("fatima.plataforma.pe")) == "https://fatima.plataforma.pe"
+    assert direccion_publica(con_host("colegiofatima.edu.pe")) == "https://colegiofatima.edu.pe"
+    assert direccion_publica(con_host("fatima.localhost:5173")) == "http://fatima.localhost:5173"
+
+
 def test_plantilla_vacia_se_puede_subir(client, db):
     crear_colegio(db, "alfa")
     h, _ = armar(client)
