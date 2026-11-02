@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Bases y respaldos locales (pueden tener datos de menores)
+*.db
+*.sqlite3
+*.dump
+*.backup
+backup_*.sql
+
+# IDE / SO
+.vscode/
+.idea/
+.DS_Store
