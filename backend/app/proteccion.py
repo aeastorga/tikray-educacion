@@ -1,0 +1,137 @@
+"""Reglas de clave y límite de intentos fallidos (traído de sgi-platform).
+
+El límite vive en memoria: vale para una sola instancia y se reinicia con el
+servidor. Si se escala a varias instancias, pasa a la base o a Redis.
+"""
+
+import ipaddress
+import secrets
+import string
+import threading
+import time
+import unicodedata
+from collections import deque
+from functools import lru_cache
+
+from fastapi import HTTPException, Request
+
+from app.config import get_settings
+
+MIN_CARACTERES = 8
+
+_REGLAS = [
+    ("Al menos 8 caracteres", lambda pw: len(pw) >= MIN_CARACTERES),
+    ("Una mayúscula", lambda pw: any(unicodedata.category(c) == "Lu" for c in pw)),
+    ("Una minúscula", lambda pw: any(unicodedata.category(c) == "Ll" for c in pw)),
+    ("Un número", lambda pw: any(unicodedata.category(c) == "Nd" for c in pw)),
+    ("Sin espacios al inicio ni al final", lambda pw: pw == pw.strip()),
+]
+
+
+def motivos_clave(pw: str) -> list[str]:
+    """Reglas que `pw` no cumple (lista vacía = válida)."""
+    return [texto for texto, cumple in _REGLAS if not cumple(pw or "")]
+
+
+def exigir_clave_valida(pw: str, campo: str = "clave_nueva") -> None:
+    motivos = motivos_clave(pw)
+    if motivos:
+        raise HTTPException(422, {"campo": campo, "mensaje": "La clave no cumple los requisitos",
+                                  "motivos": motivos})
+
+
+def generar_clave_temporal(largo: int = 10) -> str:
+    # Sin caracteres que se confunden al dictarla (0/O, 1/l/I).
+    alfabeto = "".join(c for c in string.ascii_letters + string.digits if c not in "0O1lI")
+    while True:
+        pw = "".join(secrets.choice(alfabeto) for _ in range(largo))
+        if not motivos_clave(pw):
+            return pw
+
+
+class LimitadorVentana:
+    """Máximo de fallos por clave dentro de una ventana deslizante."""
+
+    def __init__(self, maximo: int, segundos: int):
+        self.maximo = maximo
+        self.segundos = segundos
+        self._marcas: dict[str, deque] = {}
+        self._lock = threading.Lock()
+
+    def _vigentes(self, clave: str, ahora: float) -> deque:
+        marcas = self._marcas.setdefault(clave, deque())
+        while marcas and ahora - marcas[0] >= self.segundos:
+            marcas.popleft()
+        return marcas
+
+    def hay_cupo(self, clave: str) -> bool:
+        with self._lock:
+            return len(self._vigentes(clave, time.monotonic())) < self.maximo
+
+    def registrar(self, clave: str) -> None:
+        ahora = time.monotonic()
+        with self._lock:
+            self._vigentes(clave, ahora).append(ahora)
+            # Limpieza ocasional para que el diccionario no crezca sin fin.
+            if len(self._marcas) > 10000:
+                for k in [k for k, v in self._marcas.items() if not v or ahora - v[-1] >= self.segundos]:
+                    del self._marcas[k]
+
+    def limpiar(self) -> None:
+        with self._lock:
+            self._marcas.clear()
+
+
+# Bloqueado o con clave errónea, la respuesta es la misma.
+# Por cuenta: 5 fallos cada 15 minutos.
+FALLOS_CUENTA = LimitadorVentana(maximo=5, segundos=15 * 60)
+# Por IP, mucho más alto: todo el personal de un colegio sale por la misma IP
+# (el wifi del colegio) y el primer día con claves temporales se equivocan muchos.
+FALLOS_IP = LimitadorVentana(maximo=50, segundos=15 * 60)
+
+
+@lru_cache
+def _redes_confianza() -> tuple:
+    return tuple(ipaddress.ip_network(r.strip(), strict=False)
+                 for r in get_settings().proxies_confianza.split(",") if r.strip())
+
+
+def _es_de_confianza(ip: str) -> bool:
+    try:
+        direccion = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(direccion in red for red in _redes_confianza())
+
+
+def ip_cliente(request: Request) -> str:
+    """IP real de quien hace la petición.
+
+    X-Forwarded-For solo se lee si la conexión viene de un proxy de confianza
+    (PROXIES_CONFIANZA); si no, cualquiera podría inventarse una IP. Se recorre
+    de derecha a izquierda saltando los proxies propios: la primera IP que no
+    es de confianza es la del cliente (las de más a la izquierda las puede
+    escribir el propio cliente).
+    """
+    directa = request.client.host if request.client else "?"
+    if not _es_de_confianza(directa):
+        return directa
+    cadena = [ip.strip() for ip in request.headers.get("x-forwarded-for", "").split(",") if ip.strip()]
+    for ip in reversed(cadena):
+        if not _es_de_confianza(ip):
+            return ip
+    return cadena[0] if cadena else directa
+
+
+def permitir_intento(cuenta: str, ip: str) -> bool:
+    return FALLOS_CUENTA.hay_cupo(cuenta) and FALLOS_IP.hay_cupo(ip)
+
+
+def registrar_fallo(cuenta: str, ip: str) -> None:
+    FALLOS_CUENTA.registrar(cuenta)
+    FALLOS_IP.registrar(ip)
+
+
+def limpiar_limites() -> None:
+    FALLOS_CUENTA.limpiar()
+    FALLOS_IP.limpiar()
