@@ -58,6 +58,22 @@ def _ajustar(texto: str, fuente: str, tamano: float, ancho: float, minimo: float
     return tamano
 
 
+def _lineas(texto: str, fuente: str, tamano: float, ancho: float, maximo: int = 2) -> tuple[list[str], float]:
+    """Parte el texto por palabras en hasta `maximo` líneas. Solo si aun así no
+    entra (una palabra muy larga, o más texto que líneas), achica la letra."""
+    while True:
+        lineas: list[str] = []
+        for palabra in texto.split():
+            if lineas and stringWidth(f"{lineas[-1]} {palabra}", fuente, tamano) <= ancho:
+                lineas[-1] = f"{lineas[-1]} {palabra}"
+            else:
+                lineas.append(palabra)
+        cabe = len(lineas) <= maximo and all(stringWidth(l, fuente, tamano) <= ancho for l in lineas)
+        if cabe or tamano <= 6:
+            return lineas[:maximo], tamano
+        tamano -= 0.5
+
+
 def _logo(imagen: Imagen) -> ImageReader | None:
     if not imagen.logo:
         return None
@@ -113,17 +129,20 @@ def carnets(imagen: Imagen, filas: list[FilaCarnet]) -> bytes:
         _qr(c, f.qr, qr_x, qr_y, lado_qr)
         ancho_texto = qr_x - x - 5 * mm
         c.setFillColorRGB(0.1, 0.1, 0.1)
-        fila_y = y + ALTO_CARNET - franja - 8 * mm
-        t = _ajustar(f.apellidos.upper(), "Helvetica-Bold", 11, ancho_texto)
-        c.setFont("Helvetica-Bold", t)
-        c.drawString(x + 3 * mm, fila_y, f.apellidos.upper())
-        t = _ajustar(f.nombres, "Helvetica", 10, ancho_texto)
-        c.setFont("Helvetica", t)
-        c.drawString(x + 3 * mm, fila_y - 5 * mm, f.nombres)
+        fila_y = y + ALTO_CARNET - franja - 7 * mm
+        # Apellidos y nombres en hasta dos líneas cada uno; lo de abajo baja si hacen falta.
+        for texto, fuente, tamano in ((f.apellidos.upper(), "Helvetica-Bold", 11), (f.nombres, "Helvetica", 10)):
+            lineas, t = _lineas(texto, fuente, tamano, ancho_texto)
+            c.setFont(fuente, t)
+            for linea in lineas:
+                c.drawString(x + 3 * mm, fila_y, linea)
+                fila_y -= t * 0.42 * mm
+            fila_y -= 0.8 * mm
+        fila_y -= 1.5 * mm
         c.setFont("Helvetica", _ajustar(f.seccion, "Helvetica", 8.5, ancho_texto))
-        c.drawString(x + 3 * mm, fila_y - 12 * mm, f.seccion)
+        c.drawString(x + 3 * mm, fila_y, f.seccion)
         c.setFont("Helvetica", 8.5)
-        c.drawString(x + 3 * mm, fila_y - 16.5 * mm, f"Año escolar {f.anio}")
+        c.drawString(x + 3 * mm, fila_y - 4 * mm, f"Año escolar {f.anio}")
         c.setFont("Courier-Bold", 9)
         c.drawCentredString(qr_x + lado_qr / 2, y + 1.5 * mm, f.codigo)
 

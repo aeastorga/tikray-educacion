@@ -54,3 +54,16 @@ def test_qr_no_lleva_el_dni():
     from app import codigos
     contenido = codigos.contenido_qr("ABCD2345")
     assert contenido == PREFIJO_QR + "ABCD2345" and "7123" not in contenido
+
+
+def test_nombre_largo_se_parte_en_dos_lineas_sin_achicar():
+    from reportlab.lib.units import mm
+
+    from app.pdf import ANCHO_CARNET, _lineas
+    ancho = ANCHO_CARNET - 28 * mm - 2 * mm - 5 * mm  # el mismo que usa el carnet
+    lineas, tamano = _lineas("DE LA CRUZ VILLANUEVA SANTOS", "Helvetica-Bold", 11, ancho)
+    assert lineas == ["DE LA CRUZ VILLANUEVA", "SANTOS"] and tamano == 11
+    assert _lineas("QUISPE MAMANI", "Helvetica-Bold", 11, ancho) == (["QUISPE MAMANI"], 11)
+    # Solo si no entra ni en dos líneas (o una sola palabra no cabe) se achica.
+    lineas, tamano = _lineas("FERNÁNDEZ DE CÓRDOVA ECHEGARAY SALDARRIAGA MONTENEGRO", "Helvetica-Bold", 11, ancho)
+    assert len(lineas) == 2 and tamano < 11
