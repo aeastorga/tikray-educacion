@@ -32,7 +32,7 @@ Plataforma multi-colegio (particulares y estatales) de Tikray Labs. Eje: que el 
 0. Cimientos: repo, multi-colegio, subdominio, ingreso del personal, roles y permisos, panel de Tikray Labs, imagen del colegio, pruebas de aislamiento.
 1. Padrón: año escolar, niveles, turnos y horarios, grados, secciones, calendario de días no lectivos, carga masiva Excel (hoja alumnos+apoderados, hoja personal) con vista previa de errores, carnets QR y cartas en PDF.
 2. Asistencia de alumnos y personal: portería con QR (funciona sin internet), receptor único de marcaciones, tardanza por turno, faltas automáticas, deduplicación de doble marcación, marcación manual sin carnet, licencias del personal, reportes.
-3. Familias y avisos: activación, PIN, passkeys, push, cola de envío, avisos de ingreso/tarde/falta/salida, tarjeta en vivo, estado de avisos por padre.
+3. Familias y avisos: activación, PIN, passkeys, push, cola de envío, avisos de ingreso/tarde/falta/salida, tarjeta en vivo, estado de avisos por padre. Opción adicional "modo reunión": QR por aula (válido unas horas) para que el padre llene su ficha y consentimiento; queda pendiente hasta que el tutor la aprueba en vivo y puede activar la cuenta ahí mismo; respaldo ficha PDF prellenada o tablet; no abre registro libre.
 4. Cuaderno de control: comunicados con firma de lectura, incidencias, citaciones, justificaciones, permisos de salida, respuestas.
 5. Panel del director y demo con datos ficticios reiniciable; prueba de carga (1000 marcaciones en 10 min).
 
