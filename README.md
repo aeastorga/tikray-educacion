@@ -39,3 +39,11 @@ TEST_DATABASE_URL=postgresql+psycopg://usuario:clave@localhost/tikray_test .venv
 - `colegio_id` es obligatorio en toda tabla, con llave foránea a `colegio`. Las relaciones internas usan llaves compuestas `(colegio_id, id)`, así la base rechaza, por ejemplo, un usuario con un rol de otro colegio.
 - El personal de Tikray Labs usa otro token (firma y audiencia distintas) y solo entra a `/plataforma`.
 - `tests/test_aislamiento.py` recorre todas las rutas para comprobar esto.
+
+## Estado del colegio
+
+`prueba`, `activo` o `suspendido`, con `vence_en` opcional (obligatorio en prueba). Vencido o suspendido, el colegio responde 403 en todas sus rutas. La fecha se compara en hora de Lima.
+
+## Intentos de ingreso
+
+5 fallos por cuenta y 50 por IP cada 15 minutos (todo el personal de un colegio suele salir por la misma IP). Detrás de un proxy, configura `PROXIES_CONFIANZA` para leer la IP real de `X-Forwarded-For`.

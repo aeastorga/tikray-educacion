@@ -68,7 +68,7 @@ def test_base_rechaza_colegio_inexistente(db):
 def test_base_rechaza_rol_de_otro_colegio(db, dos):
     a, b = dos
     rol_b = db.query(Rol).filter_by(colegio_id=b.id).first()
-    db.add(Usuario(colegio_id=a.id, dni="20000000", usuario="20000000", nombres="X", apellidos="Y",
+    db.add(Usuario(colegio_id=a.id, numero_documento="20000000", usuario="20000000", nombres="X", apellidos="Y",
                    rol_id=rol_b.id, clave_hash="x"))
     with pytest.raises(IntegrityError):
         db.commit()
@@ -88,13 +88,14 @@ def test_dominio_propio(client, db):
     assert r.status_code == 200 and r.json()["nombre"] == "Colegio gamma"
 
 
-def test_colegio_inactivo_no_responde(client, db):
+def test_colegio_suspendido_no_responde(client, db):
     c = crear_colegio(db, "alfa")
     tok = token(client, "alfa")
-    c.activo = False
+    c.estado = "suspendido"
     db.commit()
-    assert client.get("/api/auth/yo", headers=auth("alfa", tok)).status_code == 404
-    assert client.get("/api/publico/colegio", headers=host("alfa")).status_code == 404
+    assert client.get("/api/auth/yo", headers=auth("alfa", tok)).status_code == 403
+    r = client.get("/api/publico/colegio", headers=host("alfa"))
+    assert r.status_code == 403 and r.json()["detail"] == "El acceso a este colegio está suspendido"
 
 
 # --- Token de un colegio en el Host de otro: 403 en todas las rutas ----------
@@ -145,7 +146,7 @@ def test_listados_solo_del_propio_colegio(client, db, dos):
     crear_personal(db, b, "30000000", {"personal": "ver"})
     h = auth("alfa", token(client, "alfa"))
     personal = client.get("/api/personal", headers=h).json()
-    assert [p["dni"] for p in personal] == ["10000000"]
+    assert [p["numero_documento"] for p in personal] == ["10000000"]
     roles = client.get("/api/roles", headers=h).json()
     assert [r["nombre"] for r in roles] == ["Director"]
 
@@ -158,7 +159,7 @@ def test_no_toca_recursos_de_otro_colegio_por_id(client, db, dos):
     assert client.delete(f"/api/roles/{otro.rol_id}", headers=h).status_code == 404
     assert client.post(f"/api/personal/{otro.id}/reiniciar-clave", headers=h).status_code == 404
     r = client.post("/api/personal", headers=h, json={
-        "dni": "40000000", "nombres": "N", "apellidos": "A", "rol_id": otro.rol_id})
+        "numero_documento": "40000000", "nombres": "N", "apellidos": "A", "rol_id": otro.rol_id})
     assert r.status_code == 422
 
 

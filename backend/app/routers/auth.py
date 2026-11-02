@@ -8,7 +8,7 @@ from app.db import get_db
 from app.deps import Sesion, colegio_del_host, usuario_actual, usuario_sesion
 from app.models import Colegio, Usuario
 from app.modulos import MODULOS
-from app.proteccion import FALLOS_INGRESO, exigir_clave_valida
+from app.proteccion import exigir_clave_valida, ip_cliente, permitir_intento, registrar_fallo
 from app.seguridad import emitir_token, hashear_clave, verificar_clave, verificar_clave_o_simular
 
 publico = APIRouter(prefix="/auth", tags=["auth"])
@@ -44,18 +44,16 @@ def ingresar(
     colegio: Colegio = Depends(colegio_del_host), db: Session = Depends(get_db),
 ) -> Token:
     nombre = datos.usuario.strip()
-    ip = request.client.host if request.client else "?"
-    # Por cuenta y por IP: frena tanto a quien prueba claves de un DNI como a quien prueba DNIs.
-    claves = (f"{colegio.id}:u:{nombre}", f"{colegio.id}:ip:{ip}")
-    if not all(FALLOS_INGRESO.hay_cupo(k) for k in claves):
+    # Por cuenta (5) frena a quien prueba claves de un usuario; por IP (50), a quien prueba usuarios.
+    cuenta, ip = f"colegio:{colegio.id}:{nombre}", f"colegio:{ip_cliente(request)}"
+    if not permitir_intento(cuenta, ip):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuario o clave incorrectos")
     usuario = db.scalar(
         select(Usuario).where(Usuario.colegio_id == colegio.id, Usuario.usuario == nombre)
     )
     ok = verificar_clave_o_simular(datos.clave, usuario.clave_hash if usuario else None)
     if not ok or not usuario.activo:
-        for k in claves:
-            FALLOS_INGRESO.registrar(k)
+        registrar_fallo(cuenta, ip)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuario o clave incorrectos")
     return _token(usuario)
 

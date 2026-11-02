@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
+from app.fechas import hoy_lima
 from app.models import AdminPlataforma, Colegio, Usuario
 from app.modulos import NIVELES
 from app.seguridad import leer_token
@@ -38,8 +39,10 @@ def colegio_del_host(request: Request, db: Session = Depends(get_db)) -> Colegio
             colegio = db.scalar(select(Colegio).where(Colegio.subdominio == sub))
     elif host:
         colegio = db.scalar(select(Colegio).where(func.lower(Colegio.dominio_propio) == host))
-    if colegio is None or not colegio.activo:
+    if colegio is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Colegio no encontrado")
+    if not colegio.disponible(hoy_lima()):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "El acceso a este colegio está suspendido")
     return colegio
 
 

@@ -48,14 +48,16 @@ class Usuario(ConColegio, Base):
     __tablename__ = "usuario"
     __table_args__ = (
         UniqueConstraint("colegio_id", "usuario"),
-        UniqueConstraint("colegio_id", "dni"),
+        UniqueConstraint("colegio_id", "tipo_documento", "numero_documento"),
+        CheckConstraint("tipo_documento IN ('DNI', 'CE')", name="tipo_documento_valido"),
         ForeignKeyConstraint(
             ["colegio_id", "rol_id"], ["rol.colegio_id", "rol.id"], ondelete="RESTRICT",
         ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    dni: Mapped[str] = mapped_column(String(12))
+    tipo_documento: Mapped[str] = mapped_column(String(4), default="DNI")
+    numero_documento: Mapped[str] = mapped_column(String(12))
     usuario: Mapped[str] = mapped_column(String(60))
     nombres: Mapped[str] = mapped_column(String(120))
     apellidos: Mapped[str] = mapped_column(String(120))

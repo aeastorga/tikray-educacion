@@ -1,3 +1,5 @@
+import ipaddress
+
 import pytest
 from pydantic import ValidationError
 
@@ -23,12 +25,54 @@ def test_clave_incorrecta(client, db):
     assert r.status_code == 401
 
 
-def test_bloqueo_tras_5_fallos(client, db):
+def _ingreso(client, usuario, clave, cabeceras=None):
+    return client.post("/api/auth/ingreso", json={"usuario": usuario, "clave": clave},
+                       headers={**host("alfa"), **(cabeceras or {})})
+
+
+def test_bloqueo_tras_5_fallos_de_la_cuenta(client, db):
     crear_colegio(db, "alfa")
     for _ in range(5):
-        client.post("/api/auth/ingreso", json={"usuario": "10000000", "clave": "mal"}, headers=host("alfa"))
-    r = client.post("/api/auth/ingreso", json={"usuario": "10000000", "clave": CLAVE}, headers=host("alfa"))
-    assert r.status_code == 401
+        _ingreso(client, "10000000", "mal")
+    assert _ingreso(client, "10000000", CLAVE).status_code == 401
+
+
+def test_fallos_de_otros_no_bloquean_al_colegio(client, db):
+    """Todo el colegio sale por la misma IP: 5 docentes que se equivocan no dejan fuera al resto."""
+    c = crear_colegio(db, "alfa")
+    for i in range(10):
+        crear_personal(db, c, f"2000000{i}", {})
+        _ingreso(client, f"2000000{i}", "mal")
+    assert _ingreso(client, "10000000", CLAVE).status_code == 200
+
+
+def test_limite_por_ip(client, db, monkeypatch):
+    from app import proteccion
+    monkeypatch.setattr(proteccion.FALLOS_IP, "maximo", 3)
+    crear_colegio(db, "alfa")
+    for i in range(3):
+        _ingreso(client, f"3000000{i}", "mal")
+    assert _ingreso(client, "10000000", CLAVE).status_code == 401
+
+
+def test_x_forwarded_for_solo_de_proxy_de_confianza(monkeypatch):
+    from starlette.requests import Request
+
+    from app import proteccion
+
+    def peticion(directa, xff):
+        return Request({"type": "http", "client": (directa, 1234),
+                        "headers": [(b"x-forwarded-for", xff.encode())]})
+
+    monkeypatch.setattr(proteccion, "_redes_confianza", lambda: ())
+    assert proteccion.ip_cliente(peticion("1.2.3.4", "9.9.9.9")) == "1.2.3.4"  # sin proxies: se ignora
+
+    redes = (ipaddress.ip_network("10.0.0.0/8"),)
+    monkeypatch.setattr(proteccion, "_redes_confianza", lambda: redes)
+    assert proteccion.ip_cliente(peticion("10.1.1.1", "200.1.1.1")) == "200.1.1.1"
+    # El cliente puede escribir lo que quiera a la izquierda; vale la primera IP ajena desde la derecha.
+    assert proteccion.ip_cliente(peticion("10.1.1.1", "6.6.6.6, 200.1.1.1, 10.2.2.2")) == "200.1.1.1"
+    assert proteccion.ip_cliente(peticion("1.2.3.4", "200.1.1.1")) == "1.2.3.4"  # no viene del proxy
 
 
 def test_clave_temporal_obliga_a_cambiarla(client, db):

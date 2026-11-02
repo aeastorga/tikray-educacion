@@ -23,6 +23,7 @@ export default function App() {
     api('/api/publico/colegio')
       .then((c) => { setColegio(c); aplicarImagen(c) })
       .catch((e) => setError(e.estado === 404 ? 'Esta dirección no corresponde a ningún colegio.' : e.message))
+    // 403 = colegio suspendido o vencido: el mensaje del servidor ya lo explica.
   }, [])
 
   if (esPlataforma) return <Plataforma />

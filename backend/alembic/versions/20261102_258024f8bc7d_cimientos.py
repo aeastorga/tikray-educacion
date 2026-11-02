@@ -1,8 +1,8 @@
 """cimientos
 
-Revision ID: c3b959c0cab7
+Revision ID: 258024f8bc7d
 Revises: 
-Create Date: 2026-11-02 17:10:53.924787
+Create Date: 2026-11-02 17:34:23.682321
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'c3b959c0cab7'
+revision: str = '258024f8bc7d'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -40,10 +40,13 @@ def upgrade() -> None:
     sa.Column('logo_clave', sa.String(length=300), nullable=True),
     sa.Column('color_primario', sa.String(length=7), nullable=False),
     sa.Column('color_secundario', sa.String(length=7), nullable=False),
-    sa.Column('activo', sa.Boolean(), nullable=False),
+    sa.Column('estado', sa.String(length=12), nullable=False),
+    sa.Column('vence_en', sa.Date(), nullable=True),
     sa.Column('creado_en', sa.DateTime(timezone=True), nullable=False),
     sa.CheckConstraint("color_primario ~ '^#[0-9a-fA-F]{6}$'", name=op.f('ck_colegio_color_primario_valido')),
     sa.CheckConstraint("color_secundario ~ '^#[0-9a-fA-F]{6}$'", name=op.f('ck_colegio_color_secundario_valido')),
+    sa.CheckConstraint("estado <> 'prueba' OR vence_en IS NOT NULL", name=op.f('ck_colegio_prueba_con_vencimiento')),
+    sa.CheckConstraint("estado IN ('prueba', 'activo', 'suspendido')", name=op.f('ck_colegio_estado_valido')),
     sa.CheckConstraint("subdominio ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'", name=op.f('ck_colegio_subdominio_valido')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_colegio')),
     sa.UniqueConstraint('dominio_propio', name=op.f('uq_colegio_dominio_propio')),
@@ -74,7 +77,8 @@ def upgrade() -> None:
     op.create_index(op.f('ix_permiso_rol_colegio_id'), 'permiso_rol', ['colegio_id'], unique=False)
     op.create_table('usuario',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('dni', sa.String(length=12), nullable=False),
+    sa.Column('tipo_documento', sa.String(length=4), nullable=False),
+    sa.Column('numero_documento', sa.String(length=12), nullable=False),
     sa.Column('usuario', sa.String(length=60), nullable=False),
     sa.Column('nombres', sa.String(length=120), nullable=False),
     sa.Column('apellidos', sa.String(length=120), nullable=False),
@@ -85,10 +89,11 @@ def upgrade() -> None:
     sa.Column('rol_id', sa.Integer(), nullable=False),
     sa.Column('creado_en', sa.DateTime(timezone=True), nullable=False),
     sa.Column('colegio_id', sa.Integer(), nullable=False),
+    sa.CheckConstraint("tipo_documento IN ('DNI', 'CE')", name=op.f('ck_usuario_tipo_documento_valido')),
     sa.ForeignKeyConstraint(['colegio_id', 'rol_id'], ['rol.colegio_id', 'rol.id'], name=op.f('fk_usuario_colegio_id_rol_id_rol'), ondelete='RESTRICT'),
     sa.ForeignKeyConstraint(['colegio_id'], ['colegio.id'], name=op.f('fk_usuario_colegio_id_colegio'), ondelete='RESTRICT'),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_usuario')),
-    sa.UniqueConstraint('colegio_id', 'dni', name=op.f('uq_usuario_colegio_id_dni')),
+    sa.UniqueConstraint('colegio_id', 'tipo_documento', 'numero_documento', name=op.f('uq_usuario_colegio_id_tipo_documento_numero_documento')),
     sa.UniqueConstraint('colegio_id', 'usuario', name=op.f('uq_usuario_colegio_id_usuario'))
     )
     op.create_index(op.f('ix_usuario_colegio_id'), 'usuario', ['colegio_id'], unique=False)

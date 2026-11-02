@@ -4,8 +4,11 @@ Usa su propio token ("plataforma") y su propia tabla de usuarios. Un token de
 colegio nunca entra aquí, y un token de plataforma nunca entra a /api.
 """
 
+from datetime import date
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -13,14 +16,17 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_db
 from app.deps import SUBDOMINIOS_RESERVADOS, admin_plataforma
+from app.fechas import hoy_lima
 from app.models import AdminPlataforma, Colegio, Rol, Usuario
-from app.proteccion import FALLOS_PLATAFORMA, generar_clave_temporal
+from app.routers.personal import DocumentoPersonal
+from app.proteccion import generar_clave_temporal, ip_cliente, permitir_intento, registrar_fallo
 from app.seguridad import emitir_token, hashear_clave, verificar_clave_o_simular
 
 publico = APIRouter(prefix="/plataforma", tags=["plataforma"])
 router = APIRouter(prefix="/plataforma", tags=["plataforma"], dependencies=[Depends(admin_plataforma)])
 
 SUBDOMINIO = r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+Estado = Literal["prueba", "activo", "suspendido"]
 
 
 class Ingreso(BaseModel):
@@ -28,21 +34,31 @@ class Ingreso(BaseModel):
     clave: str = Field(max_length=200)
 
 
-class Director(BaseModel):
-    dni: str = Field(pattern=r"^\d{8}$")
-    nombres: str = Field(min_length=1, max_length=120)
-    apellidos: str = Field(min_length=1, max_length=120)
+class Director(DocumentoPersonal):
+    pass
 
 
 def _dominio(v: str | None) -> str | None:
     return v.strip().lower().rstrip(".") or None if v else None
 
 
+def _prueba_con_vencimiento(estado: str | None, vence_en: date | None) -> None:
+    if estado == "prueba" and vence_en is None:
+        raise ValueError("Una prueba necesita fecha de vencimiento")
+
+
 class NuevoColegio(BaseModel):
     nombre: str = Field(min_length=1, max_length=200)
     subdominio: str = Field(pattern=SUBDOMINIO)
     dominio_propio: str | None = Field(default=None, max_length=253)
+    estado: Estado = "activo"
+    vence_en: date | None = None
     director: Director
+
+    @model_validator(mode="after")
+    def _estado(self):
+        _prueba_con_vencimiento(self.estado, self.vence_en)
+        return self
 
     @field_validator("subdominio")
     @classmethod
@@ -57,7 +73,8 @@ class NuevoColegio(BaseModel):
 class CambioColegio(BaseModel):
     nombre: str | None = Field(default=None, min_length=1, max_length=200)
     dominio_propio: str | None = Field(default=None, max_length=253)
-    activo: bool | None = None
+    estado: Estado | None = None
+    vence_en: date | None = None
 
     _norm_dominio = field_validator("dominio_propio")(classmethod(lambda cls, v: _dominio(v)))
 
@@ -67,7 +84,9 @@ class ColegioOut(BaseModel):
     nombre: str
     subdominio: str
     dominio_propio: str | None
-    activo: bool
+    estado: str
+    vence_en: date | None
+    disponible: bool
 
 
 class ColegioCreado(BaseModel):
@@ -77,8 +96,8 @@ class ColegioCreado(BaseModel):
 
 
 def _salida(c: Colegio) -> ColegioOut:
-    return ColegioOut(id=c.id, nombre=c.nombre, subdominio=c.subdominio,
-                      dominio_propio=c.dominio_propio, activo=c.activo)
+    return ColegioOut(id=c.id, nombre=c.nombre, subdominio=c.subdominio, dominio_propio=c.dominio_propio,
+                      estado=c.estado, vence_en=c.vence_en, disponible=c.disponible(hoy_lima()))
 
 
 def _conflicto() -> HTTPException:
@@ -88,15 +107,13 @@ def _conflicto() -> HTTPException:
 @publico.post("/auth/ingreso")
 def ingresar(datos: Ingreso, request: Request, db: Session = Depends(get_db)) -> dict:
     correo = datos.correo.strip().lower()
-    ip = request.client.host if request.client else "?"
-    claves = (f"c:{correo}", f"ip:{ip}")
-    if not all(FALLOS_PLATAFORMA.hay_cupo(k) for k in claves):
+    cuenta, ip = f"plataforma:{correo}", f"plataforma:{ip_cliente(request)}"
+    if not permitir_intento(cuenta, ip):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Credenciales incorrectas")
     admin = db.scalar(select(AdminPlataforma).where(AdminPlataforma.correo == correo))
     ok = verificar_clave_o_simular(datos.clave, admin.clave_hash if admin else None)
     if not ok or not admin.activo:
-        for k in claves:
-            FALLOS_PLATAFORMA.registrar(k)
+        registrar_fallo(cuenta, ip)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Credenciales incorrectas")
     token = emitir_token("plataforma", admin.id, admin.version_sesion, get_settings().token_plataforma_minutos)
     return {"token": token, "nombre": admin.nombre}
@@ -110,7 +127,7 @@ def listar(db: Session = Depends(get_db)) -> list[ColegioOut]:
 @router.post("/colegios", status_code=201)
 def crear(datos: NuevoColegio, db: Session = Depends(get_db)) -> ColegioCreado:
     colegio = Colegio(nombre=datos.nombre.strip(), subdominio=datos.subdominio,
-                      dominio_propio=datos.dominio_propio)
+                      dominio_propio=datos.dominio_propio, estado=datos.estado, vence_en=datos.vence_en)
     db.add(colegio)
     try:
         db.flush()
@@ -123,11 +140,11 @@ def crear(datos: NuevoColegio, db: Session = Depends(get_db)) -> ColegioCreado:
     clave = generar_clave_temporal()
     d = datos.director
     db.add(Usuario(
-        colegio_id=colegio.id, dni=d.dni, usuario=d.dni, nombres=d.nombres.strip(),
-        apellidos=d.apellidos.strip(), rol_id=rol.id, clave_hash=hashear_clave(clave),
+        colegio_id=colegio.id, tipo_documento=d.tipo_documento, numero_documento=d.numero_documento,
+        usuario=d.numero_documento, nombres=d.nombres, apellidos=d.apellidos, rol_id=rol.id, clave_hash=hashear_clave(clave),
     ))
     db.commit()
-    return ColegioCreado(colegio=_salida(colegio), director_usuario=d.dni, director_clave_temporal=clave)
+    return ColegioCreado(colegio=_salida(colegio), director_usuario=d.numero_documento, director_clave_temporal=clave)
 
 
 @router.patch("/colegios/{colegio_id}")
@@ -137,9 +154,15 @@ def editar(colegio_id: int, datos: CambioColegio, db: Session = Depends(get_db))
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Colegio no encontrado")
     cambios = datos.model_dump(exclude_unset=True)
     for campo, valor in cambios.items():
-        if campo != "dominio_propio" and valor is None:
+        # dominio_propio y vence_en se pueden vaciar enviando null; el resto, no.
+        if campo not in ("dominio_propio", "vence_en") and valor is None:
             continue
         setattr(colegio, campo, valor.strip() if campo == "nombre" else valor)
+    try:
+        _prueba_con_vencimiento(colegio.estado, colegio.vence_en)
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from None
     try:
         db.commit()
     except IntegrityError:
@@ -152,6 +175,6 @@ def editar(colegio_id: int, datos: CambioColegio, db: Session = Depends(get_db))
 def resumen(db: Session = Depends(get_db)) -> dict:
     return {
         "colegios": db.scalar(select(func.count()).select_from(Colegio)),
-        "colegios_activos": db.scalar(select(func.count()).select_from(Colegio).where(Colegio.activo)),
+        "por_estado": dict(db.execute(select(Colegio.estado, func.count()).group_by(Colegio.estado)).all()),
         "personal": db.scalar(select(func.count()).select_from(Usuario)),
     }

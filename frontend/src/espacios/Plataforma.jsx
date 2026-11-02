@@ -41,7 +41,11 @@ function Ingreso({ entrar }) {
   )
 }
 
-const VACIO = { nombre: '', subdominio: '', dni: '', nombres: '', apellidos: '' }
+const VACIO = {
+  nombre: '', subdominio: '', estado: 'activo', vence_en: '',
+  tipo_documento: 'DNI', numero_documento: '', nombres: '', apellidos: '',
+}
+const ESTADOS = { prueba: 'Prueba', activo: 'Activo', suspendido: 'Suspendido' }
 
 function Colegios({ salir }) {
   const [lista, setLista] = useState([])
@@ -62,7 +66,11 @@ function Colegios({ salir }) {
         metodo: 'POST',
         datos: {
           nombre: nuevo.nombre, subdominio: nuevo.subdominio.toLowerCase(),
-          director: { dni: nuevo.dni, nombres: nuevo.nombres, apellidos: nuevo.apellidos },
+          estado: nuevo.estado, vence_en: nuevo.vence_en || null,
+          director: {
+            tipo_documento: nuevo.tipo_documento, numero_documento: nuevo.numero_documento,
+            nombres: nuevo.nombres, apellidos: nuevo.apellidos,
+          },
         },
       })
       setCreado(r)
@@ -71,10 +79,10 @@ function Colegios({ salir }) {
     } catch (err) { setError(err.message) }
   }
 
-  async function alternar(c) {
-    const accion = c.activo ? 'suspender' : 'reactivar'
-    if (!confirm(`¿${accion[0].toUpperCase() + accion.slice(1)} ${c.nombre}?`)) return
-    await api(`/plataforma/colegios/${c.id}`, { metodo: 'PATCH', datos: { activo: !c.activo } })
+  async function cambiar(c, datos) {
+    if (datos.estado === 'suspendido' && !confirm(`¿Suspender ${c.nombre}? Nadie del colegio podrá entrar.`)) return
+    setError(null)
+    try { await api(`/plataforma/colegios/${c.id}`, { metodo: 'PATCH', datos }) } catch (err) { setError(err.message) }
     cargar()
   }
 
@@ -96,15 +104,23 @@ function Colegios({ salir }) {
           </div>
         )}
         <table>
-          <thead><tr><th>Colegio</th><th>Dirección</th><th>Estado</th><th /></tr></thead>
+          <thead><tr><th>Colegio</th><th>Dirección</th><th>Estado</th><th>Vence</th></tr></thead>
           <tbody>
             {lista.map((c) => (
               <tr key={c.id}>
                 <td>{c.nombre}</td>
                 <td><a href={`//${c.subdominio}.${base}`} target="_blank" rel="noreferrer">{c.subdominio}.{base}</a>
                   {c.dominio_propio && <> · {c.dominio_propio}</>}</td>
-                <td>{c.activo ? 'Activo' : 'Suspendido'}</td>
-                <td><button className="enlace" onClick={() => alternar(c)}>{c.activo ? 'Suspender' : 'Reactivar'}</button></td>
+                <td>
+                  <select value={c.estado} onChange={(e) => cambiar(c, { estado: e.target.value })}>
+                    {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                  {!c.disponible && c.estado !== 'suspendido' && <span className="error"> vencido</span>}
+                </td>
+                <td>
+                  <input type="date" value={c.vence_en || ''}
+                         onChange={(e) => cambiar(c, { vence_en: e.target.value || null })} />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -113,7 +129,17 @@ function Colegios({ salir }) {
         <form className="fila-form" onSubmit={crear}>
           <input placeholder="Nombre del colegio" required {...campo('nombre')} />
           <input placeholder="subdominio" required pattern="[a-z0-9]([a-z0-9\-]*[a-z0-9])?" {...campo('subdominio')} />
-          <input placeholder="DNI del director" required inputMode="numeric" pattern="\d{8}" {...campo('dni')} />
+          <select {...campo('estado')}>
+            {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <label>Vence
+            <input type="date" required={nuevo.estado === 'prueba'} {...campo('vence_en')} />
+          </label>
+          <select {...campo('tipo_documento')}>
+            <option value="DNI">DNI</option>
+            <option value="CE">Carné de extranjería</option>
+          </select>
+          <input placeholder="Documento del director" required {...campo('numero_documento')} />
           <input placeholder="Nombres del director" required {...campo('nombres')} />
           <input placeholder="Apellidos del director" required {...campo('apellidos')} />
           <button className="boton">Crear</button>

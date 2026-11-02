@@ -62,7 +62,8 @@ export default function PanelColegio({ colegio, setColegio }) {
 function Personal({ yo }) {
   const [lista, setLista] = useState([])
   const [roles, setRoles] = useState([])
-  const [nuevo, setNuevo] = useState({ dni: '', nombres: '', apellidos: '', rol_id: '' })
+  const vacio = { tipo_documento: 'DNI', numero_documento: '', nombres: '', apellidos: '', rol_id: '' }
+  const [nuevo, setNuevo] = useState(vacio)
   const [clave, setClave] = useState(null)
   const [error, setError] = useState(null)
   const editar = puede(yo, 'personal', 'editar')
@@ -79,7 +80,7 @@ function Personal({ yo }) {
     try {
       const r = await api('/api/personal', { metodo: 'POST', datos: { ...nuevo, rol_id: Number(nuevo.rol_id) } })
       setClave({ quien: `${r.personal.nombres} ${r.personal.apellidos}`, usuario: r.personal.usuario, clave: r.clave_temporal })
-      setNuevo({ dni: '', nombres: '', apellidos: '', rol_id: '' })
+      setNuevo(vacio)
       cargar()
     } catch (err) { setError(err.message) }
   }
@@ -101,11 +102,11 @@ function Personal({ yo }) {
         </div>
       )}
       <table>
-        <thead><tr><th>DNI</th><th>Nombre</th><th>Rol</th><th>Estado</th>{editar && <th />}</tr></thead>
+        <thead><tr><th>Documento</th><th>Nombre</th><th>Rol</th><th>Estado</th>{editar && <th />}</tr></thead>
         <tbody>
           {lista.map((p) => (
             <tr key={p.id}>
-              <td>{p.dni}</td><td>{p.apellidos}, {p.nombres}</td><td>{p.rol}</td>
+              <td>{p.tipo_documento} {p.numero_documento}</td><td>{p.apellidos}, {p.nombres}</td><td>{p.rol}</td>
               <td>{!p.activo ? 'Inactivo' : p.debe_cambiar_clave ? 'Clave temporal' : 'Activo'}</td>
               {editar && <td><button className="enlace" onClick={() => reiniciar(p)}>Reiniciar clave</button></td>}
             </tr>
@@ -114,8 +115,14 @@ function Personal({ yo }) {
       </table>
       {editar && roles.length > 0 && (
         <form className="fila-form" onSubmit={crear}>
-          <input placeholder="DNI" value={nuevo.dni} inputMode="numeric" pattern="\d{8}" required
-                 onChange={(e) => setNuevo({ ...nuevo, dni: e.target.value })} />
+          <select value={nuevo.tipo_documento} onChange={(e) => setNuevo({ ...nuevo, tipo_documento: e.target.value })}>
+            <option value="DNI">DNI</option>
+            <option value="CE">Carné de extranjería</option>
+          </select>
+          <input placeholder="N° de documento" value={nuevo.numero_documento} required
+                 inputMode={nuevo.tipo_documento === 'DNI' ? 'numeric' : 'text'}
+                 pattern={nuevo.tipo_documento === 'DNI' ? '\\d{8}' : '[A-Za-z0-9]{9,12}'}
+                 onChange={(e) => setNuevo({ ...nuevo, numero_documento: e.target.value })} />
           <input placeholder="Nombres" value={nuevo.nombres} required
                  onChange={(e) => setNuevo({ ...nuevo, nombres: e.target.value })} />
           <input placeholder="Apellidos" value={nuevo.apellidos} required

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import CheckConstraint, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db import Base, creado_en
 
 COLOR = r"^#[0-9a-fA-F]{6}$"
+ESTADOS = ("prueba", "activo", "suspendido")
 
 
 class Colegio(Base):
@@ -16,6 +17,9 @@ class Colegio(Base):
         CheckConstraint("subdominio ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'", name="subdominio_valido"),
         CheckConstraint(f"color_primario ~ '{COLOR}'", name="color_primario_valido"),
         CheckConstraint(f"color_secundario ~ '{COLOR}'", name="color_secundario_valido"),
+        CheckConstraint("estado IN ('prueba', 'activo', 'suspendido')", name="estado_valido"),
+        # Una prueba siempre tiene fin.
+        CheckConstraint("estado <> 'prueba' OR vence_en IS NOT NULL", name="prueba_con_vencimiento"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -26,5 +30,12 @@ class Colegio(Base):
     logo_clave: Mapped[str | None] = mapped_column(String(300))
     color_primario: Mapped[str] = mapped_column(String(7), default="#1F4E79")
     color_secundario: Mapped[str] = mapped_column(String(7), default="#F2A900")
-    activo: Mapped[bool] = mapped_column(default=True)
+    estado: Mapped[str] = mapped_column(String(12), default="activo")
+    # Último día con acceso (fecha de Lima). Vacío = sin vencimiento.
+    vence_en: Mapped[date | None]
     creado_en: Mapped[datetime] = creado_en()
+
+    def disponible(self, hoy: date) -> bool:
+        if self.estado == "suspendido":
+            return False
+        return self.vence_en is None or hoy <= self.vence_en

@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     database_url: str
     dominio_base: str = "localhost"
     carpeta_archivos: str = "archivos"
+    # Redes (CIDR, separadas por comas) de los proxies propios, por ejemplo el
+    # balanceador de Render. Solo de ellas se acepta X-Forwarded-For.
+    proxies_confianza: str = ""
 
     token_colegio_minutos: int = 60 * 12
     token_plataforma_minutos: int = 60 * 2

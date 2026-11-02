@@ -22,7 +22,7 @@ from sqlalchemy import text  # noqa: E402
 from app.db import Base, get_engine, get_sessionmaker  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import AdminPlataforma, Colegio, PermisoRol, Rol, Usuario  # noqa: E402
-from app.proteccion import FALLOS_INGRESO, FALLOS_PLATAFORMA  # noqa: E402
+from app.proteccion import limpiar_limites  # noqa: E402
 from app.seguridad import hashear_clave  # noqa: E402
 
 CLAVE = "ClaveBuena123"
@@ -44,8 +44,7 @@ def limpiar():
     tablas = ", ".join(t.name for t in Base.metadata.sorted_tables)
     with get_engine().begin() as conn:
         conn.execute(text(f"TRUNCATE {tablas} RESTART IDENTITY CASCADE"))
-    FALLOS_INGRESO.limpiar()
-    FALLOS_PLATAFORMA.limpiar()
+    limpiar_limites()
 
 
 @pytest.fixture
@@ -71,7 +70,7 @@ def crear_colegio(db, sub: str, **extra) -> Colegio:
     rol = Rol(colegio_id=c.id, nombre="Director", es_director=True)
     db.add(rol)
     db.flush()
-    db.add(Usuario(colegio_id=c.id, dni="10000000", usuario="10000000", nombres="Dir", apellidos=sub,
+    db.add(Usuario(colegio_id=c.id, numero_documento="10000000", usuario="10000000", nombres="Dir", apellidos=sub,
                    rol_id=rol.id, clave_hash=_HASH, debe_cambiar_clave=False))
     db.commit()
     return c
@@ -81,7 +80,7 @@ def crear_personal(db, colegio: Colegio, dni: str, permisos: dict[str, str] | No
                    debe_cambiar_clave: bool = False) -> Usuario:
     rol = Rol(colegio_id=colegio.id, nombre=f"Rol {dni}")
     rol.permisos = [PermisoRol(colegio_id=colegio.id, modulo=m, nivel=n) for m, n in (permisos or {}).items()]
-    u = Usuario(colegio_id=colegio.id, dni=dni, usuario=dni, nombres="P", apellidos=dni, rol=rol,
+    u = Usuario(colegio_id=colegio.id, numero_documento=dni, usuario=dni, nombres="P", apellidos=dni, rol=rol,
                 clave_hash=_HASH, debe_cambiar_clave=debe_cambiar_clave)
     db.add(u)
     db.commit()

@@ -4,14 +4,18 @@ El límite vive en memoria: vale para una sola instancia y se reinicia con el
 servidor. Si se escala a varias instancias, pasa a la base o a Redis.
 """
 
+import ipaddress
 import secrets
 import string
 import threading
 import time
 import unicodedata
 from collections import deque
+from functools import lru_cache
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
+
+from app.config import get_settings
 
 MIN_CARACTERES = 8
 
@@ -78,6 +82,56 @@ class LimitadorVentana:
             self._marcas.clear()
 
 
-# 5 fallos cada 15 minutos. Bloqueado o con clave errónea, la respuesta es la misma.
-FALLOS_INGRESO = LimitadorVentana(maximo=5, segundos=15 * 60)
-FALLOS_PLATAFORMA = LimitadorVentana(maximo=5, segundos=15 * 60)
+# Bloqueado o con clave errónea, la respuesta es la misma.
+# Por cuenta: 5 fallos cada 15 minutos.
+FALLOS_CUENTA = LimitadorVentana(maximo=5, segundos=15 * 60)
+# Por IP, mucho más alto: todo el personal de un colegio sale por la misma IP
+# (el wifi del colegio) y el primer día con claves temporales se equivocan muchos.
+FALLOS_IP = LimitadorVentana(maximo=50, segundos=15 * 60)
+
+
+@lru_cache
+def _redes_confianza() -> tuple:
+    return tuple(ipaddress.ip_network(r.strip(), strict=False)
+                 for r in get_settings().proxies_confianza.split(",") if r.strip())
+
+
+def _es_de_confianza(ip: str) -> bool:
+    try:
+        direccion = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(direccion in red for red in _redes_confianza())
+
+
+def ip_cliente(request: Request) -> str:
+    """IP real de quien hace la petición.
+
+    X-Forwarded-For solo se lee si la conexión viene de un proxy de confianza
+    (PROXIES_CONFIANZA); si no, cualquiera podría inventarse una IP. Se recorre
+    de derecha a izquierda saltando los proxies propios: la primera IP que no
+    es de confianza es la del cliente (las de más a la izquierda las puede
+    escribir el propio cliente).
+    """
+    directa = request.client.host if request.client else "?"
+    if not _es_de_confianza(directa):
+        return directa
+    cadena = [ip.strip() for ip in request.headers.get("x-forwarded-for", "").split(",") if ip.strip()]
+    for ip in reversed(cadena):
+        if not _es_de_confianza(ip):
+            return ip
+    return cadena[0] if cadena else directa
+
+
+def permitir_intento(cuenta: str, ip: str) -> bool:
+    return FALLOS_CUENTA.hay_cupo(cuenta) and FALLOS_IP.hay_cupo(ip)
+
+
+def registrar_fallo(cuenta: str, ip: str) -> None:
+    FALLOS_CUENTA.registrar(cuenta)
+    FALLOS_IP.registrar(ip)
+
+
+def limpiar_limites() -> None:
+    FALLOS_CUENTA.limpiar()
+    FALLOS_IP.limpiar()
