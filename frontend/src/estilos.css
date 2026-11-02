@@ -75,3 +75,17 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
 .tenue { color: var(--tenue); }
 .error { color: var(--error); margin: 0; }
 code { font-size: 1.05em; padding: 1px 6px; border-radius: 4px; background: var(--fondo); }
+
+.subpestanas { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 16px; }
+.subpestanas a { padding: 6px 12px; border-radius: 999px; color: var(--tenue); text-decoration: none; border: 1px solid var(--borde); }
+.subpestanas a.active { background: var(--primario); border-color: var(--primario); color: #fff; }
+.bloque { padding: 8px 0; border-bottom: 1px solid var(--borde); }
+.chip { display: inline-flex; align-items: center; gap: 2px; padding: 2px 8px; margin: 2px; border-radius: 999px; background: var(--fondo); border: 1px solid var(--borde); }
+.check { flex-direction: row; align-items: center; gap: 6px; color: var(--texto); }
+.dias { display: flex; gap: 8px; border: 1px solid var(--borde); border-radius: 8px; padding: 4px 10px; }
+.dias legend { font-size: .85rem; color: var(--tenue); }
+.sin-margen { margin-top: 0; }
+.pasos { line-height: 1.7; }
+tr.clic { cursor: pointer; }
+tr.clic:hover { background: var(--fondo); }
+h3 { font-size: 1rem; }
