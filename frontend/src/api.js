@@ -50,3 +50,23 @@ export async function api(ruta, { metodo = 'GET', datos, archivo } = {}) {
   }
   return json
 }
+
+// Descarga un archivo protegido (PDF, Excel) con el token y lo abre o guarda.
+export async function descargar(ruta, nombre) {
+  const token = leerToken()
+  const r = await fetch(ruta, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  if (!r.ok) {
+    const json = await r.json().catch(() => null)
+    throw new ErrorApi(r.status, json?.detail)
+  }
+  guardarArchivo(await r.blob(), nombre)
+}
+
+export function guardarArchivo(blob, nombre) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = nombre
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 10000)
+}

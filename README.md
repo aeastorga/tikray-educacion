@@ -47,3 +47,13 @@ TEST_DATABASE_URL=postgresql+psycopg://usuario:clave@localhost/tikray_test .venv
 ## Intentos de ingreso
 
 5 fallos por cuenta y 50 por IP cada 15 minutos (todo el personal de un colegio suele salir por la misma IP). Detrás de un proxy, configura `PROXIES_CONFIANZA` para leer la IP real de `X-Forwarded-For`.
+
+## Padrón (paso 1)
+
+- **Año escolar** con fechas y días de clase de la semana (lunes a viernes por defecto; se pueden agregar sábados). Un solo año activo por colegio, también controlado por la base.
+- **Niveles, grados, turnos** (entrada, tolerancia y salida) y **secciones** por año.
+- **Días no lectivos**: un día o un rango (vacaciones); solo se guardan los días de clase.
+- **Alumnos y apoderados**: N a N (hermanos con el mismo apoderado, un alumno con varios). Documento DNI, CE, pasaporte u otro.
+- **Carga masiva desde Excel**: plantilla con hojas Alumnos y Personal. La vista previa muestra los errores por hoja, fila y columna, y no se guarda nada hasta que no haya ninguno. Reimportar actualiza, no duplica.
+- **Carnets en PDF** (10 por hoja A4). El QR lleva un código aleatorio (`TK1:XXXXXXXX`), no el DNI, y se puede regenerar si se pierde el carnet.
+- **Cartas de acceso del personal** en PDF con usuario y clave temporal. Se generan solo al confirmar la carga y no se guardan.

@@ -16,6 +16,8 @@ class Almacenamiento(Protocol):
 
     def borrar(self, clave: str) -> None: ...
 
+    def leer(self, clave: str) -> bytes | None: ...
+
     def url(self, clave: str) -> str: ...
 
 
@@ -31,6 +33,10 @@ class AlmacenamientoLocal:
 
     def borrar(self, clave: str) -> None:
         (self.carpeta / clave).unlink(missing_ok=True)
+
+    def leer(self, clave: str) -> bytes | None:
+        ruta = self.carpeta / clave
+        return ruta.read_bytes() if ruta.is_file() else None
 
     def url(self, clave: str) -> str:
         return f"{self.url_base}/{clave}"

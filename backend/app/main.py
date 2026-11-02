@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.deps import colegio_del_host, usuario_actual, usuario_sesion
-from app.routers import auth, colegio, personal, plataforma, roles
+from app.routers import alumnos, auth, colegio, estructura, importacion, personal, plataforma, roles
 
 
 def crear_app() -> FastAPI:
@@ -24,7 +24,8 @@ def crear_app() -> FastAPI:
 
     # Sesión completa: token del mismo colegio del Host y clave ya cambiada.
     api_privada = APIRouter(dependencies=[Depends(usuario_actual)])
-    for r in (colegio.privado, roles.router, personal.router):
+    for r in (colegio.privado, roles.router, personal.router, estructura.router, alumnos.router,
+              importacion.router):
         api_privada.include_router(r)
 
     for r in (api_publica, api_sesion, api_privada):

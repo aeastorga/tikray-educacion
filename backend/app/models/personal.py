@@ -61,6 +61,8 @@ class Usuario(ConColegio, Base):
     usuario: Mapped[str] = mapped_column(String(60))
     nombres: Mapped[str] = mapped_column(String(120))
     apellidos: Mapped[str] = mapped_column(String(120))
+    celular: Mapped[str | None] = mapped_column(String(9))
+    correo: Mapped[str | None] = mapped_column(String(254))
     clave_hash: Mapped[str] = mapped_column(String(255))
     debe_cambiar_clave: Mapped[bool] = mapped_column(default=True)
     activo: Mapped[bool] = mapped_column(default=True)
