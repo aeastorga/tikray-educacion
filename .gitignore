@@ -26,3 +26,9 @@ backup_*.sql
 .idea/
 .DS_Store
 archivos/
+
+# Pruebas de navegador
+frontend/e2e/.semilla.json
+frontend/test-results/
+frontend/playwright-report/
+backend/archivos-e2e/

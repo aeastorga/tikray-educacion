@@ -33,6 +33,14 @@ cd backend
 TEST_DATABASE_URL=postgresql+psycopg://usuario:clave@localhost/tikray_test .venv/bin/pytest
 ```
 
+Pruebas de navegador (Playwright) de la portería: levantan su propio backend (puerto 8001) y Vite (5174) contra otra base, que se borra y se siembra con datos ficticios en cada corrida (su nombre debe terminar en `e2e`):
+
+```bash
+cd frontend
+npx playwright install chromium   # la primera vez
+E2E_DATABASE_URL=postgresql+psycopg://usuario:clave@localhost/tikray_e2e npm run e2e
+```
+
 ## Cómo se aísla cada colegio
 
 - El colegio sale del `Host` (subdominio o dominio propio). Las rutas privadas exigen que el `colegio_id` del token sea el de ese Host; si no, 403.
