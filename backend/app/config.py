@@ -18,9 +18,16 @@ class Settings(BaseSettings):
 
     # Faltas automáticas cada minuto dentro del servidor. En pruebas se apaga.
     tareas_en_fondo: bool = True
+    # Web Push (VAPID). Sin ellas no se envían avisos: quedan en la cola hasta configurarlas.
+    # Se generan con: python -m app.cli claves-push
+    vapid_clave_privada: str = ""
+    vapid_clave_publica: str = ""
+    vapid_contacto: str = "mailto:soporte@tikraylabs.pe"
 
     token_colegio_minutos: int = 60 * 12
     token_plataforma_minutos: int = 60 * 2
+    # El padre entra con PIN o huella; una sesión larga es lo que espera de una app del celular.
+    token_familia_minutos: int = 60 * 24 * 90
 
 
 @lru_cache

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_db
 from app.fechas import hoy_lima
-from app.models import AdminPlataforma, Colegio, Usuario
+from app.models import AdminPlataforma, Apoderado, Colegio, CuentaFamilia, Usuario
 from app.modulos import NIVELES
 from app.seguridad import leer_token
 
@@ -112,3 +112,31 @@ def admin_plataforma(
     if admin is None or not admin.activo or admin.version_sesion != datos["ver"]:
         raise _no_autenticado()
     return admin
+
+
+# --- Familias ----------------------------------------------------------------
+
+@dataclass
+class SesionFamilia:
+    colegio: Colegio
+    cuenta: CuentaFamilia
+    apoderado: Apoderado  # el de este colegio (por cuya dirección entró)
+
+
+def familia_sesion(
+    colegio: Colegio = Depends(colegio_del_host),
+    cred: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: Session = Depends(get_db),
+) -> SesionFamilia:
+    """Padre o apoderado con sesión en el colegio del Host. Como el personal: el token de
+    otro colegio da 403. El colegio puede cerrar sus sesiones o bloquearlo en cualquier momento."""
+    datos = leer_token("familia", cred.credentials) if cred else None
+    if datos is None:
+        raise _no_autenticado()
+    if datos.get("col") != colegio.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "El token no corresponde a este colegio")
+    ap = db.scalar(select(Apoderado).where(Apoderado.colegio_id == colegio.id, Apoderado.id == datos.get("apo"),
+                                           Apoderado.cuenta_id == int(datos["sub"])))
+    if ap is None or ap.estado_acceso not in ("activo", "pendiente") or ap.version_sesion != datos["ver"]:
+        raise _no_autenticado()
+    return SesionFamilia(colegio=colegio, cuenta=db.get(CuentaFamilia, ap.cuenta_id), apoderado=ap)

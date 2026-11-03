@@ -1,11 +1,11 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app import codigos, validacion
+from app import codigos, familias, validacion
 from app.comun import guardar, obtener
 from app.db import get_db
 from app.deps import Sesion, requerir_permiso
@@ -180,7 +180,8 @@ def nuevo_codigo(alumno_id: int, s: Sesion = Depends(editar), db: Session = Depe
     return {"codigo": a.codigo}
 
 
-def buscar_o_crear_apoderado(db: Session, colegio_id: int, datos: DatosApoderado) -> Apoderado:
+def buscar_o_crear_apoderado(db: Session, colegio_id: int, datos: DatosApoderado,
+                             usuario_id: int | None = None) -> Apoderado:
     ap = db.scalar(select(Apoderado).where(Apoderado.colegio_id == colegio_id,
                                            Apoderado.tipo_documento == datos.tipo_documento,
                                            Apoderado.numero_documento == datos.numero_documento))
@@ -189,9 +190,8 @@ def buscar_o_crear_apoderado(db: Session, colegio_id: int, datos: DatosApoderado
                        numero_documento=datos.numero_documento)
         db.add(ap)
     ap.nombres, ap.apellidos = datos.nombres, datos.apellidos
-    # Un dato vacío no borra el que ya estaba.
-    ap.celular = datos.celular or ap.celular
-    ap.correo = datos.correo or ap.correo
+    # Un dato vacío no borra el que ya estaba; un cambio queda registrado.
+    familias.cambiar_contacto(db, ap, datos.celular, datos.correo, "panel", usuario_id)
     db.flush()
     return ap
 
@@ -200,7 +200,7 @@ def buscar_o_crear_apoderado(db: Session, colegio_id: int, datos: DatosApoderado
 def vincular(alumno_id: int, datos: Vinculo, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> dict:
     cid = s.colegio.id
     a = obtener(db, Alumno, cid, alumno_id, "Alumno")
-    ap = buscar_o_crear_apoderado(db, cid, datos)
+    ap = buscar_o_crear_apoderado(db, cid, datos, s.usuario.id)
     v = db.get(AlumnoApoderado, (a.id, ap.id))
     if v is None:
         v = AlumnoApoderado(colegio_id=cid, alumno_id=a.id, apoderado_id=ap.id)
@@ -226,7 +226,12 @@ def desvincular(alumno_id: int, apoderado_id: int, s: Sesion = Depends(editar), 
 def editar_apoderado(apoderado_id: int, datos: DatosApoderado, s: Sesion = Depends(editar),
                      db: Session = Depends(get_db)) -> dict:
     ap = obtener(db, Apoderado, s.colegio.id, apoderado_id, "Apoderado")
-    for campo, valor in datos.model_dump().items():
+    if ap.cuenta_id is not None and (datos.tipo_documento, datos.numero_documento) != (
+            ap.tipo_documento, ap.numero_documento):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Este apoderado ya activó su cuenta con ese documento; no se puede cambiar")
+    familias.cambiar_contacto(db, ap, datos.celular, datos.correo, "panel", s.usuario.id)
+    for campo, valor in datos.model_dump(exclude={"celular", "correo"}).items():
         setattr(ap, campo, valor)
     guardar(db, "Ya existe un apoderado con ese documento")
     return _apoderado(ap)

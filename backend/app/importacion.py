@@ -18,7 +18,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import codigos, validacion
+from app import codigos, familias, validacion
 from app.models import (Alumno, AlumnoApoderado, AnioEscolar, Apoderado, Grado, Matricula, Nivel, Rol, Seccion,
                         Usuario)
 from app.proteccion import generar_clave_temporal
@@ -407,8 +407,9 @@ class Credencial:
     clave_temporal: str
 
 
-def aplicar(db: Session, colegio_id: int, a: Analisis) -> list[Credencial]:
-    """Ejecuta el plan. Quien llama hace el commit (todo o nada)."""
+def aplicar(db: Session, colegio_id: int, a: Analisis, usuario_id: int | None = None) -> list[Credencial]:
+    """Ejecuta el plan. Quien llama hace el commit (todo o nada). `usuario_id`: quien cargó
+    el archivo, para el registro de cambios de contacto de los apoderados."""
     assert a.total_errores == 0
     cid = colegio_id
     alumnos = {(x.tipo_documento, x.numero_documento): x
@@ -445,7 +446,7 @@ def aplicar(db: Session, colegio_id: int, a: Analisis) -> list[Credencial]:
                 db.add(ap)
                 apoderados[(d.tipo_documento, d.numero_documento)] = ap
             ap.nombres, ap.apellidos = d.nombres, d.apellidos
-            ap.celular, ap.correo = d.celular or ap.celular, d.correo or ap.correo
+            familias.cambiar_contacto(db, ap, d.celular, d.correo, "excel", usuario_id)
             db.flush()
             v = vinculos.get((al.id, ap.id))
             if v is None:

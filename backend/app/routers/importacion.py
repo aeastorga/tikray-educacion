@@ -85,7 +85,7 @@ def confirmar(request: Request, archivo: UploadFile = File(...), anio_id: int | 
     if a.total_errores:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             {"mensaje": "El archivo tiene errores; corrígelos y vuelve a subirlo", **_informe(a)})
-    credenciales = importacion.aplicar(db, s.colegio.id, a)
+    credenciales = importacion.aplicar(db, s.colegio.id, a, s.usuario.id)
     guardar(db, "Otro usuario cambió el padrón mientras tanto; vuelve a intentarlo")
     cartas = None
     if credenciales:

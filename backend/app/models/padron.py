@@ -7,7 +7,7 @@ así la base rechaza, por ejemplo, matricular en una sección de otro colegio.
 
 from datetime import date, datetime, time
 
-from sqlalchemy import (CheckConstraint, ForeignKeyConstraint, Index, String, UniqueConstraint,
+from sqlalchemy import (CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Index, String, UniqueConstraint,
                         text)
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -155,12 +155,21 @@ class Matricula(ConColegio, Base):
     seccion_id: Mapped[int]
 
 
+ESTADOS_ACCESO = ("sin_cuenta", "pendiente", "activo", "bloqueado")
+
+
 class Apoderado(ConColegio, Base):
     __tablename__ = "apoderado"
     __table_args__ = (
         UniqueConstraint("colegio_id", "tipo_documento", "numero_documento"),
         UniqueConstraint("colegio_id", "id"),
+        # Una cuenta de familia es una sola persona: un apoderado por colegio.
+        UniqueConstraint("colegio_id", "cuenta_id"),
         CheckConstraint(_CK_TIPO_DOC, name="tipo_documento_valido"),
+        CheckConstraint(f"estado_acceso IN ({', '.join(repr(e) for e in ESTADOS_ACCESO)})",
+                        name="estado_acceso_valido"),
+        CheckConstraint("estado_acceso IN ('sin_cuenta', 'bloqueado') OR cuenta_id IS NOT NULL",
+                        name="acceso_con_cuenta"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -172,6 +181,12 @@ class Apoderado(ConColegio, Base):
     celular: Mapped[str | None] = mapped_column(String(9))
     correo: Mapped[str | None] = mapped_column(String(254))
     creado_en: Mapped[datetime] = creado_en()
+    # Acceso de la familia en este colegio. La cuenta (DNI + PIN) es global y une a los
+    # hijos de varios colegios; el estado y las sesiones son de cada colegio.
+    cuenta_id: Mapped[int | None] = mapped_column(ForeignKey("cuenta_familia.id", ondelete="SET NULL"))
+    estado_acceso: Mapped[str] = mapped_column(String(12), default="sin_cuenta")
+    activado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    version_sesion: Mapped[int] = mapped_column(default=0)
 
 
 class AlumnoApoderado(ConColegio, Base):

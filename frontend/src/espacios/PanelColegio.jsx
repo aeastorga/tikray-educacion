@@ -6,6 +6,7 @@ import { borrarPadron } from '../porteria/almacen.js'
 import Asistencia from './Asistencia.jsx'
 import Cabecera from './Cabecera.jsx'
 import CambiarClave from './CambiarClave.jsx'
+import CuentasPadres from './CuentasPadres.jsx'
 import Padron from './Padron.jsx'
 
 const NIVEL = { ver: 1, editar: 2 }
@@ -56,6 +57,7 @@ export default function PanelColegio({ colegio, setColegio }) {
         <NavLink to="/panel" end>Inicio</NavLink>
         {puede(yo, 'asistencia') && <NavLink to="/panel/asistencia">Asistencia</NavLink>}
         {puede(yo, 'padron') && <NavLink to="/panel/padron">Padrón</NavLink>}
+        {puede(yo, 'familias') && <NavLink to="/panel/familias">Cuentas de padres</NavLink>}
         {puede(yo, 'personal') && <NavLink to="/panel/personal">Personal</NavLink>}
         {puede(yo, 'roles') && <NavLink to="/panel/roles">Roles</NavLink>}
         {puede(yo, 'configuracion') && <NavLink to="/panel/imagen">Imagen del colegio</NavLink>}
@@ -67,6 +69,8 @@ export default function PanelColegio({ colegio, setColegio }) {
           <Route path="asistencia/*" element={<Asistencia yo={yo} marcar={puede(yo, 'asistencia', 'editar')}
             licencias={puede(yo, 'personal', 'editar')} reglas={puede(yo, 'configuracion', 'editar')} />} />
           <Route path="padron/*" element={<Padron editar={puede(yo, 'padron', 'editar')} />} />
+          <Route path="familias/*" element={<CuentasPadres colegio={colegio} editar={puede(yo, 'familias', 'editar')}
+            reglas={puede(yo, 'configuracion', 'editar')} />} />
           <Route path="personal" element={<Personal yo={yo} />} />
           <Route path="roles" element={<Roles yo={yo} />} />
           <Route path="imagen" element={<Imagen yo={yo} colegio={colegio} setColegio={setColegio} />} />

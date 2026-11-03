@@ -2,6 +2,7 @@
 
     python -m app.cli crear-admin <correo> "<nombre>"
     python -m app.cli faltas [AAAA-MM-DD]
+    python -m app.cli claves-push
 
 `faltas` sin fecha hace lo mismo que el proceso del servidor (hoy, turnos cuyo
 corte ya pasó). Con fecha cierra ese día completo, sin avisar a las familias:
@@ -48,9 +49,26 @@ def faltas(fecha: str | None) -> None:
     print(f"{n} faltas o licencias registradas")
 
 
+def claves_push() -> None:
+    """Par de llaves VAPID para Web Push. Se generan una vez y no se cambian: si cambian,
+    todos los padres tienen que volver a aceptar las notificaciones."""
+    from cryptography.hazmat.primitives import serialization
+    from py_vapid import Vapid02
+    from py_vapid.utils import b64urlencode
+
+    v = Vapid02()
+    v.generate_keys()
+    privada = b64urlencode(v.private_key.private_numbers().private_value.to_bytes(32, "big"))
+    publica = b64urlencode(v.public_key.public_bytes(serialization.Encoding.X962,
+                                                     serialization.PublicFormat.UncompressedPoint))
+    print(f"VAPID_CLAVE_PRIVADA={privada}\nVAPID_CLAVE_PUBLICA={publica}")
+
+
 if __name__ == "__main__":
     if len(sys.argv) == 4 and sys.argv[1] == "crear-admin":
         crear_admin(sys.argv[2], sys.argv[3])
+    elif sys.argv[1:] == ["claves-push"]:
+        claves_push()
     elif len(sys.argv) in (2, 3) and sys.argv[1] == "faltas":
         faltas(sys.argv[2] if len(sys.argv) == 3 else None)
     else:
