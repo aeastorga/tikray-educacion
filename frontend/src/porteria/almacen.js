@@ -39,6 +39,12 @@ export const datos = {
   guardar: (clave, valor) => operar('datos', 'readwrite', (s) => s.put(valor, clave)),
 }
 
+// Al cerrar sesión: fuera el padrón (nombres de alumnos y personal) y el historial del día.
+// Las marcaciones pendientes se quedan: son asistencia real que aún debe llegar al servidor.
+export function borrarPadron() {
+  return operar('datos', 'readwrite', (s) => { s.delete('padron'); s.delete('marcas') }).catch(() => {})
+}
+
 export function nuevoId() {
   if (crypto.randomUUID) return crypto.randomUUID()
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')

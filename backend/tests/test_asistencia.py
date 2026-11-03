@@ -450,3 +450,61 @@ def test_reportes_aislados_entre_colegios(client, db):
 
 def test_hora_en_utc_se_muestra_en_lima():
     assert asistencia.hora(datetime(2026, 6, 1, 12, 40, tzinfo=UTC)) == "07:40"
+
+
+# --- Revisión del PR #4 ----------------------------------------------------------
+
+def test_motivo_de_licencia_solo_con_permiso_de_personal(client, db):
+    e = preparar(db, "alfa")
+    docente = crear_personal(db, e.colegio, "20000000", {})
+    crear_personal(db, e.colegio, "20000001", {"asistencia": "ver"})
+    crear_personal(db, e.colegio, "20000002", {"asistencia": "ver", "personal": "ver"})
+    h = auth("alfa", token(client, "alfa"))
+    client.post("/api/asistencia/licencias", headers=h, json={
+        "usuario_id": docente.id, "tipo": "salud", "desde": HOY.isoformat(), "hasta": HOY.isoformat(),
+        "motivo": "Descanso médico"})
+    sin = client.get("/api/asistencia/licencias", headers=auth("alfa", token(client, "alfa", "20000001"))).json()
+    con = client.get("/api/asistencia/licencias", headers=auth("alfa", token(client, "alfa", "20000002"))).json()
+    assert [(x["tipo"], x["motivo"]) for x in sin] == [("salud", None)]
+    assert [(x["tipo"], x["motivo"]) for x in con] == [("salud", "Descanso médico")]
+
+
+def test_nadie_marca_su_propia_asistencia(client, db):
+    e = preparar(db, "alfa")
+    portero = crear_personal(db, e.colegio, "20000000", {"asistencia": "editar"})
+    director = db.scalar(select(Usuario).where(Usuario.colegio_id == e.colegio.id, Usuario.usuario == "10000000"))
+    url = "/api/asistencia/marcaciones"
+    hp = auth("alfa", token(client, "alfa", "20000000"))
+    r = client.post(url, headers=hp, json={"marcaciones": [
+        _marca(contenido_qr(portero.codigo, True)), _marca(usuario_id=portero.id),
+        _marca(portero.codigo),  # tecleado sin prefijo: igual es él
+    ]}).json()["resultados"]
+    assert [x["estado"] for x in r] == ["rechazada"] * 3
+    assert r[0]["mensaje"] == "No puedes registrar tu propia asistencia"
+    assert db.scalars(select(Marcacion)).all() == []
+    # Otra persona sí puede marcarlo, y él a otros.
+    hd = auth("alfa", token(client, "alfa"))
+    assert client.post(url, headers=hd, json={"marcaciones": [_marca(usuario_id=portero.id)]}).json()[
+        "resultados"][0]["estado"] == "ok"
+    assert client.post(url, headers=hp, json={"marcaciones": [_marca(contenido_qr(director.codigo, True))]}).json()[
+        "resultados"][0]["estado"] == "ok"
+
+
+def test_marcacion_recibida_tarde_figura_como_registrada_despues(client, db):
+    e = preparar(db, "alfa")
+    yo = db.scalar(select(Usuario).where(Usuario.colegio_id == e.colegio.id))
+    marcar(db, e, en(LUNES, 7, 40), e.alumnos[0])
+    marcar(db, e, en(LUNES, 7, 42), e.alumnos[1])
+    marcar(db, e, en(LUNES, 7, 44), codigo=contenido_qr(yo.codigo, True))
+    # La del primer alumno llegó a los 2 minutos; las demás, meses después (recibido_en = ahora).
+    m0 = db.scalar(select(Marcacion).where(Marcacion.alumno_id == e.alumnos[0].id))
+    m0.recibido_en = m0.momento + timedelta(minutes=2)
+    db.commit()
+    h = auth("alfa", token(client, "alfa"))
+    detalle = client.get(f"/api/asistencia/dia?fecha={LUNES}&seccion_id={e.seccion.id}", headers=h).json()
+    assert [x["registrada_despues"] for x in detalle["alumnos"]] == [False, True]
+    marcas = client.get(f"/api/asistencia/marcaciones?fecha={LUNES}", headers=h).json()
+    assert [(m["hora"], m["registrada_despues"]) for m in marcas] == [("07:44", True), ("07:42", True),
+                                                                       ("07:40", False)]
+    personal = client.get(f"/api/asistencia/personal/dia?fecha={LUNES}", headers=h).json()["personal"]
+    assert personal[0]["registrada_despues"] is True

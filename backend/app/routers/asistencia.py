@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app import asistencia
 from app.comun import guardar, obtener
 from app.db import get_db
-from app.deps import Sesion, requerir_permiso
+from app.deps import Sesion, requerir_permiso, tiene_permiso
 from app.fechas import hoy_lima
 from app.models import (Alumno, AnioEscolar, AsistenciaAlumno, AsistenciaPersonal, ConfigAsistencia,
                         LicenciaPersonal, Marcacion, Matricula, Rol, Seccion, Turno, Usuario)
@@ -82,12 +82,14 @@ def marcaciones(fecha: date | None = None, limite: int = 100, s: Sesion = Depend
     cid, fecha = s.colegio.id, fecha or hoy_lima()
     filas = db.execute(
         select(Marcacion, Alumno.apellidos, Alumno.nombres, Usuario.apellidos, Usuario.nombres)
+        .select_from(Marcacion)
         .outerjoin(Alumno, and_(Alumno.colegio_id == Marcacion.colegio_id, Alumno.id == Marcacion.alumno_id))
         .outerjoin(Usuario, and_(Usuario.colegio_id == Marcacion.colegio_id, Usuario.id == Marcacion.usuario_id))
         .where(Marcacion.colegio_id == cid, Marcacion.fecha == fecha)
         .order_by(Marcacion.momento.desc()).limit(min(max(limite, 1), 500)))
     return [{"id": m.id, "hora": asistencia.hora(m.momento), "resultado": m.resultado, "origen": m.origen,
              "equipo": m.equipo, "tipo": "alumno" if m.alumno_id else "personal",
+             "registrada_despues": m.recibido_en - m.momento > asistencia.REGISTRO_TARDIO,
              "nombre": f"{aa or ua}, {an or un}"} for m, aa, an, ua, un in filas]
 
 
@@ -131,7 +133,8 @@ def dia(fecha: date | None = None, seccion_id: int | None = None, s: Sesion = De
     """Resumen del día por sección; con `seccion_id`, la lista de alumnos de esa sección."""
     cid, fecha = s.colegio.id, fecha or hoy_lima()
     anio = anio_activo(db, cid)
-    base = (select(Matricula.seccion_id, Alumno, AsistenciaAlumno)
+    tardia = asistencia.registrada_despues(cid, fecha, alumno_id=Alumno.id)
+    base = (select(Matricula.seccion_id, Alumno, AsistenciaAlumno, tardia)
             .join(Alumno, and_(Alumno.colegio_id == Matricula.colegio_id, Alumno.id == Matricula.alumno_id))
             .outerjoin(AsistenciaAlumno, and_(AsistenciaAlumno.colegio_id == Matricula.colegio_id,
                                               AsistenciaAlumno.alumno_id == Matricula.alumno_id,
@@ -144,8 +147,8 @@ def dia(fecha: date | None = None, seccion_id: int | None = None, s: Sesion = De
         salida["alumnos"] = [{
             "alumno_id": a.id, "nombre": f"{a.apellidos}, {a.nombres}", "estado": f.estado if f else None,
             "entrada": asistencia.hora(f.entrada) if f else None, "salida": asistencia.hora(f.salida) if f else None,
-            "minutos_tarde": f.minutos_tarde if f else 0,
-        } for _, a, f in filas]
+            "minutos_tarde": f.minutos_tarde if f else 0, "registrada_despues": tardia,
+        } for _, a, f, tardia in filas]
         return salida
     por_seccion: dict[int, dict] = {}
     for sid, estado, n in db.execute(
@@ -257,7 +260,8 @@ def personal_dia(fecha: date | None = None, s: Sesion = Depends(ver), db: Sessio
     cid, fecha = s.colegio.id, fecha or hoy_lima()
     licencias = {lic.usuario_id: lic.tipo for lic in _licencias_en(db, cid, fecha, fecha)}
     filas = db.execute(
-        select(Usuario, Rol.nombre, Turno.nombre, AsistenciaPersonal)
+        select(Usuario, Rol.nombre, Turno.nombre, AsistenciaPersonal,
+               asistencia.registrada_despues(cid, fecha, usuario_id=Usuario.id))
         .join(Rol, and_(Rol.colegio_id == Usuario.colegio_id, Rol.id == Usuario.rol_id))
         .outerjoin(Turno, and_(Turno.colegio_id == Usuario.colegio_id, Turno.id == Usuario.turno_id))
         .outerjoin(AsistenciaPersonal, and_(AsistenciaPersonal.colegio_id == Usuario.colegio_id,
@@ -269,7 +273,8 @@ def personal_dia(fecha: date | None = None, s: Sesion = Depends(ver), db: Sessio
         "estado": f.estado if f else ("licencia" if u.id in licencias else None),
         "entrada": asistencia.hora(f.entrada) if f else None, "salida": asistencia.hora(f.salida) if f else None,
         "minutos_tarde": f.minutos_tarde if f else 0, "licencia": licencias.get(u.id),
-    } for u, rol, turno, f in filas]}
+        "registrada_despues": tardia,
+    } for u, rol, turno, f, tardia in filas]}
 
 
 @router.get("/personal/mensual.xlsx")
@@ -313,9 +318,10 @@ class DatosLicencia(BaseModel):
         return self
 
 
-def _licencia(lic: LicenciaPersonal, u: Usuario) -> dict:
+def _licencia(lic: LicenciaPersonal, u: Usuario, con_motivo: bool = True) -> dict:
     return {"id": lic.id, "usuario_id": lic.usuario_id, "nombre": f"{u.apellidos}, {u.nombres}", "tipo": lic.tipo,
-            "desde": lic.desde.isoformat(), "hasta": lic.hasta.isoformat(), "motivo": lic.motivo}
+            "desde": lic.desde.isoformat(), "hasta": lic.hasta.isoformat(),
+            "motivo": lic.motivo if con_motivo else None}
 
 
 @router.get("/licencias")
@@ -326,7 +332,9 @@ def licencias(desde: date | None = None, hasta: date | None = None, s: Sesion = 
     lics = _licencias_en(db, s.colegio.id, desde, hasta)
     personas = {u.id: u for u in db.scalars(select(Usuario).where(
         Usuario.colegio_id == s.colegio.id, Usuario.id.in_({lic.usuario_id for lic in lics})))}
-    return [_licencia(lic, personas[lic.usuario_id]) for lic in lics]
+    # El motivo (p. ej. un descanso médico) solo lo ve quien tiene permiso sobre el personal.
+    con_motivo = tiene_permiso(s.usuario, "personal", "ver")
+    return [_licencia(lic, personas[lic.usuario_id], con_motivo) for lic in lics]
 
 
 @router.post("/licencias", status_code=201)

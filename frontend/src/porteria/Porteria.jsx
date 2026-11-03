@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, ErrorApi } from '../api.js'
+import { Link } from 'react-router-dom'
+import { api, ErrorApi, leerToken } from '../api.js'
 import { datos, nuevoId, pendientes } from './almacen.js'
 import Camara from './Camara.jsx'
 import { buscar, decidir, fechaLima, horaLima, indexar, leerCodigo, minutosTarde, sinTildes } from './reglas.js'
@@ -8,7 +9,7 @@ const CADA_MS = 10000 // reintento de envío
 const LOTE = 200
 const TEXTO = { entrada: 'Entrada', salida: 'Salida', duplicada: 'Ya registrado' }
 
-export default function Porteria() {
+export default function Porteria({ yo }) {
   const [padron, setPadron] = useState(null)
   const [enLinea, setEnLinea] = useState(navigator.onLine)
   const [porEnviar, setPorEnviar] = useState(0)
@@ -18,6 +19,7 @@ export default function Porteria() {
   const [busqueda, setBusqueda] = useState('')
   const [equipo, setEquipo] = useState(() => leerLocal('tikray.equipo') || 'Portería principal')
   const [error, setError] = useState(null)
+  const [sesionVencida, setSesionVencida] = useState(!leerToken())
   const lector = useRef(null)
   const marcas = useRef(new Map()) // persona -> instantes aceptados hoy en este celular
   const enviando = useRef(false)
@@ -26,13 +28,15 @@ export default function Porteria() {
 
   // Padrón: el del servidor si hay internet; si no, el último guardado.
   useEffect(() => {
-    api('/api/asistencia/porteria')
+    api('/api/asistencia/porteria', { sinSalir: true })
       .then((p) => { setPadron(p); datos.guardar('padron', p) })
       .catch(async (e) => {
         if (!(e instanceof ErrorApi)) setEnLinea(false)
+        if (e.estado === 401) setSesionVencida(true)
         const guardado = await datos.leer('padron')
         if (guardado) setPadron(guardado)
-        else setError(e instanceof ErrorApi ? e.message : 'Sin internet y sin padrón guardado: conéctate una vez para descargarlo.')
+        else setError(e.estado === 401 ? 'Tu sesión venció. Vuelve a ingresar para descargar el padrón.'
+          : e instanceof ErrorApi ? e.message : 'Sin internet y sin padrón guardado: conéctate una vez para descargarlo.')
       })
     datos.leer('marcas').then((m) => {
       if (m?.fecha === fechaLima(new Date())) marcas.current = new Map(m.lista)
@@ -42,12 +46,13 @@ export default function Porteria() {
   const contar = useCallback(async () => setPorEnviar((await pendientes.todos()).length), [])
 
   const sincronizar = useCallback(async () => {
-    if (enviando.current) return
+    if (enviando.current || !leerToken()) return
     enviando.current = true
     try {
       const lista = await pendientes.todos()
       for (let i = 0; i < lista.length; i += LOTE) {
-        const r = await api('/api/asistencia/marcaciones', { metodo: 'POST', datos: { marcaciones: lista.slice(i, i + LOTE) } })
+        const r = await api('/api/asistencia/marcaciones',
+          { metodo: 'POST', datos: { marcaciones: lista.slice(i, i + LOTE) }, sinSalir: true })
         // "error" se queda para el siguiente intento; lo demás ya lo decidió el servidor.
         await pendientes.quitar(r.resultados.filter((x) => x.estado !== 'error').map((x) => x.id_cliente))
         const rechazos = Object.fromEntries(r.resultados.filter((x) => x.estado === 'desconocido' || x.estado === 'rechazada')
@@ -60,6 +65,7 @@ export default function Porteria() {
       }
     } catch (e) {
       if (!(e instanceof ErrorApi)) setEnLinea(false)
+      if (e.estado === 401) setSesionVencida(true) // las pendientes siguen en el celular
     } finally {
       enviando.current = false
       contar()
@@ -83,6 +89,11 @@ export default function Porteria() {
 
   const registrar = useCallback(async (persona, envio) => {
     const momento = new Date()
+    if (persona?.tipo === 'personal' && persona.id === yo?.id) {
+      setTarjeta({ id: null, persona, rechazo: 'No puedes registrar tu propia asistencia', hora: horaLima(momento) })
+      avisar('mal')
+      return
+    }
     const clave = `${persona?.tipo}:${persona?.id}`
     let resultado = null
     let tarde = 0
@@ -104,7 +115,7 @@ export default function Porteria() {
     avisar(persona ? (resultado === 'duplicada' ? 'repetida' : 'bien') : 'mal')
     contar()
     sincronizar()
-  }, [padron, indice, equipo, contar, sincronizar])
+  }, [padron, indice, equipo, yo, contar, sincronizar])
 
   const leer = useCallback((texto) => {
     if (!indice) return
@@ -130,8 +141,8 @@ export default function Porteria() {
     const q = sinTildes(busqueda.trim())
     if (!indice || q.length < 2) return []
     return [...indice.alumnos.values(), ...indice.personal.values()]
-      .filter((p) => sinTildes(p.nombre).includes(q)).slice(0, 8)
-  }, [busqueda, indice])
+      .filter((p) => !(p.tipo === 'personal' && p.id === yo?.id) && sinTildes(p.nombre).includes(q)).slice(0, 8)
+  }, [busqueda, indice, yo])
 
   function manual(p) {
     if (!confirm(`¿Marcar a ${p.nombre} sin carnet?`)) return
@@ -140,11 +151,25 @@ export default function Porteria() {
     lector.current?.focus()
   }
 
-  if (error) return <p className="error">{error}</p>
+  if (error) {
+    return <>
+      <p className="error">{error}</p>
+      {sesionVencida && <Link className="boton" to="/personal?volver=/panel/asistencia/porteria">Ingresar de nuevo</Link>}
+    </>
+  }
   if (!padron) return <p className="tenue">Preparando la portería…</p>
 
   return (
     <div className="porteria">
+      {sesionVencida && (
+        <div className="porteria-sesion" role="alert">
+          <b>Sesión vencida: vuelve a ingresar.</b>{' '}
+          {porEnviar > 0
+            ? `Las ${porEnviar} marcaciones pendientes están guardadas en este celular y se enviarán al ingresar.`
+            : 'Puedes seguir marcando: se guardan en este celular y se enviarán al ingresar.'}{' '}
+          <Link className="boton" to="/personal?volver=/panel/asistencia/porteria">Ingresar de nuevo</Link>
+        </div>
+      )}
       <div className="porteria-estado">
         <span><span className={enLinea ? 'punto en-linea' : 'punto sin-linea'} />{' '}
           {enLinea ? 'Con internet' : 'Sin internet: las marcaciones se guardan en este celular'}</span>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
 import { api, descargar, ErrorApi, guardarToken, leerToken } from '../api.js'
 import { aplicarImagen } from '../App.jsx'
+import { borrarPadron } from '../porteria/almacen.js'
 import Asistencia from './Asistencia.jsx'
 import Cabecera from './Cabecera.jsx'
 import CambiarClave from './CambiarClave.jsx'
@@ -39,6 +40,7 @@ export default function PanelColegio({ colegio, setColegio }) {
   function salir() {
     guardarToken(null)
     try { localStorage.removeItem(CLAVE_YO) } catch { /* modo privado */ }
+    borrarPadron()
     navegar('/', { replace: true })
   }
 
@@ -62,7 +64,7 @@ export default function PanelColegio({ colegio, setColegio }) {
       <main className="contenido">
         <Routes>
           <Route index element={<p>Bienvenido, {yo.nombres}.</p>} />
-          <Route path="asistencia/*" element={<Asistencia marcar={puede(yo, 'asistencia', 'editar')}
+          <Route path="asistencia/*" element={<Asistencia yo={yo} marcar={puede(yo, 'asistencia', 'editar')}
             licencias={puede(yo, 'personal', 'editar')} reglas={puede(yo, 'configuracion', 'editar')} />} />
           <Route path="padron/*" element={<Padron editar={puede(yo, 'padron', 'editar')} />} />
           <Route path="personal" element={<Personal yo={yo} />} />

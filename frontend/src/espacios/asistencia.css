@@ -36,6 +36,9 @@
 .porteria-busqueda { list-style: none; padding: 0; margin: 8px 0; }
 .porteria-busqueda li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--borde); }
 .porteria-ajustes { margin-top: 16px; }
+.porteria-sesion { background: #fef3c7; color: #78350f; border-left: 4px solid #d97706; padding: 12px; border-radius: 8px; margin-bottom: 12px; line-height: 1.8; }
+.porteria-sesion .boton { display: inline-block; text-decoration: none; padding: 6px 12px; }
+.marca-tardia { font-size: .8rem; color: var(--tenue); font-style: italic; }
 
 @media (prefers-color-scheme: dark) {
   .estado.presente { background: #14532d; color: #dcfce7; }

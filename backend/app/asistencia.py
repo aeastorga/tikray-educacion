@@ -31,6 +31,9 @@ MINUTOS_CORTE_FALTA = 90
 FUTURO_MAXIMO = timedelta(minutes=5)
 # Lo que se acepta de una portería que estuvo sin internet.
 PASADO_MAXIMO = timedelta(days=30)
+# Recibida más de esto después de su hora: en los reportes figura como "registrada después"
+# (portería sin internet, o alguien que la cargó luego).
+REGISTRO_TARDIO = timedelta(minutes=10)
 # Una marcación que llega tarde (sincronizada después) ya no avisa: "ingresó a las 7:40" a las 3 p. m. confunde.
 AVISO_VIGENTE = timedelta(hours=3)
 
@@ -144,6 +147,10 @@ def registrar(db: Session, colegio_id: int, l: Lectura, registrado_por_id: int |
     persona = _persona(db, colegio_id, l)
     if persona is None:
         return {"id_cliente": l.id_cliente, "estado": "desconocido", "mensaje": "Carnet no reconocido"}
+    if persona.tipo == "personal" and persona.id == registrado_por_id:
+        # Ni con su propio carnet ni buscándose por nombre: su asistencia la registra otra persona.
+        return {"id_cliente": l.id_cliente, "estado": "rechazada",
+                "mensaje": "No puedes registrar tu propia asistencia"}
 
     es_alumno = persona.tipo == "alumno"
     Dia = AsistenciaAlumno if es_alumno else AsistenciaPersonal
@@ -196,6 +203,14 @@ def registrar(db: Session, colegio_id: int, l: Lectura, registrado_por_id: int |
             _encolar(db, colegio_id, persona.id, fecha, resultado, fila)
     db.flush()
     return _respuesta(l, persona, resultado, fila)
+
+
+def registrada_despues(colegio_id: int, fecha, alumno_id=None, usuario_id=None):
+    """Condición SQL: la persona tiene alguna marcación válida de ese día recibida tarde."""
+    persona = Marcacion.alumno_id == alumno_id if alumno_id is not None else Marcacion.usuario_id == usuario_id
+    return exists().where(Marcacion.colegio_id == colegio_id, persona, Marcacion.fecha == fecha,
+                          Marcacion.resultado != "duplicada",
+                          Marcacion.recibido_en > Marcacion.momento + REGISTRO_TARDIO)
 
 
 def _encolar(db: Session, colegio_id: int, alumno_id: int, fecha: date, resultado: str,

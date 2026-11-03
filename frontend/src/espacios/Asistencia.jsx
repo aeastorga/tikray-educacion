@@ -8,7 +8,7 @@ import './asistencia.css'
 const ESTADOS = { presente: 'Presente', tarde: 'Tarde', falta: 'Falta', licencia: 'Licencia' }
 const TIPOS_LICENCIA = { salud: 'Salud', personal: 'Personal', vacaciones: 'Vacaciones', comision: 'Comisión de servicio', maternidad: 'Maternidad / paternidad', otro: 'Otro' }
 
-export default function Asistencia({ marcar, licencias, reglas }) {
+export default function Asistencia({ yo, marcar, licencias, reglas }) {
   return (
     <section>
       <nav className="subpestanas">
@@ -19,7 +19,7 @@ export default function Asistencia({ marcar, licencias, reglas }) {
       </nav>
       <Routes>
         <Route index element={<Alumnos />} />
-        {marcar && <Route path="porteria" element={<Porteria />} />}
+        {marcar && <Route path="porteria" element={<Porteria yo={yo} />} />}
         <Route path="personal" element={<Personal licencias={licencias} />} />
         {reglas && <Route path="reglas" element={<Reglas />} />}
       </Routes>
@@ -41,6 +41,10 @@ function useDia(ruta) {
 
 function Estado({ valor }) {
   return valor ? <span className={`estado ${valor}`}>{ESTADOS[valor]}</span> : <span className="tenue">Sin registro</span>
+}
+
+function Tardia({ si }) {
+  return si ? <span className="marca-tardia" title="Recibida más de 10 minutos después de su hora"> · registrada después</span> : null
 }
 
 function Mensual({ ruta, nombre }) {
@@ -104,7 +108,7 @@ function Alumnos() {
                 <tr key={a.alumno_id}>
                   <td>{a.nombre}</td>
                   <td><Estado valor={a.estado} />{a.minutos_tarde > 0 && <span className="tenue"> {a.minutos_tarde} min</span>}</td>
-                  <td>{a.entrada || '—'}</td><td>{a.salida || '—'}</td>
+                  <td>{a.entrada || '—'}<Tardia si={a.registrada_despues} /></td><td>{a.salida || '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -156,7 +160,7 @@ function Personal({ licencias: editar }) {
               <tr key={p.usuario_id}>
                 <td>{p.nombre}</td><td>{p.rol}</td><td>{p.turno || <span className="tenue">Sin turno</span>}</td>
                 <td><Estado valor={p.estado} />{p.minutos_tarde > 0 && <span className="tenue"> {p.minutos_tarde} min</span>}</td>
-                <td>{p.entrada || '—'}</td><td>{p.salida || '—'}</td>
+                <td>{p.entrada || '—'}<Tardia si={p.registrada_despues} /></td><td>{p.salida || '—'}</td>
               </tr>
             ))}
           </tbody>

@@ -25,7 +25,8 @@ export class ErrorApi extends Error {
   }
 }
 
-export async function api(ruta, { metodo = 'GET', datos, archivo } = {}) {
+// `sinSalir`: ante un 401 la pantalla se queda (la portería sigue marcando sin sesión y avisa).
+export async function api(ruta, { metodo = 'GET', datos, archivo, sinSalir = false } = {}) {
   const cabeceras = {}
   const token = leerToken()
   if (token) cabeceras.Authorization = `Bearer ${token}`
@@ -40,7 +41,7 @@ export async function api(ruta, { metodo = 'GET', datos, archivo } = {}) {
   const r = await fetch(ruta, { method: metodo, headers: cabeceras, body: cuerpo })
   if (r.status === 401 && token) {
     guardarToken(null)
-    window.dispatchEvent(new Event('sesion-cerrada'))
+    if (!sinSalir) window.dispatchEvent(new Event('sesion-cerrada'))
   }
   if (r.status === 204) return null
   const json = await r.json().catch(() => null)
