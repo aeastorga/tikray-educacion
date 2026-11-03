@@ -13,13 +13,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import and_, delete, select, update
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.almacenamiento import get_almacenamiento_privado
-from app.fechas import LIMA, hoy_lima
-from app.models import (AdjuntoCuaderno, Alumno, AlumnoApoderado, AnioEscolar, Apoderado, AsistenciaAlumno, ColaAviso,
+from app.fechas import LIMA
+from app.models import (AdjuntoCuaderno, Alumno, AlumnoApoderado, AnioEscolar, Apoderado, AsistenciaAlumno,
+                        CategoriaIncidencia, ColaAviso,
                         DestinoCuaderno, EntradaCuaderno, Grado, Matricula, Nivel, Seccion, SeccionDocente, Usuario)
 
 MAX_ADJUNTOS = 5
@@ -152,8 +153,12 @@ def avisar(db: Session, e: EntradaCuaderno, apoderados: list[int], mensaje: str)
         Apoderado.colegio_id == e.colegio_id, Apoderado.id.in_(apoderados), Apoderado.estado_acceso == "activo")))
     if con_app:
         datos = {"mensaje": mensaje[:280], "url": f"/familia/cuaderno/{e.id}", "entrada_id": e.id}
+        # Programado: el aviso espera en la cola hasta la hora de envío (y luego, si cae en el horario sin
+        # molestar, hasta que termine).
+        desde = e.programado_para or datetime.now(UTC)
         db.execute(insert(ColaAviso).values([
-            {"colegio_id": e.colegio_id, "tipo": "cuaderno", "apoderado_id": a, "fecha": hoy_lima(), "datos": datos}
+            {"colegio_id": e.colegio_id, "tipo": "cuaderno", "apoderado_id": a, "datos": datos,
+             "fecha": desde.astimezone(LIMA).date(), "procesar_desde": desde}
             for a in con_app]))
     return len(con_app)
 
@@ -286,9 +291,21 @@ def iso(m: datetime | None) -> str | None:
     return m.isoformat() if m else None
 
 
-def entrada_basica(e: EntradaCuaderno) -> dict:
+def publicada(ahora: datetime | None = None):
+    """Condición: ya salió (no es un comunicado programado para más tarde). La familia solo ve estas."""
+    ahora = ahora or datetime.now(UTC)
+    return or_(EntradaCuaderno.programado_para.is_(None), EntradaCuaderno.programado_para <= ahora)
+
+
+def categorias_de(db: Session, colegio_id: int) -> dict[int, dict]:
+    return {c.id: {"id": c.id, "nombre": c.nombre, "tipo": c.tipo} for c in db.scalars(
+        select(CategoriaIncidencia).where(CategoriaIncidencia.colegio_id == colegio_id))}
+
+
+def entrada_basica(e: EntradaCuaderno, categorias: dict[int, dict] | None = None) -> dict:
     """Lo que ven igual el colegio y la familia."""
     return {
+        "categoria": (categorias or {}).get(e.categoria_id), "programado_para": iso(e.programado_para),
         "id": e.id, "tipo": e.tipo, "titulo": e.titulo, "cuerpo": e.cuerpo, "alcance": e.alcance,
         "pide_firma": requiere_firma(e), "cita_en": iso(e.cita_en), "lugar": e.lugar,
         "desde": e.desde.isoformat() if e.desde else None, "hasta": e.hasta.isoformat() if e.hasta else None,

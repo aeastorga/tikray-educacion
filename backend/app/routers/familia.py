@@ -349,7 +349,8 @@ def yo(request: Request, s: SesionFamilia = Depends(familia_sesion), db: Session
     tiene_passkey = db.scalar(select(PasskeyFamilia.id).where(PasskeyFamilia.cuenta_id == s.cuenta.id,
                                                               PasskeyFamilia.rp_id == _host(request))) is not None
     return {"nombres": ap.nombres, "apellidos": ap.apellidos, "estado": ap.estado_acceso,
-            "tiene_passkey": tiene_passkey, "push_clave": get_settings().vapid_clave_publica or None}
+            "tiene_passkey": tiene_passkey, "push_clave": get_settings().vapid_clave_publica or None,
+            "modulos": {m: s.colegio.modulo_activo(m) for m in ("asistencia", "cuaderno")}}
 
 
 def _apoderados_activos(db: Session, cuenta_id: int):
@@ -393,16 +394,22 @@ def hijos(s: SesionFamilia = Depends(familia_sesion), db: Session = Depends(get_
             select(Marcacion).where(Marcacion.colegio_id == colegio.id, Marcacion.alumno_id.in_(ids),
                                     Marcacion.fecha == hoy, Marcacion.resultado != "duplicada"))} if ids else {}
         lectivo = es_dia_lectivo(db, colegio.id, hoy)
+        con_asistencia = colegio.modulo_activo("asistencia")
         for a, grado, seccion, dia, hora_salida in filas:
+            if not con_asistencia:  # el colegio no usa asistencia: la tarjeta sin datos del día
+                dia, lectivo_a = None, False
+            else:
+                lectivo_a = lectivo
             tarjetas.append({
                 "alumno_id": a.id, "colegio": colegio.nombre, "nombres": a.nombres, "apellidos": a.apellidos,
-                "seccion": f"{grado} {seccion}" if seccion else None, "lectivo": lectivo,
+                "seccion": f"{grado} {seccion}" if seccion else None, "lectivo": lectivo_a,
+                "asistencia": con_asistencia, "cuaderno": colegio.modulo_activo("cuaderno"),
                 "estado": dia.estado if dia else None, "entrada": asistencia.hora(dia.entrada) if dia else None,
                 "salida": asistencia.hora(dia.salida) if dia else None,
                 "minutos_tarde": dia.minutos_tarde if dia else 0,
                 "puerta": puertas.get((a.id, dia.entrada)) if dia and dia.entrada else None,
                 "hora_salida": hora_salida.strftime("%H:%M") if hora_salida else None,
-                "tardanzas_mes": tardanzas.get(a.id, 0),
+                "tardanzas_mes": tardanzas.get(a.id, 0) if con_asistencia else 0,
             })
     pendientes = db.scalars(select(Colegio.nombre).join(Apoderado, Apoderado.colegio_id == Colegio.id)
                             .where(Apoderado.cuenta_id == s.cuenta.id, Apoderado.estado_acceso == "pendiente")).all()
@@ -419,6 +426,8 @@ def asistencia_del_mes(alumno_id: int, mes: str | None = Query(None, pattern=r"^
     if vinculo is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Alumno no encontrado")
     cid = vinculo[0]
+    if not db.get(Colegio, cid).modulo_activo("asistencia"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Este módulo no está activo en el colegio")
     hoy = hoy_lima()
     inicio = date.fromisoformat(f"{mes}-01") if mes else hoy.replace(day=1)
     fin = min((inicio + timedelta(days=32)).replace(day=1) - timedelta(days=1), hoy)

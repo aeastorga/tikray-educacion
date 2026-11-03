@@ -9,15 +9,19 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import activacion, configuracion
 from app.config import get_settings
 from app.db import get_db
 from app.deps import SUBDOMINIOS_RESERVADOS, admin_plataforma
 from app.fechas import hoy_lima
 from app.models import AdminPlataforma, Colegio, Rol, Usuario
+from app.models.colegio import CONTRATABLES
+from app.modulos import MODULOS
+from app.routers.configuracion import NOMBRE_CAMPO, Perfil, aplicar_perfil, modulos_de, perfil_de
 from app.routers.personal import DocumentoPersonal
 from app.proteccion import generar_clave_temporal, ip_cliente, permitir_intento, registrar_fallo
 from app.seguridad import emitir_token, hashear_clave, verificar_clave_o_simular
@@ -25,6 +29,7 @@ from app.seguridad import emitir_token, hashear_clave, verificar_clave_o_simular
 publico = APIRouter(prefix="/plataforma", tags=["plataforma"])
 router = APIRouter(prefix="/plataforma", tags=["plataforma"], dependencies=[Depends(admin_plataforma)])
 
+QUIEN = "Tikray Labs"  # en el historial del colegio
 SUBDOMINIO = r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
 Estado = Literal["prueba", "activo", "suspendido"]
 
@@ -75,6 +80,8 @@ class CambioColegio(BaseModel):
     dominio_propio: str | None = Field(default=None, max_length=253)
     estado: Estado | None = None
     vence_en: date | None = None
+    perfil: Perfil | None = None
+    modulos_contratados: list[Literal["asistencia", "cuaderno", "familias", "reuniones"]] | None = None
 
     _norm_dominio = field_validator("dominio_propio")(classmethod(lambda cls, v: _dominio(v)))
 
@@ -88,6 +95,8 @@ class ColegioOut(BaseModel):
     vence_en: date | None
     disponible: bool
     es_demo: bool
+    perfil: dict
+    modulos: list[dict]
 
 
 class ColegioCreado(BaseModel):
@@ -98,7 +107,8 @@ class ColegioCreado(BaseModel):
 
 def _salida(c: Colegio) -> ColegioOut:
     return ColegioOut(id=c.id, nombre=c.nombre, subdominio=c.subdominio, dominio_propio=c.dominio_propio,
-                      estado=c.estado, vence_en=c.vence_en, disponible=c.disponible(hoy_lima()), es_demo=c.es_demo)
+                      estado=c.estado, vence_en=c.vence_en, disponible=c.disponible(hoy_lima()), es_demo=c.es_demo,
+                      perfil=perfil_de(c), modulos=modulos_de(c))
 
 
 def _conflicto() -> HTTPException:
@@ -137,6 +147,7 @@ def crear(datos: NuevoColegio, db: Session = Depends(get_db)) -> ColegioCreado:
         raise _conflicto()
     rol = Rol(colegio_id=colegio.id, nombre="Director", es_director=True)
     db.add(rol)
+    configuracion.crear_categorias_por_defecto(db, colegio.id)
     db.flush()
     clave = generar_clave_temporal()
     d = datos.director
@@ -154,6 +165,19 @@ def editar(colegio_id: int, datos: CambioColegio, db: Session = Depends(get_db))
     if colegio is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Colegio no encontrado")
     cambios = datos.model_dump(exclude_unset=True)
+    perfil, contratados = cambios.pop("perfil", None), cambios.pop("modulos_contratados", None)
+    if perfil is not None:
+        if campos := aplicar_perfil(colegio, datos.perfil):
+            configuracion.registrar(db, colegio.id, QUIEN, "editar", "configuracion", "perfil", colegio.id,
+                                    "Perfil del colegio: " + ", ".join(NOMBRE_CAMPO[c] for c in campos))
+    if contratados is not None:
+        nuevos = [m for m in CONTRATABLES if m in set(contratados)]
+        if nuevos != [m for m in CONTRATABLES if m in (colegio.modulos_contratados or [])]:
+            colegio.modulos_contratados = nuevos
+            # Lo que se deja de contratar ya no figura como "apagado por el director".
+            colegio.modulos_apagados = [m for m in (colegio.modulos_apagados or []) if m in nuevos]
+            configuracion.registrar(db, colegio.id, QUIEN, "editar", "configuracion", "modulos", colegio.id,
+                                    "Módulos contratados: " + (", ".join(MODULOS[m] for m in nuevos) or "ninguno"))
     for campo, valor in cambios.items():
         # dominio_propio y vence_en se pueden vaciar enviando null; el resto, no.
         if campo not in ("dominio_propio", "vence_en") and valor is None:
@@ -170,6 +194,37 @@ def editar(colegio_id: int, datos: CambioColegio, db: Session = Depends(get_db))
         db.rollback()
         raise _conflicto()
     return _salida(colegio)
+
+
+# --- Pasar de prueba a activo ---------------------------------------------------------------
+
+class Activacion(BaseModel):
+    borrar_ejemplo: bool
+    confirmar: str = Field(max_length=63)  # el subdominio, escrito a mano
+
+
+@router.post("/colegios/{colegio_id}/activar")
+def activar(colegio_id: int, d: Activacion, db: Session = Depends(get_db)) -> dict:
+    """Un colegio en prueba pasa a activo. Si se pide, borra los datos de ejemplo (alumnos, apoderados,
+    marcaciones, cuaderno y avisos) y conserva la estructura, turnos, calendario, roles, personal, imagen y
+    configuración. Nunca la demo pública."""
+    c = db.get(Colegio, colegio_id)
+    if c is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Colegio no encontrado")
+    if c.es_demo:
+        raise HTTPException(status.HTTP_409_CONFLICT, "La demo pública no se activa")
+    if c.estado != "prueba":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Solo se activa un colegio en prueba")
+    if d.confirmar.strip().lower() != c.subdominio:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Escribe el subdominio del colegio para confirmar")
+    db.execute(text("SELECT pg_advisory_xact_lock(8, :c)"), {"c": c.id})
+    borrados = activacion.borrar_datos_de_ejemplo(db, c) if d.borrar_ejemplo else {}
+    c.estado, c.vence_en = "activo", None
+    configuracion.registrar(db, c.id, QUIEN, "editar", "configuracion", "colegio", c.id,
+                            "Colegio activado" + (" y datos de ejemplo borrados" if d.borrar_ejemplo else ""))
+    db.commit()
+    activacion.borrar_archivos(borrados.pop("_archivos", []))
+    return {"colegio": _salida(c), "borrados": borrados}
 
 
 # --- Demo con datos ficticios --------------------------------------------------------------

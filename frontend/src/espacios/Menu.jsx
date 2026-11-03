@@ -1,6 +1,6 @@
 // Menú lateral del panel del colegio. Solo muestra los módulos que el rol permite.
 import {
-  BookUser, CalendarCheck, IdCard, KeyRound, LayoutDashboard, LogOut, Menu as IconoMenu, NotebookPen, Presentation,
+  BookUser, CalendarCheck, History, IdCard, KeyRound, LayoutDashboard, LogOut, Menu as IconoMenu, NotebookPen, Presentation,
   ScanLine, Settings, ShieldCheck, UsersRound, X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -51,6 +51,7 @@ export default function Menu({ colegio, yo, puede, salir }) {
       puede('personal') && { a: '/panel/personal', texto: 'Personal', icono: IdCard },
       puede('roles') && { a: '/panel/roles', texto: 'Roles y permisos', icono: ShieldCheck },
       puede('configuracion') && { a: '/panel/configuracion', texto: 'Configuración', icono: Settings },
+      yo.es_director && { a: '/panel/historial', texto: 'Historial', icono: History },
     ]],
   ].map(([titulo, items]) => [titulo, items.filter(Boolean)]).filter(([, items]) => items.length)
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, Check, MessageCircle, Paperclip } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api.js'
-import { Adjuntos, Detalles, fechaHora, TIPOS } from '../espacios/Cuaderno.jsx'
+import { Adjuntos, Categoria, Detalles, fechaHora, TIPOS } from '../espacios/Cuaderno.jsx'
 import '../espacios/cuaderno.css'
 
 // Lo que dice el botón de firma según el tipo.
@@ -43,9 +43,11 @@ export function ListaCuaderno({ recargar }) {
       {datos.entradas.length === 0 ? <p className="tenue">Aún no hay nada en el cuaderno.</p> : (
         <ul className="lista-cuaderno">
           {visibles.map((e) => (
-            <li key={e.id} className={!e.visto || (e.pide_firma && !e.firmado_en) ? 'nueva' : ''}>
+            <li key={e.id} className={[!e.visto || (e.pide_firma && !e.firmado_en) ? 'nueva' : '',
+              e.categoria?.tipo === 'merito' ? 'merito' : ''].join(' ').trim()}>
               <Link to={`/familia/cuaderno/${e.id}`}>
                 <span className={`tipo-cuaderno ${e.tipo}`}>{TIPOS[e.tipo]}</span>
+                <Categoria c={e.categoria} />
                 <b> {e.titulo}</b>
                 <span className="tenue pequeno">
                   {' '}· {e.alumnos.join(', ')} · {fechaHora(e.creado_en)}
@@ -99,9 +101,11 @@ export function DetalleCuaderno() {
       {error && <p className="error">{error}</p>}
       {e && <>
         <p className="tenue">
-          <span className={`tipo-cuaderno ${e.tipo}`}>{TIPOS[e.tipo]}</span> {e.alumnos.join(', ')} · {fechaHora(e.creado_en)}
+          <span className={`tipo-cuaderno ${e.tipo}`}>{TIPOS[e.tipo]}</span> <Categoria c={e.categoria} />
+          {' '}{e.alumnos.join(', ')} · {fechaHora(e.creado_en)}
           {e.autor && ` · ${e.autor}`}
         </p>
+        {e.categoria?.tipo === 'merito' && <p className="merito-destacado">¡Un mérito para {e.alumnos.join(', ')}!</p>}
         <h2>{e.titulo}</h2>
         <Detalles e={e} />
         {e.cuerpo && <p className="cuaderno-cuerpo">{e.cuerpo}</p>}

@@ -24,7 +24,7 @@ from app import familias, pdf, reunion, validacion
 from app.comun import guardar, obtener
 from app.cuaderno import secciones_permitidas
 from app.db import get_db
-from app.deps import Sesion, colegio_del_host, requerir_permiso
+from app.deps import Sesion, colegio_del_host, modulo_encendido, requerir_permiso
 from app.models import (Alumno, AlumnoApoderado, Apoderado, Colegio, FichaReunion, Grado, InvitacionFamilia,
                         Matricula, ReunionPadres, Seccion, Usuario)
 from app.proteccion import FALLOS_IP, ip_cliente
@@ -33,7 +33,8 @@ from app.routers.estructura import anio_activo
 from app.routers.familia import _cuenta_de, activar
 
 router = APIRouter(prefix="/reuniones", tags=["reuniones"])
-publico = APIRouter(prefix="/familia/reunion", tags=["reuniones"])
+publico = APIRouter(prefix="/familia/reunion", tags=["reuniones"],
+                  dependencies=[Depends(modulo_encendido("reuniones"))])
 ver = requerir_permiso("reuniones")
 editar = requerir_permiso("reuniones", "editar")
 

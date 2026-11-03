@@ -22,6 +22,14 @@ export function fechaCorta(iso) {
   return iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('es-PE', { day: 'numeric', month: 'short' }) : ''
 }
 
+// Perú no cambia de hora: un datetime-local se lee siempre como hora de Lima.
+const conZonaLima = (local) => `${local.length === 16 ? `${local}:00` : local}-05:00`
+export const programadoPendiente = (e) => e.programado_para && new Date(e.programado_para) > new Date()
+
+export function Categoria({ c }) {
+  return c ? <span className={`categoria-cuaderno ${c.tipo}`}>{c.tipo === 'merito' ? '★ ' : ''}{c.nombre}</span> : null
+}
+
 // Lo propio de cada tipo, en una línea: fecha de la citación, días justificados, hora de salida.
 export function Detalles({ e }) {
   const partes = []
@@ -100,10 +108,12 @@ function Bandeja() {
           <tbody>
             {lista.map((e) => (
               <tr key={e.id} className="clic" onClick={() => navegar(`/panel/cuaderno/${e.id}`)}>
-                <td className="tenue fecha">{fechaHora(e.creado_en)}</td>
+                <td className="tenue fecha">{fechaHora(programadoPendiente(e) ? e.programado_para : e.creado_en)}</td>
                 <td>
                   <span className={`tipo-cuaderno ${e.tipo}`}>{TIPOS[e.tipo]}</span>
                   {e.estado && <span className={`estado-cuaderno ${e.estado}`}>{ESTADOS[e.estado]}</span>}
+                  {programadoPendiente(e) && <span className="estado-cuaderno programado" title={`Sale el ${fechaHora(e.programado_para)}`}>Programado</span>}
+                  <Categoria c={e.categoria} />
                 </td>
                 <td>
                   {e.espera_al_colegio && <span className="punto" title="Espera respuesta del colegio" />}
@@ -159,6 +169,13 @@ function Detalle({ editar }) {
     catch (err) { setError(err.message) }
   }
 
+  async function cancelar() {
+    if (!window.confirm('¿Cancelar este comunicado? No saldrá y se borra.')) return
+    setError(null)
+    try { await api(`/api/cuaderno/entradas/${id}/cancelar`, { metodo: 'POST' }); navegar('/panel/cuaderno') }
+    catch (err) { setError(err.message) }
+  }
+
   async function resolver(estado) {
     setError(null)
     try {
@@ -180,8 +197,16 @@ function Detalle({ editar }) {
       <p className="tenue">
         <span className={`tipo-cuaderno ${e.tipo}`}>{TIPOS[e.tipo]}</span> {e.destino} · {fechaHora(e.creado_en)}
         {e.autor && ` · ${e.de_familia ? 'Enviado por' : 'Escrito por'} ${e.autor}`}
+        {' '}<Categoria c={e.categoria} />
       </p>
       <h2>{e.titulo}</h2>
+      {programadoPendiente(e) && (
+        <div className="aviso aviso-programado">
+          <p className="sin-margen"><b>Programado para el {fechaHora(e.programado_para)}</b> Hasta entonces las familias
+            no lo ven ni reciben el aviso.</p>
+          {editar && <button className="boton secundario" onClick={cancelar}>Cancelar envío</button>}
+        </div>
+      )}
       <Detalles e={e} />
       {e.cuerpo && <p className="cuaderno-cuerpo">{e.cuerpo}</p>}
       <Adjuntos lista={e.adjuntos} ruta="/api/cuaderno/adjuntos" />
@@ -271,6 +296,13 @@ function tamano(bytes) {
 const VACIO = {
   tipo: 'comunicado', alcance: 'colegio', nivel_id: '', grado_id: '', seccion_id: '', alumno: null, titulo: '',
   cuerpo: '', pide_firma: true, cita_en: '', lugar: '', desde: '', hasta: '', hora_salida: '', recoge: '',
+  categoria_id: '', programar: false, programado_para: '',
+}
+
+// Ahora en Lima, como valor de un datetime-local (para el mínimo del programado).
+function ahoraLocal(minutos = 0) {
+  const d = new Date(Date.now() + minutos * 60000)
+  return d.toLocaleString('sv-SE', { timeZone: 'America/Lima' }).slice(0, 16).replace(' ', 'T')
 }
 
 function Escribir() {
@@ -280,8 +312,12 @@ function Escribir() {
   const [archivos, setArchivos] = useState([])
   const [error, setError] = useState(null)
   const [enviando, setEnviando] = useState(false)
+  const [plantillas, setPlantillas] = useState([])
+  const [categorias, setCategorias] = useState([])
 
   useEffect(() => {
+    api('/api/configuracion/plantillas').then(setPlantillas).catch(() => {})
+    api('/api/configuracion/categorias').then((l) => setCategorias(l.filter((c) => c.activa))).catch(() => {})
     api('/api/cuaderno/opciones').then((o) => {
       setOp(o)
       if (!o.todo_el_colegio) setF((x) => ({ ...x, alcance: 'seccion' }))
@@ -305,6 +341,8 @@ function Escribir() {
       hasta: f.tipo === 'justificacion' ? f.hasta || null : null,
       hora_salida: f.tipo === 'permiso_salida' ? f.hora_salida : null,
       recoge: f.tipo === 'permiso_salida' ? f.recoge : null,
+      categoria_id: f.tipo === 'incidencia' ? n(f.categoria_id) : null,
+      programado_para: f.tipo === 'comunicado' && f.programar && f.programado_para ? conZonaLima(f.programado_para) : null,
     }
     const formulario = new FormData()
     formulario.append('datos', JSON.stringify(datos))
@@ -341,6 +379,30 @@ function Escribir() {
       {alcance === 'seccion' && <Opcion valor={f.seccion_id} onChange={cambiar('seccion_id')} lista={op.secciones} nombre="Sección" />}
       {alcance === 'alumno' && <ElegirAlumno valor={f.alumno} onChange={(a) => setF({ ...f, alumno: a })} secciones={op.secciones} />}
 
+      {f.tipo === 'comunicado' && plantillas.length > 0 && (
+        <label>Plantilla
+          <select value="" onChange={(ev) => {
+            const p = plantillas.find((x) => String(x.id) === ev.target.value)
+            if (p) setF({ ...f, titulo: p.titulo, cuerpo: p.cuerpo })
+          }}>
+            <option value="">Elegir una plantilla…</option>
+            {plantillas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </select>
+        </label>
+      )}
+      {f.tipo === 'incidencia' && categorias.length > 0 && (
+        <label>Categoría
+          <select value={f.categoria_id} onChange={cambiar('categoria_id')} required>
+            <option value="">Elige…</option>
+            {[['merito', 'Méritos'], ['mejora', 'A mejorar']].map(([t, nombre]) => (
+              <optgroup key={t} label={nombre}>
+                {categorias.filter((c) => c.tipo === t).map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+      )}
+
       <label>{f.tipo === 'justificacion' ? 'Motivo' : 'Asunto'}
         <input value={f.titulo} onChange={cambiar('titulo')} required maxLength={200} />
       </label>
@@ -353,6 +415,20 @@ function Escribir() {
           <input type="checkbox" checked={f.pide_firma} onChange={cambiar('pide_firma')} />
           Pedir firma de lectura a cada apoderado
         </label>
+      )}
+      {f.tipo === 'comunicado' && (
+        <div className="programar">
+          <label className="check">
+            <input type="checkbox" checked={f.programar} onChange={cambiar('programar')} />
+            Programar el envío
+          </label>
+          {f.programar && (
+            <label>Sale el (hora de Lima)
+              <input type="datetime-local" value={f.programado_para} onChange={cambiar('programado_para')}
+                     min={ahoraLocal(2)} max={ahoraLocal(90 * 24 * 60)} required />
+            </label>
+          )}
+        </div>
       )}
       {f.tipo === 'citacion' && (
         <div className="fila-form sin-margen">
@@ -381,9 +457,13 @@ function Escribir() {
       {error && <p className="error">{error}</p>}
       <p className="tenue pequeno">
         {['justificacion', 'permiso_salida'].includes(f.tipo) ? 'Lo que registra el colegio queda aprobado. ' : ''}
-        Las familias con la app reciben un aviso en el celular.
+        {f.tipo === 'comunicado' && f.programar
+          ? 'Las familias lo verán y recibirán el aviso a la hora elegida. Puedes cancelarlo antes desde la bandeja.'
+          : 'Las familias con la app reciben un aviso en el celular.'}
       </p>
-      <button className="boton" disabled={enviando}>{enviando ? 'Enviando…' : 'Enviar'}</button>
+      <button className="boton" disabled={enviando}>
+        {enviando ? 'Enviando…' : f.tipo === 'comunicado' && f.programar ? 'Programar' : 'Enviar'}
+      </button>
     </form>
   )
 }

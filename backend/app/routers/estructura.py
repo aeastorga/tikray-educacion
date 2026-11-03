@@ -9,6 +9,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.comun import guardar, obtener
+from app.configuracion import anotar
 from app.db import get_db
 from app.deps import Sesion, requerir_permiso
 from app.models import AnioEscolar, DiaNoLectivo, Grado, Matricula, Nivel, Seccion, Turno
@@ -68,7 +69,7 @@ def crear_anio(datos: DatosAnio, s: Sesion = Depends(editar), db: Session = Depe
                                                         AnioEscolar.activo))
     a = AnioEscolar(colegio_id=s.colegio.id, activo=hay_activo is None, **datos.model_dump())
     db.add(a)
-    guardar(db, "Ese año escolar ya existe")
+    anotar(db, s, "crear", "padron", "anio", a, f"Año escolar {a.anio}", "Ese año escolar ya existe")
     return _anio(a)
 
 
@@ -77,7 +78,8 @@ def editar_anio(anio_id: int, datos: DatosAnio, s: Sesion = Depends(editar),
                 db: Session = Depends(get_db)) -> AnioOut:
     a = obtener(db, AnioEscolar, s.colegio.id, anio_id, "Año escolar")
     a.anio, a.inicio, a.fin, a.dias_semana = datos.anio, datos.inicio, datos.fin, datos.dias_semana
-    guardar(db, "Ese año escolar ya existe")
+    anotar(db, s, "editar", "padron", "anio", a, f"Año escolar {a.anio}: {a.inicio:%d/%m} al {a.fin:%d/%m}",
+           "Ese año escolar ya existe")
     return _anio(a)
 
 
@@ -87,7 +89,7 @@ def activar_anio(anio_id: int, s: Sesion = Depends(editar), db: Session = Depend
     db.execute(update(AnioEscolar).where(AnioEscolar.colegio_id == s.colegio.id, AnioEscolar.id != a.id)
                .values(activo=False))
     a.activo = True
-    guardar(db)
+    anotar(db, s, "editar", "padron", "anio", a, f"Activó el año escolar {a.anio}")
     return _anio(a)
 
 
@@ -123,7 +125,7 @@ def estructura(s: Sesion = Depends(ver), db: Session = Depends(get_db)) -> dict:
 def crear_nivel(datos: DatosNivel, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> dict:
     n = Nivel(colegio_id=s.colegio.id, nombre=datos.nombre.strip(), orden=datos.orden)
     db.add(n)
-    guardar(db, "Ya existe un nivel con ese nombre")
+    anotar(db, s, "crear", "padron", "nivel", n, f"Nivel {n.nombre}", "Ya existe un nivel con ese nombre")
     return {"id": n.id, "nombre": n.nombre, "orden": n.orden}
 
 
@@ -132,14 +134,16 @@ def editar_nivel(nivel_id: int, datos: DatosNivel, s: Sesion = Depends(editar),
                  db: Session = Depends(get_db)) -> dict:
     n = obtener(db, Nivel, s.colegio.id, nivel_id, "Nivel")
     n.nombre, n.orden = datos.nombre.strip(), datos.orden
-    guardar(db, "Ya existe un nivel con ese nombre")
+    anotar(db, s, "editar", "padron", "nivel", n, f"Nivel {n.nombre}", "Ya existe un nivel con ese nombre")
     return {"id": n.id, "nombre": n.nombre, "orden": n.orden}
 
 
 @router.delete("/niveles/{nivel_id}", status_code=204)
 def borrar_nivel(nivel_id: int, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> None:
-    db.delete(obtener(db, Nivel, s.colegio.id, nivel_id, "Nivel"))
-    guardar(db, en_uso="El nivel tiene grados; bórralos primero")
+    n = obtener(db, Nivel, s.colegio.id, nivel_id, "Nivel")
+    db.delete(n)
+    anotar(db, s, "anular", "padron", "nivel", nivel_id, f"Borró el nivel {n.nombre}",
+           en_uso="El nivel tiene grados; bórralos primero")
 
 
 @router.post("/grados", status_code=201)
@@ -147,7 +151,7 @@ def crear_grado(datos: DatosGrado, s: Sesion = Depends(editar), db: Session = De
     obtener(db, Nivel, s.colegio.id, datos.nivel_id, "Nivel")
     g = Grado(colegio_id=s.colegio.id, nivel_id=datos.nivel_id, nombre=datos.nombre.strip(), orden=datos.orden)
     db.add(g)
-    guardar(db, "Ese grado ya existe en el nivel")
+    anotar(db, s, "crear", "padron", "grado", g, f"Grado {g.nombre}", "Ese grado ya existe en el nivel")
     return {"id": g.id, "nivel_id": g.nivel_id, "nombre": g.nombre, "orden": g.orden}
 
 
@@ -157,14 +161,16 @@ def editar_grado(grado_id: int, datos: DatosGrado, s: Sesion = Depends(editar),
     g = obtener(db, Grado, s.colegio.id, grado_id, "Grado")
     obtener(db, Nivel, s.colegio.id, datos.nivel_id, "Nivel")
     g.nivel_id, g.nombre, g.orden = datos.nivel_id, datos.nombre.strip(), datos.orden
-    guardar(db, "Ese grado ya existe en el nivel")
+    anotar(db, s, "editar", "padron", "grado", g, f"Grado {g.nombre}", "Ese grado ya existe en el nivel")
     return {"id": g.id, "nivel_id": g.nivel_id, "nombre": g.nombre, "orden": g.orden}
 
 
 @router.delete("/grados/{grado_id}", status_code=204)
 def borrar_grado(grado_id: int, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> None:
-    db.delete(obtener(db, Grado, s.colegio.id, grado_id, "Grado"))
-    guardar(db, en_uso="El grado tiene secciones; bórralas primero")
+    g = obtener(db, Grado, s.colegio.id, grado_id, "Grado")
+    db.delete(g)
+    anotar(db, s, "anular", "padron", "grado", grado_id, f"Borró el grado {g.nombre}",
+           en_uso="El grado tiene secciones; bórralas primero")
 
 
 # --- Turnos -------------------------------------------------------------------
@@ -187,11 +193,16 @@ def _turno(t: Turno) -> dict:
             "tolerancia_minutos": t.tolerancia_minutos, "hora_salida": t.hora_salida.strftime("%H:%M")}
 
 
+def _texto_turno(t: Turno) -> str:
+    return (f"Turno {t.nombre}: entrada {t.hora_entrada:%H:%M} (tolerancia {t.tolerancia_minutos} min), "
+            f"salida {t.hora_salida:%H:%M}")
+
+
 @router.post("/turnos", status_code=201)
 def crear_turno(datos: DatosTurno, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> dict:
     t = Turno(colegio_id=s.colegio.id, **{**datos.model_dump(), "nombre": datos.nombre.strip()})
     db.add(t)
-    guardar(db, "Ya existe un turno con ese nombre")
+    anotar(db, s, "crear", "padron", "turno", t, _texto_turno(t), "Ya existe un turno con ese nombre")
     return _turno(t)
 
 
@@ -201,14 +212,16 @@ def editar_turno(turno_id: int, datos: DatosTurno, s: Sesion = Depends(editar),
     t = obtener(db, Turno, s.colegio.id, turno_id, "Turno")
     for campo, valor in datos.model_dump().items():
         setattr(t, campo, valor.strip() if campo == "nombre" else valor)
-    guardar(db, "Ya existe un turno con ese nombre")
+    anotar(db, s, "editar", "padron", "turno", t, _texto_turno(t), "Ya existe un turno con ese nombre")
     return _turno(t)
 
 
 @router.delete("/turnos/{turno_id}", status_code=204)
 def borrar_turno(turno_id: int, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> None:
-    db.delete(obtener(db, Turno, s.colegio.id, turno_id, "Turno"))
-    guardar(db, en_uso="Hay secciones en este turno")
+    t = obtener(db, Turno, s.colegio.id, turno_id, "Turno")
+    db.delete(t)
+    anotar(db, s, "anular", "padron", "turno", turno_id, f"Borró el turno {t.nombre}",
+           en_uso="Hay secciones en este turno")
 
 
 # --- Secciones ----------------------------------------------------------------
@@ -254,7 +267,7 @@ def crear_seccion(datos: DatosSeccion, anio_id: int | None = None, s: Sesion = D
     sec = Seccion(colegio_id=cid, anio_id=anio.id, grado_id=datos.grado_id, turno_id=datos.turno_id,
                   nombre=datos.nombre.strip().upper())
     db.add(sec)
-    guardar(db, "Esa sección ya existe en el grado")
+    anotar(db, s, "crear", "padron", "seccion", sec, f"Sección {sec.nombre}", "Esa sección ya existe en el grado")
     return {"id": sec.id, "anio_id": sec.anio_id, "grado_id": sec.grado_id, "turno_id": sec.turno_id,
             "nombre": sec.nombre}
 
@@ -267,15 +280,17 @@ def editar_seccion(seccion_id: int, datos: DatosSeccion, s: Sesion = Depends(edi
     obtener(db, Grado, cid, datos.grado_id, "Grado")
     obtener(db, Turno, cid, datos.turno_id, "Turno")
     sec.grado_id, sec.turno_id, sec.nombre = datos.grado_id, datos.turno_id, datos.nombre.strip().upper()
-    guardar(db, "Esa sección ya existe en el grado")
+    anotar(db, s, "editar", "padron", "seccion", sec, f"Sección {sec.nombre}", "Esa sección ya existe en el grado")
     return {"id": sec.id, "anio_id": sec.anio_id, "grado_id": sec.grado_id, "turno_id": sec.turno_id,
             "nombre": sec.nombre}
 
 
 @router.delete("/secciones/{seccion_id}", status_code=204)
 def borrar_seccion(seccion_id: int, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> None:
-    db.delete(obtener(db, Seccion, s.colegio.id, seccion_id, "Sección"))
-    guardar(db, en_uso="La sección tiene alumnos matriculados")
+    sec = obtener(db, Seccion, s.colegio.id, seccion_id, "Sección")
+    db.delete(sec)
+    anotar(db, s, "anular", "padron", "seccion", seccion_id, f"Borró la sección {sec.nombre}",
+           en_uso="La sección tiene alumnos matriculados")
 
 
 # --- Días no lectivos ---------------------------------------------------------
@@ -320,14 +335,17 @@ def agregar_dias(datos: DatosDiaNoLectivo, anio_id: int | None = None, s: Sesion
             db.add(DiaNoLectivo(colegio_id=cid, anio_id=anio.id, fecha=dia, motivo=datos.motivo.strip()))
             agregados += 1
         dia += timedelta(days=1)
-    guardar(db, "Ese día ya está marcado como no lectivo")
+    rango = f"{datos.desde:%d/%m}" + (f" al {hasta:%d/%m}" if hasta != datos.desde else "")
+    anotar(db, s, "crear", "padron", "dia_no_lectivo", None, f"Día no lectivo {rango}: {datos.motivo.strip()}",
+           "Ese día ya está marcado como no lectivo")
     return {"agregados": agregados}
 
 
 @router.delete("/dias-no-lectivos/{dia_id}", status_code=204)
 def borrar_dia(dia_id: int, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> None:
-    db.delete(obtener(db, DiaNoLectivo, s.colegio.id, dia_id, "Día no lectivo"))
-    guardar(db)
+    d = obtener(db, DiaNoLectivo, s.colegio.id, dia_id, "Día no lectivo")
+    db.delete(d)
+    anotar(db, s, "anular", "padron", "dia_no_lectivo", dia_id, f"Quitó el día no lectivo {d.fecha:%d/%m/%Y}")
 
 
 def es_dia_lectivo(db: Session, colegio_id: int, dia: date) -> bool:

@@ -84,6 +84,9 @@ class EntradaCuaderno(ConColegio, Base):
         CheckConstraint("tipo <> 'permiso_salida' OR (desde IS NOT NULL AND hora_salida IS NOT NULL)",
                         name="permiso_con_hora"),
         CheckConstraint("creado_por_id IS NULL OR apoderado_autor_id IS NULL", name="un_autor"),
+        _fk("categoria_id", "categoria_incidencia", "SET NULL"),
+        CheckConstraint("categoria_id IS NULL OR tipo = 'incidencia'", name="categoria_solo_incidencia"),
+        CheckConstraint("programado_para IS NULL OR tipo = 'comunicado'", name="programado_solo_comunicado"),
         Index("ix_entrada_cuaderno_colegio_creado", "colegio_id", "creado_en"),
     )
 
@@ -119,6 +122,10 @@ class EntradaCuaderno(ConColegio, Base):
     creado_por_id: Mapped[int | None]
     apoderado_autor_id: Mapped[int | None]
     creado_en: Mapped[datetime] = creado_en()
+    # Incidencia: su categoría (mérito o a mejorar).
+    categoria_id: Mapped[int | None]
+    # Comunicado programado: la familia no lo ve ni recibe el aviso hasta esta hora (UTC).
+    programado_para: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class DestinoCuaderno(ConColegio, Base):

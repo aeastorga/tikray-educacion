@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app import cuaderno
 from app.db import get_db
-from app.deps import Sesion, tiene_permiso, usuario_actual
+from app.deps import Sesion, puede, usuario_actual
 from app.fechas import LIMA, hoy_lima
 from app.models import (Alumno, AnioEscolar, Apoderado, AsistenciaAlumno, AsistenciaPersonal, ColaAviso,
                         DestinoCuaderno, EntradaCuaderno, EntregaAviso, Grado, LicenciaPersonal, Marcacion, Matricula,
@@ -208,7 +208,7 @@ def _cuaderno(db: Session, s: Sesion) -> dict:
     sin_responder = db.scalar(visibles(select(func.count()).select_from(EntradaCuaderno).where(
         EntradaCuaderno.colegio_id == cid, ultimo.is_(True)))) or 0
     con_firma = db.scalars(visibles(select(EntradaCuaderno).where(
-        EntradaCuaderno.colegio_id == cid, EntradaCuaderno.tipo.in_(("comunicado", "citacion")),
+        EntradaCuaderno.colegio_id == cid, EntradaCuaderno.tipo.in_(("comunicado", "citacion")), cuaderno.publicada(),
         (EntradaCuaderno.tipo == "citacion") | EntradaCuaderno.pide_firma))
         .order_by(EntradaCuaderno.id.desc()).limit(5)).all()
     firmas = {}
@@ -270,13 +270,13 @@ def _familias(db: Session, cid: int) -> dict:
 def resumen(s: Sesion = Depends(usuario_actual), db: Session = Depends(get_db)) -> dict:
     cid, u = s.colegio.id, s.usuario
     salida: dict = {"fecha": hoy_lima().isoformat(), "colegio": s.colegio.nombre}
-    if tiene_permiso(u, "asistencia", "ver"):
+    if puede(s, "asistencia", "ver"):
         salida["asistencia"] = _asistencia(db, cid, cuaderno.secciones_permitidas(db, u))
-    if tiene_permiso(u, "personal", "ver"):  # nombres, licencias y quién no marcó: solo con este permiso
+    if puede(s, "personal", "ver"):  # nombres, licencias y quién no marcó: solo con este permiso
         salida["personal"] = _personal(db, cid, hoy_lima())
-    if tiene_permiso(u, "cuaderno", "ver"):
+    if puede(s, "cuaderno", "ver"):
         salida["cuaderno"] = _cuaderno(db, s)
-    if tiene_permiso(u, "familias", "ver"):
+    if puede(s, "familias", "ver"):
         salida["familias"] = _familias(db, cid)
     if u.rol.es_director:
         salida["personal_activo"] = db.scalar(select(func.count()).select_from(Usuario).where(
@@ -290,14 +290,14 @@ def menu(s: Sesion = Depends(usuario_actual), db: Session = Depends(get_db)) -> 
     cid, u = s.colegio.id, s.usuario
     anio = db.scalar(select(AnioEscolar.anio).where(AnioEscolar.colegio_id == cid, AnioEscolar.activo))
     salida: dict = {"anio": anio}
-    if tiene_permiso(u, "cuaderno", "ver"):
+    if puede(s, "cuaderno", "ver"):
         permitidas = cuaderno.secciones_permitidas(db, u)
         q = select(func.count()).select_from(EntradaCuaderno).where(EntradaCuaderno.colegio_id == cid,
                                                                     EntradaCuaderno.estado == "pendiente")
         if permitidas is not None:
             q = q.where(EntradaCuaderno.seccion_id.in_(permitidas))
         salida["cuaderno_pendientes"] = db.scalar(q) or 0
-    if tiene_permiso(u, "familias", "ver"):
+    if puede(s, "familias", "ver"):
         salida["padres_por_aprobar"] = db.scalar(select(func.count()).select_from(Apoderado).where(
             Apoderado.colegio_id == cid, Apoderado.estado_acceso == "pendiente")) or 0
     return salida

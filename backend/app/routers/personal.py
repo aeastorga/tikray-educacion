@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import codigos, pdf, validacion
+from app import codigos, configuracion, pdf, validacion
 from app.comun import guardar
 from app.db import get_db
 from app.deps import Sesion, requerir_permiso
@@ -112,10 +112,13 @@ def crear(
     )
     db.add(u)
     try:
-        db.commit()
+        db.flush()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe personal con ese documento o usuario")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe personal con ese documento o usuario") from None
+    configuracion.registrar(db, s.colegio.id, s.usuario, "crear", "personal", "personal", u.id,
+                            f"{u.apellidos}, {u.nombres} · {rol.nombre}")
+    db.commit()
     return ConClaveTemporal(personal=_salida(u), clave_temporal=clave)
 
 
@@ -131,6 +134,9 @@ def reiniciar_clave(
     u.clave_hash = hashear_clave(clave)
     u.debe_cambiar_clave = True
     u.version_sesion += 1
+    # Sin la clave: solo que se reinició.
+    configuracion.registrar(db, s.colegio.id, s.usuario, "editar", "personal", "personal", u.id,
+                            f"Reinició la clave de {u.apellidos}, {u.nombres}")
     db.commit()
     return ConClaveTemporal(personal=_salida(u), clave_temporal=clave)
 
@@ -154,7 +160,10 @@ def editar(
     u.nombres, u.apellidos, u.rol, u.turno_id = datos.nombres, datos.apellidos, rol, datos.turno_id
     if u.activo and not datos.activo:
         u.version_sesion += 1  # quien deja el colegio pierde la sesión al instante
+    estado = "" if u.activo == datos.activo else (" · reactivado" if datos.activo else " · desactivado")
     u.activo = datos.activo
+    configuracion.registrar(db, s.colegio.id, s.usuario, "editar", "personal", "personal", u.id,
+                            f"{u.apellidos}, {u.nombres} · {rol.nombre}{estado}")
     guardar(db)
     return _salida(u)
 
@@ -167,6 +176,8 @@ def nuevo_codigo(
     """Para un carnet perdido: el código anterior deja de servir en la portería."""
     u = _persona(db, s.colegio.id, usuario_id)
     u.codigo = codigos.aleatorio()
+    configuracion.registrar(db, s.colegio.id, s.usuario, "editar", "personal", "personal", u.id,
+                            f"Carnet nuevo para {u.apellidos}, {u.nombres}")
     guardar(db, repetido="Intenta de nuevo")
     return {"codigo": u.codigo}
 

@@ -18,14 +18,15 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app import codigos
+from app import codigos, configuracion
 from app.almacenamiento import get_almacenamiento_privado
 from app.db import Base
 from app.fechas import LIMA, hoy_lima
 from app.models import (AdjuntoCuaderno, Alumno, AlumnoApoderado, AnioEscolar, Apoderado, AsistenciaAlumno,
-                        AsistenciaPersonal, Colegio, ConfigFamilias, CuentaFamilia, DestinoCuaderno, DiaNoLectivo,
-                        EntradaCuaderno, Grado, LicenciaPersonal, Matricula, MensajeCuaderno, Nivel, PermisoRol, Rol,
-                        Seccion, SeccionDocente, Turno, Usuario)
+                        AsistenciaPersonal, CategoriaIncidencia, Colegio, ConfigFamilias, CuentaFamilia,
+                        DestinoCuaderno, DiaNoLectivo, EntradaCuaderno, Grado, LicenciaPersonal, Matricula,
+                        MensajeCuaderno, Nivel, PermisoRol, PlantillaComunicado, Rol, Seccion, SeccionDocente, Turno,
+                        Usuario)
 from app.modulos import MODULOS
 from app.seguridad import hashear_clave
 
@@ -352,10 +353,26 @@ def _cuaderno(db, rnd, cid, director, docentes, secciones, alumnos, dias, hoy) -
     entrada(docentes[3], de_seccion[sec_p1.id], 0.5, tipo="comunicado", alcance="seccion", seccion_id=sec_p1.id,
             pide_firma=True, hace_dias=2, titulo="Paseo al museo de sitio",
             cuerpo="Traer lonchera y agua. Salida 8 a. m., retorno 12 m.")
-    for i, (a, s) in enumerate(rnd.sample(alumnos, 4)):
+    # Categorías por defecto del colegio (las mismas que recibe cualquier colegio nuevo) y plantillas.
+    configuracion.crear_categorias_por_defecto(db, cid)
+    db.flush()
+    categoria = {c.nombre: c.id for c in db.scalars(select(CategoriaIncidencia)
+                                                     .where(CategoriaIncidencia.colegio_id == cid))}
+    db.add_all([PlantillaComunicado(colegio_id=cid, nombre=n, titulo=t, cuerpo=c) for n, t, c in (
+        ("Reunión de padres", "Reunión de padres de familia",
+         "Los esperamos el [día] a las [hora] en [lugar]. Se tratará [tema]. Su asistencia es importante."),
+        ("Simulacro", "Simulacro de sismo",
+         "El [día] a las [hora] haremos un simulacro. No es necesario recoger a los alumnos."),
+        ("Día no laborable", "No habrá clases el [día]",
+         "Por [motivo] no habrá clases. Las clases se reanudan el [día] en el horario de siempre."),
+    )])
+    incidencias = [("No trajo su tarea de Matemática", "Tareas y materiales"),
+                   ("Ayudó a un compañero que se golpeó en el recreo", "Compañerismo"),
+                   ("Uso del celular en clase", "Conducta"),
+                   ("Excelente participación en la feria de ciencias", "Participación")]
+    for i, ((a, s), (titulo, cat)) in enumerate(zip(rnd.sample(alumnos, 4), incidencias)):
         entrada(docentes[0], [a.id], 0.5, tipo="incidencia", seccion_id=s.id, alumno_id=a.id, hace_dias=i,
-                titulo=["No trajo su tarea de Matemática", "Se golpeó la rodilla en el recreo (se le dio primeros "
-                        "auxilios)", "Uso del celular en clase", "Excelente participación en la feria de ciencias"][i])
+                titulo=titulo, categoria_id=categoria[cat])
     for i, (a, s) in enumerate(rnd.sample(alumnos, 2)):
         cita = datetime.combine(hoy + timedelta(days=2 + i), time(8, 30), LIMA)
         entrada(docentes[1], [a.id], 0.5, tipo="citacion", seccion_id=s.id, alumno_id=a.id, cita_en=cita,

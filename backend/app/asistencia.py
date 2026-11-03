@@ -246,8 +246,8 @@ def corte(turno: Turno, minutos: int) -> time:
 
 def turnos_por_cortar(db: Session, fecha: date, desde: time | None, hasta: time | None,
                       colegio_id: int | None = None) -> dict[int, list[int]]:
-    """Turnos cuyo corte de falta cae en (desde, hasta], por colegio, solo de colegios disponibles y
-    con clase ese día. Una sola consulta de turnos para todos los colegios; los demás no se tocan."""
+    """Turnos cuyo corte de falta cae en (desde, hasta], por colegio, solo de colegios disponibles, con
+    asistencia prendida y con clase ese día. Una sola consulta de turnos para todos los colegios; los demás no se tocan."""
     q = (select(Turno.id, Turno.colegio_id, Turno.hora_entrada,
                 func.coalesce(ConfigAsistencia.minutos_corte_falta, MINUTOS_CORTE_FALTA))
          .outerjoin(ConfigAsistencia, ConfigAsistencia.colegio_id == Turno.colegio_id))
@@ -262,7 +262,7 @@ def turnos_por_cortar(db: Session, fecha: date, desde: time | None, hasta: time 
         return {}
     colegios = db.scalars(select(Colegio).where(Colegio.id.in_(por_colegio))).all()
     return {c.id: por_colegio[c.id] for c in colegios
-            if c.disponible(fecha) and es_dia_lectivo(db, c.id, fecha)}
+            if c.disponible(fecha) and c.modulo_activo("asistencia") and es_dia_lectivo(db, c.id, fecha)}
 
 
 def marcar_faltas(db: Session, fecha: date, hasta: time | None = None, colegio_id: int | None = None,

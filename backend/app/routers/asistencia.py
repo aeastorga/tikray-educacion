@@ -13,8 +13,9 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
-from app import asistencia
+from app import asistencia, configuracion
 from app.comun import guardar, obtener
+from app.configuracion import anotar
 from app.db import get_db
 from app.deps import Sesion, requerir_permiso, tiene_permiso
 from app.fechas import hoy_lima
@@ -69,6 +70,11 @@ def recibir(datos: LoteIn, s: Sesion = Depends(marcar), db: Session = Depends(ge
             codigo=m.codigo, alumno_id=m.alumno_id, usuario_id=m.usuario_id, equipo=m.equipo)
         try:
             r = asistencia.registrar(db, s.colegio.id, lectura, s.usuario.id)
+            if lectura.origen == "manual" and r.get("estado") == "ok":
+                p = r["persona"]
+                configuracion.registrar(db, s.colegio.id, s.usuario, "crear", "asistencia", "marcación manual",
+                                        None, f"Marcación manual ({r['resultado']}) de {p['nombre']} "
+                                              f"a las {r['hora']}")
             db.commit()
             if r.get("resultado") == "salida" and r["persona"]["tipo"] == "alumno":
                 permisos = permisos if permisos is not None else permisos_salida(db, s.colegio.id)
@@ -355,16 +361,24 @@ def crear_licencia(datos: DatosLicencia, s: Sesion = Depends(editar_licencias), 
                            motivo=datos.motivo, registrado_por_id=s.usuario.id)
     db.add(lic)
     asistencia.aplicar_licencia(db, lic)
-    guardar(db)
+    # Sin el motivo: puede ser un dato de salud.
+    anotar(db, s, "crear", "asistencia", "licencia", lic,
+           f"Licencia ({lic.tipo}) de {u.apellidos}, {u.nombres} del {_dia(lic.desde)} al {_dia(lic.hasta)}")
     return _licencia(lic, u)
 
 
 @router.delete("/licencias/{licencia_id}", status_code=204)
 def borrar_licencia(licencia_id: int, s: Sesion = Depends(editar_licencias), db: Session = Depends(get_db)) -> None:
     lic = obtener(db, LicenciaPersonal, s.colegio.id, licencia_id, "Registro de licencia")
+    u = db.get(Usuario, (lic.usuario_id))
     asistencia.aplicar_licencia(db, lic, quitar=True)
     db.delete(lic)
-    guardar(db)
+    anotar(db, s, "anular", "asistencia", "licencia", licencia_id,
+           f"Quitó la licencia ({lic.tipo}) de {u.apellidos}, {u.nombres} del {_dia(lic.desde)} al {_dia(lic.hasta)}")
+
+
+def _dia(d: date) -> str:
+    return d.strftime("%d/%m/%Y")
 
 
 # --- Reglas del colegio --------------------------------------------------------------
@@ -390,6 +404,8 @@ def editar_config(datos: DatosConfig, s: Sesion = Depends(editar_reglas), db: Se
         c = ConfigAsistencia(colegio_id=s.colegio.id)
         db.add(c)
     c.minutos_duplicado, c.minutos_corte_falta = datos.minutos_duplicado, datos.minutos_corte_falta
-    guardar(db)
+    anotar(db, s, "editar", "asistencia", "reglas", None,
+           f"Reglas de asistencia: doble marcación {c.minutos_duplicado} min, "
+           f"falta tras {c.minutos_corte_falta} min")
     return _config(c)
 

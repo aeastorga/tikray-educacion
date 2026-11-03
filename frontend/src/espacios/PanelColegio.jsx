@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { api, descargar, ErrorApi, guardarToken, leerToken } from '../api.js'
-import { aplicarImagen } from '../App.jsx'
 import { borrarPadron } from '../porteria/almacen.js'
 import Asistencia from './Asistencia.jsx'
 import CambiarClave from './CambiarClave.jsx'
+import Configuracion, { Historial } from './Configuracion.jsx'
 import Menu from './Menu.jsx'
 import Cuaderno from './Cuaderno.jsx'
 import CuentasPadres from './CuentasPadres.jsx'
@@ -64,7 +64,9 @@ export default function PanelColegio({ colegio, setColegio }) {
           <Route path="reunion/*" element={<Reunion colegio={colegio} editar={puede(yo, 'reuniones', 'editar')} />} />
           <Route path="personal" element={<Personal yo={yo} />} />
           <Route path="roles" element={<Roles yo={yo} />} />
-          <Route path="configuracion" element={<Configuracion yo={yo} colegio={colegio} setColegio={setColegio} />} />
+          <Route path="configuracion/*" element={<Configuracion editar={puede(yo, 'configuracion', 'editar')}
+            colegio={colegio} setColegio={setColegio} recargarYo={cargar} />} />
+          {yo.es_director && <Route path="historial" element={<Historial />} />}
           <Route path="imagen" element={<Navigate to="/panel/configuracion" replace />} />
           <Route path="clave" element={<CambiarClave alTerminar={() => navegar('/panel')} />} />
         </Routes>
@@ -263,85 +265,6 @@ function Roles({ yo }) {
           </div>
         </form>
       )}
-    </section>
-  )
-}
-
-function Configuracion({ yo, colegio, setColegio }) {
-  const [colores, setColores] = useState({ color_primario: colegio.color_primario, color_secundario: colegio.color_secundario })
-  const [mensaje, setMensaje] = useState(null)
-  const editar = puede(yo, 'configuracion', 'editar')
-
-  function aplicar(c) { setColegio(c); aplicarImagen(c) }
-
-  async function guardarColores(e) {
-    e.preventDefault()
-    aplicar(await api('/api/colegio/imagen', { metodo: 'PUT', datos: colores }))
-    setMensaje('Colores guardados')
-  }
-
-  async function cambiarMenu(claro) {
-    try {
-      aplicar(await api('/api/colegio/imagen', { metodo: 'PUT', datos: { ...colores, color_primario: colegio.color_primario,
-        color_secundario: colegio.color_secundario, menu_claro: claro } }))
-      setMensaje(claro ? 'Menú claro activado' : 'Menú oscuro activado')
-    } catch (err) { setMensaje(err.message) }
-  }
-
-  async function subirLogo(e) {
-    const archivo = e.target.files[0]
-    if (!archivo) return
-    try { aplicar(await api('/api/colegio/logo', { metodo: 'PUT', archivo })); setMensaje('Logo actualizado') }
-    catch (err) { setMensaje(err.message) }
-    e.target.value = ''
-  }
-
-  async function quitarLogo() {
-    aplicar(await api('/api/colegio/logo', { metodo: 'DELETE' }))
-    setMensaje('Logo quitado')
-  }
-
-  return (
-    <section className="configuracion">
-      <h2>Configuración</h2>
-      <div className="tarjeta-panel">
-        <h2>Imagen del colegio</h2>
-        <p className="tenue">El color principal es el acento de todo el sistema: botones, menú, la tarjeta en vivo de las familias.
-          Si no se lee bien con texto blanco, se oscurece solo en los botones.</p>
-        <form onSubmit={guardarColores} className="fila-form">
-          <label>Color principal
-            <input type="color" value={colores.color_primario} disabled={!editar}
-                   onChange={(e) => setColores({ ...colores, color_primario: e.target.value })} />
-          </label>
-          <label>Color secundario
-            <input type="color" value={colores.color_secundario} disabled={!editar}
-                   onChange={(e) => setColores({ ...colores, color_secundario: e.target.value })} />
-          </label>
-          {editar && <button className="boton">Guardar colores</button>}
-        </form>
-        {editar && (
-          <div className="fila-form">
-            <label>Logo (PNG, JPG o WEBP, hasta 200 KB)
-              <input type="file" accept="image/png,image/jpeg,image/webp" onChange={subirLogo} />
-            </label>
-            {colegio.logo_url && <button className="enlace" onClick={quitarLogo}>Quitar logo</button>}
-          </div>
-        )}
-      </div>
-      <fieldset className="tarjeta-panel elegir-menu" disabled={!editar}>
-        <legend><h2>Menú lateral</h2></legend>
-        <p className="tenue">Cómo ve el menú todo el personal del colegio.</p>
-        <div className="opciones-menu">
-          {[[false, 'Oscuro'], [true, 'Claro']].map(([claro, texto]) => (
-            <label key={texto} className={`opcion-menu ${claro ? 'claro' : 'oscuro'}`}>
-              <input type="radio" name="menu" checked={Boolean(colegio.menu_claro) === claro} onChange={() => cambiarMenu(claro)} />
-              <span className="muestra-menu" aria-hidden="true"><i /><i /><i /></span>
-              {texto}
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      {mensaje && <p className="tenue" role="status">{mensaje}</p>}
     </section>
   )
 }
