@@ -61,14 +61,14 @@ def anular_invitaciones(db: Session, colegio_id: int, apoderado_id: int, motivo:
     return r.rowcount
 
 
-def crear_invitacion(db: Session, ap: Apoderado, creado_por_id: int | None,
-                     nuevo_pin: bool = False) -> tuple[InvitacionFamilia, str]:
+def crear_invitacion(db: Session, ap: Apoderado, creado_por_id: int | None, nuevo_pin: bool = False,
+                     presencial: bool = False, vigencia: timedelta = VIGENCIA_INVITACION) -> tuple[InvitacionFamilia, str]:
     """Un enlace nuevo anula los anteriores: solo sirve el último que se envió."""
     anular_invitaciones(db, ap.colegio_id, ap.id, "Se envió un enlace nuevo")
     token = secrets.token_urlsafe(32)
     inv = InvitacionFamilia(colegio_id=ap.colegio_id, apoderado_id=ap.id, token_hash=hash_token(token),
                             celular=ap.celular, nuevo_pin=nuevo_pin, creado_por_id=creado_por_id,
-                            vence_en=datetime.now(UTC) + VIGENCIA_INVITACION)
+                            presencial=presencial, vence_en=datetime.now(UTC) + vigencia)
     db.add(inv)
     db.flush()
     return inv, token

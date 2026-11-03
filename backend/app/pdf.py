@@ -222,3 +222,134 @@ def cartas_personal(imagen: Imagen, direccion: str, filas: list[FilaCarta]) -> b
 
     c.save()
     return salida.getvalue()
+
+
+@dataclass
+class ApoderadoFicha:
+    documento: str
+    nombres: str
+    apellidos: str
+    parentesco: str
+    celular: str
+    correo: str
+
+
+@dataclass
+class FichaAlumno:
+    nombre: str
+    documento: str
+    apoderados: list[ApoderadoFicha]
+
+
+def _envolver(texto: str, fuente: str, tamano: float, ancho: float) -> list[str]:
+    lineas, actual = [], ""
+    for palabra in texto.split():
+        prueba = f"{actual} {palabra}".strip()
+        if stringWidth(prueba, fuente, tamano) <= ancho:
+            actual = prueba
+        else:
+            lineas.append(actual)
+            actual = palabra
+    return lineas + ([actual] if actual else [])
+
+
+def fichas_reunion(imagen: Imagen, seccion: str, consentimiento: str, alumnos: list[FichaAlumno]) -> bytes:
+    """Respaldo en papel del modo reunión: una hoja por alumno con lo que el colegio tiene de sus
+    apoderados, una columna para corregir, un recuadro para otro apoderado y el consentimiento para firmar."""
+    salida = BytesIO()
+    c = Canvas(salida, pagesize=A4)
+    c.setTitle(f"Fichas de apoderados · {seccion} · {imagen.nombre}")
+    ancho, alto = A4
+    color = HexColor(imagen.color_primario)
+    logo = _logo(imagen)
+    izq, util = 18 * mm, ancho - 36 * mm
+    campos = [("Documento", "documento"), ("Nombres", "nombres"), ("Apellidos", "apellidos"),
+              ("Parentesco", "parentesco"), ("Celular", "celular"), ("Correo", "correo")]
+    fila_alto = 7.5 * mm
+
+    def tabla(y: float, titulo: str, ap: ApoderadoFicha | None) -> float:
+        c.setFillColor(color)
+        c.setFont("Helvetica-Bold", 10.5)
+        c.drawString(izq, y, titulo)
+        y -= 3 * mm
+        col1, col2 = izq + 26 * mm, izq + 26 * mm + (util - 26 * mm) / 2
+        c.setFont("Helvetica", 8)
+        c.setFillColorRGB(0.4, 0.4, 0.4)
+        c.drawString(col1 + 1.5 * mm, y - 3.5 * mm, "Registrado en el colegio" if ap else "")
+        c.drawString(col2 + 1.5 * mm, y - 3.5 * mm, "Corrección (solo si cambió)" if ap else "Escribe aquí")
+        y -= 5 * mm
+        c.setStrokeColorRGB(0.75, 0.75, 0.75)
+        c.setLineWidth(0.6)
+        for etiqueta, campo in campos:
+            c.rect(izq, y - fila_alto, util, fila_alto)
+            c.line(col1, y, col1, y - fila_alto)
+            if ap:
+                c.line(col2, y, col2, y - fila_alto)
+            c.setFillColorRGB(0.35, 0.35, 0.35)
+            c.setFont("Helvetica", 9)
+            c.drawString(izq + 1.5 * mm, y - 5 * mm, etiqueta)
+            if ap:
+                valor = getattr(ap, campo) or "—"
+                c.setFillColorRGB(0.1, 0.1, 0.1)
+                c.setFont("Helvetica", _ajustar(valor, "Helvetica", 9.5, col2 - col1 - 3 * mm))
+                c.drawString(col1 + 1.5 * mm, y - 5 * mm, valor)
+            y -= fila_alto
+        return y - 6 * mm
+
+    for i, a in enumerate(alumnos):
+        if i:
+            c.showPage()
+        y = alto - 18 * mm
+        if logo:
+            c.drawImage(logo, izq, y - 14 * mm, 14 * mm, 14 * mm, preserveAspectRatio=True, mask="auto")
+        x = izq + (18 * mm if logo else 0)
+        c.setFillColor(color)
+        c.setFont("Helvetica-Bold", _ajustar(imagen.nombre, "Helvetica-Bold", 14, util - 60 * mm))
+        c.drawString(x, y - 6 * mm, imagen.nombre)
+        c.setFillColorRGB(0.1, 0.1, 0.1)
+        c.setFont("Helvetica", 10)
+        c.drawString(x, y - 12 * mm, f"Ficha del apoderado · Reunión de padres · {seccion}")
+        c.setStrokeColor(color)
+        c.setLineWidth(1.2)
+        c.line(izq, y - 17 * mm, ancho - izq, y - 17 * mm)
+
+        y -= 25 * mm
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(izq, y, _recortar(f"Alumno(a): {a.nombre}", "Helvetica-Bold", 11, util - 40 * mm))
+        c.setFont("Helvetica", 10)
+        c.drawRightString(ancho - izq, y, a.documento)
+        y -= 9 * mm
+        for n, ap in enumerate(a.apoderados[:2]):
+            y = tabla(y, f"Apoderado {n + 1}", ap)
+        for n in range(len(a.apoderados[:2]), 2):
+            y = tabla(y, "Otro apoderado (si no figura arriba)" if a.apoderados else f"Apoderado {n + 1}", None)
+
+        c.setFillColorRGB(0.1, 0.1, 0.1)
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(izq, y, "Consentimiento (Ley 29733)")
+        y -= 5 * mm
+        c.setFont("Helvetica", 8.5)
+        for linea in _envolver(consentimiento, "Helvetica", 8.5, util):
+            c.drawString(izq, y, linea)
+            y -= 4 * mm
+        y -= 10 * mm
+        c.setStrokeColorRGB(0.3, 0.3, 0.3)
+        c.line(izq, y, izq + 80 * mm, y)
+        c.line(ancho - izq - 50 * mm, y, ancho - izq, y)
+        c.setFont("Helvetica", 8.5)
+        c.drawString(izq, y - 4 * mm, "Firma y DNI del apoderado que llena esta ficha")
+        c.drawString(ancho - izq - 50 * mm, y - 4 * mm, "Fecha")
+        c.setFillColorRGB(0.45, 0.45, 0.45)
+        c.drawString(izq, 14 * mm, "Entrega esta hoja al tutor. Tus datos solo se actualizan cuando el tutor la registra.")
+
+    if not alumnos:
+        c.setFont("Helvetica", 12)
+        c.drawString(20 * mm, alto - 30 * mm, "No hay alumnos en esta sección.")
+    c.save()
+    return salida.getvalue()
+
+
+def _recortar(texto: str, fuente: str, tamano: float, ancho: float) -> str:
+    while texto and stringWidth(texto, fuente, tamano) > ancho:
+        texto = texto[:-2] + "…"
+    return texto

@@ -28,7 +28,8 @@ from app.db import get_db
 from app.deps import SesionFamilia, _host, colegio_del_host, familia_sesion
 from app.fechas import hoy_lima
 from app.models import (Alumno, AlumnoApoderado, AnioEscolar, Apoderado, AsistenciaAlumno, Colegio,
-                        ConsentimientoApoderado, CuentaFamilia, EntregaAviso, Grado, Matricula, PasskeyFamilia,
+                        ConsentimientoApoderado, CuentaFamilia, EntregaAviso, Grado, InvitacionFamilia, Matricula,
+                        PasskeyFamilia,
                         RetoUsado, Seccion, SuscripcionPush)
 from app.proteccion import FALLOS_IP, ip_cliente, permitir_intento, registrar_fallo
 from app.routers.estructura import es_dia_lectivo
@@ -147,37 +148,46 @@ def completar_activacion(d: Activacion, request: Request, colegio: Colegio = Dep
     if not d.acepto:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             "Para activar tu cuenta debes aceptar el tratamiento de datos")
+    resultado = activar(db, colegio, inv, ap, d.pin, d.pin_actual, request)
+    db.add(ConsentimientoApoderado(colegio_id=colegio.id, apoderado_id=ap.id,
+                                   version=familias.CONSENTIMIENTO_VERSION, ip=ip_cliente(request)[:45]))
+    db.commit()
+    return resultado
+
+
+def activar(db: Session, colegio: Colegio, inv: InvitacionFamilia, ap: Apoderado, pin: str | None,
+            pin_actual: str | None, request: Request) -> dict:
+    """Crea la cuenta (o la une, si ya tiene una por otro colegio) y marca el enlace como usado.
+    Lo usan el enlace personal y la ficha aprobada en la reunión. No guarda el consentimiento ni hace commit
+    (salvo el del PIN fallido)."""
     ahora = datetime.now(UTC)
     cuenta = _cuenta_de(db, ap)
     if cuenta is not None and not inv.nuevo_pin:
         # Ya tiene cuenta (por otro colegio): demuestra que es suya con su PIN, no lo reemplaza.
-        if not _comprobar_pin(db, cuenta, d.pin_actual or "", colegio):
+        if not _comprobar_pin(db, cuenta, pin_actual or "", colegio):
             FALLOS_IP.registrar(f"familia:{ip_cliente(request)}")
             inv.intentos += 1
             db.commit()
             raise HTTPException(status.HTTP_400_BAD_REQUEST,
                                 "El PIN no es correcto. Si lo olvidaste, pide al colegio un enlace para crear uno nuevo")
     elif cuenta is not None:
-        cuenta.pin_hash = hashear_clave(_pin_valido(d.pin))
+        cuenta.pin_hash = hashear_clave(_pin_valido(pin))
         familias.pin_nuevo(db, cuenta, ap, colegio)
     else:
         cuenta = CuentaFamilia(tipo_documento=ap.tipo_documento, numero_documento=ap.numero_documento,
-                               pin_hash=hashear_clave(_pin_valido(d.pin)))
+                               pin_hash=hashear_clave(_pin_valido(pin)))
         db.add(cuenta)
         db.flush()
     db.refresh(ap)
     ap.cuenta_id = cuenta.id
     if ap.estado_acceso != "activo":
         # Quien el colegio ya aprobó antes (p. ej. quedó pendiente por un PIN nuevo creado en otro
-        # colegio) vuelve a activo con el enlace de este colegio.
+        # colegio) vuelve a activo con el enlace de este colegio; también quien el tutor aprobó en persona.
         automatica = familias.activacion(db, colegio.id) == "automatica"
-        ap.estado_acceso = "activo" if automatica or ap.activado_en else "pendiente"
+        ap.estado_acceso = "activo" if automatica or ap.activado_en or inv.presencial else "pendiente"
     if ap.estado_acceso == "activo" and ap.activado_en is None:
         ap.activado_en = ahora
     inv.usada_en = ahora
-    db.add(ConsentimientoApoderado(colegio_id=colegio.id, apoderado_id=ap.id,
-                                   version=familias.CONSENTIMIENTO_VERSION, ip=ip_cliente(request)[:45]))
-    db.commit()
     return _token(colegio, cuenta, ap)
 
 

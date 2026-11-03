@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { api, CLAVE_TOKEN_FAMILIA, guardarToken, leerToken } from '../api.js'
 import { DetalleCuaderno, ListaCuaderno, PedidoCuaderno } from '../familia/Cuaderno.jsx'
+import Reunion from '../familia/Reunion.jsx'
 import { crearPasskey, hayPasskeys, llaveVapid, usarPasskey } from '../familia/webauthn.js'
 import Cabecera from './Cabecera.jsx'
 import './familia.css'
@@ -15,6 +16,7 @@ export default function Familia({ colegio }) {
     <Routes>
       <Route index element={tokenFamilia() ? <Inicio colegio={colegio} /> : <Ingreso colegio={colegio} />} />
       <Route path="activar" element={<Activar colegio={colegio} />} />
+      <Route path="reunion" element={<Reunion colegio={colegio} />} />
       <Route path="cuaderno/nuevo/:tipo" element={<ConSesion colegio={colegio}><PedidoCuaderno /></ConSesion>} />
       <Route path="cuaderno/:id" element={<ConSesion colegio={colegio}><DetalleCuaderno /></ConSesion>} />
       <Route path="*" element={<Navigate to="/familia" replace />} />

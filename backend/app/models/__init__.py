@@ -9,8 +9,10 @@ from app.models.padron import (AlumnoApoderado, Alumno, AnioEscolar, Apoderado, 
                                Matricula, Nivel, Seccion, Turno)
 from app.models.personal import PermisoRol, Rol, Usuario
 from app.models.plataforma import AdminPlataforma, IntentoFallido
+from app.models.reunion import FichaReunion, ReunionPadres
 
 __all__ = [
+    "FichaReunion", "ReunionPadres",
     "AdjuntoCuaderno", "DestinoCuaderno", "EntradaCuaderno", "MensajeCuaderno", "SeccionDocente",
     "AdminPlataforma", "Alumno", "AlumnoApoderado", "AnioEscolar", "Apoderado", "AsistenciaAlumno",
     "AsistenciaPersonal", "CambioApoderado", "ColaAviso", "Colegio", "ConfigAsistencia", "ConfigFamilias",

@@ -77,6 +77,7 @@ class InvitacionFamilia(ConColegio, Base):
     __table_args__ = (
         _fk("apoderado_id", "apoderado"),
         _fk("creado_por_id", "usuario", "SET NULL"),
+        UniqueConstraint("colegio_id", "id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -85,6 +86,8 @@ class InvitacionFamilia(ConColegio, Base):
     celular: Mapped[str | None] = mapped_column(String(9))  # a dónde se envió
     # El colegio lo marca cuando el padre olvidó su PIN: al activar crea uno nuevo.
     nuevo_pin: Mapped[bool] = mapped_column(default=False)
+    # Creada al aprobar una ficha en la reunión, con el padre delante: activa sin otra aprobación.
+    presencial: Mapped[bool] = mapped_column(default=False, server_default="false")
     creado_por_id: Mapped[int | None]
     creado_en: Mapped[datetime] = creado_en()
     vence_en: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -153,7 +156,7 @@ class CambioApoderado(ConColegio, Base):
     __table_args__ = (
         _fk("apoderado_id", "apoderado"),
         _fk("cambiado_por_id", "usuario", "SET NULL"),
-        CheckConstraint("origen IN ('excel', 'panel', 'familia')", name="origen_valido"),
+        CheckConstraint("origen IN ('excel', 'panel', 'familia', 'reunion')", name="origen_valido"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

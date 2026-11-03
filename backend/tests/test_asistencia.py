@@ -17,6 +17,7 @@ from app import asistencia
 from app.codigos import contenido_qr
 from app.fechas import LIMA, hoy_lima
 from app.models import (Alumno, AnioEscolar, AsistenciaAlumno, AsistenciaPersonal, ColaAviso, Colegio,
+                        ConfigAsistencia,
                         DiaNoLectivo, Grado, Marcacion, Matricula, Nivel, Seccion, Turno, Usuario)
 from tests.conftest import auth, crear_colegio, crear_personal, token
 
@@ -261,6 +262,49 @@ def test_ventanas_del_proceso_de_faltas():
     noche, madrugada = datetime(2026, 6, 1, 23, 59, 30, tzinfo=LIMA), datetime(2026, 6, 2, 0, 0, 30, tzinfo=LIMA)
     assert asistencia.ventanas_faltas(noche, madrugada) == [
         (noche.date(), time(23, 59, 30), None), (madrugada.date(), None, time(0, 0, 30))]
+
+
+def test_revision_completa_de_cada_noche():
+    lunes = datetime(2026, 6, 1, 10, 0, tzinfo=LIMA)
+    ayer = lunes.date() - timedelta(days=1)
+    # Al arrancar: ayer completo (por si el servidor estaba caído a la hora de la revisión).
+    assert asistencia.revisiones_completas(None, lunes) == [(ayer, None)]
+    noche = datetime(2026, 6, 1, 22, 30, tzinfo=LIMA)
+    assert asistencia.revisiones_completas(None, noche) == [(ayer, None), (lunes.date(), time(22, 30))]
+    # Durante el día, nada; una sola vez al cruzar las 22:00.
+    assert asistencia.revisiones_completas(lunes - timedelta(minutes=1), lunes) == []
+    cruce = datetime(2026, 6, 1, 22, 0, 20, tzinfo=LIMA)
+    assert asistencia.revisiones_completas(cruce - timedelta(minutes=1), cruce) == [(lunes.date(), time(22, 0, 20))]
+    assert asistencia.revisiones_completas(cruce, cruce + timedelta(minutes=1)) == []
+    # Si el servidor estuvo caído a las 22:00 y vuelve después de medianoche, revisa el día que quedó.
+    tarde, madrugada = datetime(2026, 6, 1, 21, 0, tzinfo=LIMA), datetime(2026, 6, 2, 0, 1, tzinfo=LIMA)
+    assert asistencia.revisiones_completas(tarde, madrugada) == [(lunes.date(), None)]
+    assert asistencia.revisiones_completas(noche, madrugada) == []
+
+
+def test_revision_nocturna_cubre_un_corte_adelantado_durante_el_dia(db):
+    """A las 09:30 el director adelanta el corte de 09:15 a 09:00 (o la entrada): la ventana de cada
+    minuto ya no lo alcanza; la revisión de la noche sí, sin avisar a las familias a esa hora."""
+    a = preparar(db, "alfa")
+    otro = preparar(db, "beta")
+    db.add(ConfigAsistencia(colegio_id=a.colegio.id, minutos_corte_falta=150))  # corte 10:15
+    db.commit()
+    assert asistencia.marcar_faltas(db, LUNES, time(9, 30), desde=time(9, 29)) == 0
+    db.get(ConfigAsistencia, a.colegio.id).minutos_corte_falta = 75  # corte 09:00, ya pasó
+    db.commit()
+    for minuto in range(30, 59):  # el resto de la mañana: el corte nuevo quedó atrás
+        asistencia.marcar_faltas(db, LUNES, time(9, minuto + 1), desde=time(9, minuto), colegio_id=a.colegio.id)
+    db.commit()
+    assert not db.scalars(select(AsistenciaAlumno).where(AsistenciaAlumno.colegio_id == a.colegio.id)).all()
+
+    assert asistencia.marcar_faltas(db, LUNES, time(22, 0), avisar=False) == 4  # alfa y beta (sus 2 alumnos)
+    db.commit()
+    assert {f.estado for f in db.scalars(select(AsistenciaAlumno).where(
+        AsistenciaAlumno.colegio_id == a.colegio.id))} == {"falta"}
+    assert not db.scalars(select(ColaAviso)).all()
+    # Repetirla no cambia nada.
+    assert asistencia.marcar_faltas(db, LUNES, time(22, 0), avisar=False) == 0
+    assert otro.colegio.id != a.colegio.id
 
 
 def test_colegio_suspendido_no_recibe_faltas(db):

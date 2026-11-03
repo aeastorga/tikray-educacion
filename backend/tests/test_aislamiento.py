@@ -18,7 +18,10 @@ SIN_COLEGIO = {"colegio", "admin_plataforma", "cuenta_familia", "passkey_familia
                "intento_fallido"}  # límite de intentos: claves de plataforma, de colegio o de IP
 RUTAS_PUBLICAS = {"/api/auth/ingreso", "/api/publico/colegio", "/plataforma/auth/ingreso",
                   "/api/familia/ingreso", "/api/familia/activacion/revisar", "/api/familia/activacion/completar",
-                  "/api/familia/passkey/opciones-ingreso", "/api/familia/passkey/ingreso"}
+                  "/api/familia/passkey/opciones-ingreso", "/api/familia/passkey/ingreso",
+                  # Modo reunión: el padre con el QR del aula (y luego con el código de su ficha), sin sesión.
+                  "/api/familia/reunion/abrir", "/api/familia/reunion/alumno", "/api/familia/reunion/ficha",
+                  "/api/familia/reunion/estado", "/api/familia/reunion/activar"}
 FAMILIA = "/api/familia/"
 
 
