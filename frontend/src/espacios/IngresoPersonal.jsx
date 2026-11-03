@@ -1,7 +1,8 @@
+import { ArrowLeft } from 'lucide-react'
 import { useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, guardarToken, leerToken } from '../api.js'
-import Cabecera from './Cabecera.jsx'
+import Acceso from './Acceso.jsx'
 
 export default function IngresoPersonal({ colegio }) {
   const navegar = useNavigate()
@@ -31,9 +32,11 @@ export default function IngresoPersonal({ colegio }) {
   }
 
   return (
-    <main className="centro">
-      <form className="tarjeta" onSubmit={enviar}>
-        <Cabecera colegio={colegio} />
+    <Acceso colegio={colegio}>
+      <Link to="/" className="enlace acceso-volver"><ArrowLeft size={18} aria-hidden="true" /> Volver</Link>
+      <h1>Personal del colegio</h1>
+      <p className="acceso-subtitulo">Dirección, docentes, portería y secretaría</p>
+      <form className="acceso-form" onSubmit={enviar}>
         <label>Usuario (DNI)
           <input value={usuario} onChange={(e) => setUsuario(e.target.value)} inputMode="numeric"
                  autoComplete="username" required />
@@ -42,10 +45,10 @@ export default function IngresoPersonal({ colegio }) {
           <input type="password" value={clave} onChange={(e) => setClave(e.target.value)}
                  autoComplete="current-password" required />
         </label>
-        {error && <p className="error">{error}</p>}
-        <button className="boton" disabled={enviando}>{enviando ? 'Ingresando…' : 'Ingresar'}</button>
-        <Link to="/" className="enlace">Volver</Link>
+        {error && <p className="error" role="alert">{error}</p>}
+        <button className="boton grande" disabled={enviando}>{enviando ? 'Ingresando…' : 'Ingresar'}</button>
       </form>
-    </main>
+      <p className="acceso-nota">¿Olvidó su clave? Dirección o secretaría le da una nueva.</p>
+    </Acceso>
   )
 }

@@ -1,3 +1,4 @@
+import { ArrowLeft, MessageCircle, Paperclip } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { api, descargar } from '../api.js'
@@ -107,8 +108,8 @@ function Bandeja() {
                 <td>
                   {e.espera_al_colegio && <span className="punto" title="Espera respuesta del colegio" />}
                   {e.titulo}
-                  {e.adjuntos > 0 && <span className="tenue"> · 📎 {e.adjuntos}</span>}
-                  {e.respuestas > 0 && <span className="tenue"> · 💬 {e.respuestas}</span>}
+                  {e.adjuntos > 0 && <span className="tenue icono-texto"> · <Paperclip size={14} aria-label="adjuntos" /> {e.adjuntos}</span>}
+                  {e.respuestas > 0 && <span className="tenue icono-texto"> · <MessageCircle size={14} aria-label="respuestas" /> {e.respuestas}</span>}
                   {e.de_familia && <span className="tenue"> · enviado por la familia</span>}
                 </td>
                 <td>{e.destino}</td>
@@ -175,7 +176,7 @@ function Detalle({ editar }) {
 
   return (
     <article className="cuaderno-detalle">
-      <button className="enlace" onClick={() => navegar('/panel/cuaderno')}>← Bandeja</button>
+      <button className="enlace" onClick={() => navegar('/panel/cuaderno')}><ArrowLeft size={18} aria-hidden="true" /> Bandeja</button>
       <p className="tenue">
         <span className={`tipo-cuaderno ${e.tipo}`}>{TIPOS[e.tipo]}</span> {e.destino} · {fechaHora(e.creado_en)}
         {e.autor && ` · ${e.de_familia ? 'Enviado por' : 'Escrito por'} ${e.autor}`}
@@ -254,7 +255,7 @@ export function Adjuntos({ lista, ruta }) {
   return (
     <div className="adjuntos">
       {lista.map((a) => (
-        <button key={a.id} className="chip" onClick={() => bajar(a)}>📎 {a.nombre} <span className="tenue">({tamano(a.tamano)})</span></button>
+        <button key={a.id} className="chip" onClick={() => bajar(a)}><Paperclip size={14} aria-hidden="true" /> {a.nombre} <span className="tenue">({tamano(a.tamano)})</span></button>
       ))}
       {error && <p className="error">{error}</p>}
     </div>

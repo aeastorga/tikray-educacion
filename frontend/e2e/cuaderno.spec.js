@@ -15,9 +15,11 @@ async function director(page) {
 async function familia(page) {
   const { familia: f } = semilla()
   await page.goto('/familia')
-  await page.getByLabel('Tu DNI').fill(f.documento)
+  await page.getByLabel('DNI o carné de extranjería').fill(f.documento)
   await page.getByLabel('PIN (6 números)').fill(f.pin)
-  await page.getByRole('button', { name: 'Entrar con PIN' }).click()
+  await page.getByRole('button', { name: 'Ingresar', exact: true }).click()
+  await expect(page.locator('.en-vivo')).toBeVisible()
+  await page.getByRole('navigation', { name: 'Secciones' }).getByRole('link', { name: /^Cuaderno/ }).click()
   await expect(page.getByRole('heading', { name: 'Cuaderno de control' })).toBeVisible()
 }
 

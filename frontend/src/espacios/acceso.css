@@ -1,0 +1,163 @@
+/* Pantalla de ingreso: dos mitades. En celular la mitad de color es una franja corta arriba. */
+
+.acceso { min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); background: var(--superficie); }
+
+.acceso-marca {
+  position: relative; overflow: hidden; background: var(--acento-fuerte); color: #fff;
+  display: flex; flex-direction: column; padding: 40px 48px; gap: 24px;
+}
+.acceso-colegio { display: flex; align-items: center; gap: 14px; position: relative; z-index: 2; }
+.acceso-logo { width: 52px; height: 52px; }
+.acceso-marca .logo-iniciales { background: rgba(255, 255, 255, .16); color: #fff; border: 1px solid rgba(255, 255, 255, .35); }
+.acceso-nombre { font-family: var(--letra-titulo); font-weight: 700; font-size: 1.2rem; line-height: 1.2; }
+
+/* Formas simples semitransparentes, sin degradados. */
+.forma { position: absolute; pointer-events: none; z-index: 0; }
+.forma-circulo { width: 520px; height: 520px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .16); left: -180px; bottom: -220px; }
+.forma-cuadro { width: 180px; height: 180px; border-radius: 36px; background: rgba(255, 255, 255, .07); right: -40px; top: 90px; transform: rotate(22deg); }
+
+/* --- Escena animada (ciclo de 9 s) ------------------------------------------------------- */
+
+.escena { position: relative; z-index: 1; flex: 1; display: flex; align-items: center; justify-content: center; gap: 36px; min-height: 420px; }
+
+.escena-carnet {
+  position: relative; width: 190px; padding: 16px; border-radius: 18px; background: #fff; color: #111827;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .08); animation: carnet 9s ease-in-out infinite; transform: rotate(-6deg);
+}
+.carnet-cabeza { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
+.carnet-foto { width: 40px; height: 48px; border-radius: 10px; background: var(--acento-medio); }
+.carnet-lineas { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.carnet-lineas i { display: block; height: 7px; border-radius: 4px; background: #E3E8EF; }
+.carnet-lineas i:first-child { width: 90%; background: #CBD3DF; }
+.carnet-lineas i:nth-child(2) { width: 70%; }
+.carnet-lineas i:nth-child(3) { width: 45%; background: var(--acento-medio); }
+.carnet-qr { position: relative; display: grid; grid-template-columns: repeat(9, 1fr); gap: 2px; padding: 8px; border: 1px solid #E3E8EF; border-radius: 10px; overflow: hidden; }
+.carnet-qr > span:not(.carnet-escaneo) { aspect-ratio: 1; border-radius: 2px; }
+.carnet-qr > span.lleno { background: #111827; }
+.carnet-escaneo { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #22C55E; box-shadow: 0 0 0 1px rgba(34, 197, 94, .3); animation: escaneo 9s linear infinite; opacity: 0; }
+.carnet-check {
+  position: absolute; right: -16px; bottom: -16px; width: 52px; height: 52px; border-radius: 50%;
+  background: #16A34A; color: #fff; display: grid; place-items: center; border: 4px solid #fff;
+  animation: check 9s ease-out infinite; opacity: 0;
+}
+
+.escena-celular {
+  position: relative; width: 236px; height: 440px; border-radius: 40px; background: #0B1220;
+  border: 8px solid #1F2937; padding: 44px 12px 12px; animation: celular 9s ease-in-out infinite;
+}
+.celular-muesca { position: absolute; top: 10px; left: 50%; width: 76px; height: 20px; margin-left: -38px; border-radius: 999px; background: #1F2937; }
+.celular-hora { position: absolute; top: 40px; left: 0; right: 0; text-align: center; font-family: var(--letra-titulo); font-weight: 600; font-size: 2.6rem; color: rgba(255, 255, 255, .92); }
+.celular-avisos { position: absolute; left: 10px; right: 10px; top: 118px; display: flex; flex-direction: column; gap: 8px; }
+.notificacion {
+  display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: start; padding: 10px;
+  border-radius: 16px; background: rgba(255, 255, 255, .94); color: #111827; font-size: .72rem; line-height: 1.3; opacity: 0;
+}
+.notificacion-icono { width: 26px; height: 26px; border-radius: 8px; background: var(--acento-fuerte); }
+.notificacion-texto { display: flex; flex-direction: column; min-width: 0; }
+.notificacion-texto b { font-size: .68rem; color: #5B6474; font-weight: 700; }
+.notificacion-cuando { font-size: .62rem; color: #5B6474; }
+.notificacion-1 { animation: aviso1 9s ease-out infinite; }
+.notificacion-2 { animation: aviso2 9s ease-out infinite; }
+.notificacion-3 { animation: aviso3 9s ease-out infinite; }
+
+@keyframes carnet {
+  0% { opacity: 0; transform: translate(-60px, 40px) rotate(-16deg) scale(.88); }
+  12% { opacity: 1; transform: translate(0, 0) rotate(-6deg) scale(1); }
+  90% { opacity: 1; transform: translate(0, 0) rotate(-6deg) scale(1); }
+  98%, 100% { opacity: 0; transform: translate(0, 0) rotate(-6deg) scale(1); }
+}
+@keyframes escaneo {
+  0%, 13% { opacity: 0; top: 0; }
+  14% { opacity: 1; top: 0; }
+  30% { opacity: 1; top: calc(100% - 3px); }
+  31%, 100% { opacity: 0; top: calc(100% - 3px); }
+}
+@keyframes check {
+  0%, 31% { opacity: 0; transform: scale(.4); }
+  35% { opacity: 1; transform: scale(1.15); }
+  38%, 90% { opacity: 1; transform: scale(1); }
+  97%, 100% { opacity: 0; transform: scale(1); }
+}
+@keyframes celular {
+  0% { opacity: 0; transform: translateY(24px); }
+  10%, 92% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes aviso1 {
+  0%, 38% { opacity: 0; transform: translateY(-18px); }
+  42%, 86% { opacity: 1; transform: translateY(0); }
+  94%, 100% { opacity: 0; transform: translateY(0); }
+}
+@keyframes aviso2 {
+  0%, 53% { opacity: 0; transform: translateY(-18px); }
+  57%, 86% { opacity: 1; transform: translateY(0); }
+  94%, 100% { opacity: 0; transform: translateY(0); }
+}
+@keyframes aviso3 {
+  0%, 68% { opacity: 0; transform: translateY(-18px); }
+  72%, 86% { opacity: 1; transform: translateY(0); }
+  94%, 100% { opacity: 0; transform: translateY(0); }
+}
+
+/* Sin movimiento: la escena completa y quieta. */
+@media (prefers-reduced-motion: reduce) {
+  .escena-carnet, .escena-celular, .carnet-check, .notificacion { animation: none; opacity: 1; }
+  .carnet-escaneo { animation: none; opacity: 0; }
+  .carnet-check { transform: none; }
+}
+
+/* --- Mitad derecha ----------------------------------------------------------------------- */
+
+.acceso-panel { display: flex; flex-direction: column; padding: 40px 48px 24px; min-width: 0; }
+.acceso-contenido { flex: 1; width: 100%; max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; justify-content: center; gap: 16px; }
+.acceso-contenido h1 { font-size: 2.2rem; }
+.acceso-contenido > p { margin: 0; }
+.acceso-subtitulo { color: var(--tenue); font-size: 1.05rem; margin-top: -8px !important; }
+.acceso-form { display: flex; flex-direction: column; gap: 14px; }
+.acceso-volver { align-self: flex-start; margin-left: -6px; text-decoration: none; color: var(--tenue); }
+.acceso-separador { display: flex; align-items: center; gap: 12px; color: var(--tenue); font-size: .85rem; }
+.acceso-separador::before, .acceso-separador::after { content: ""; flex: 1; height: 1px; background: var(--borde); }
+.acceso-nota { font-size: .9rem; color: var(--tenue); background: var(--fondo); border-radius: var(--radio-chico); padding: 12px 14px; margin: 0; }
+.acceso-nota b { color: var(--texto); }
+
+.opciones-ingreso { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+.opcion-ingreso {
+  display: grid; grid-template-columns: 52px minmax(0, 1fr) 24px; gap: 16px; align-items: center; min-height: 92px;
+  padding: 18px 18px 18px 18px; border: 1px solid var(--borde); border-radius: var(--radio); background: var(--superficie);
+  color: var(--texto); text-decoration: none; transition: border-color .15s, background .15s;
+}
+.opcion-ingreso:hover { border-color: var(--acento); background: var(--acento-suave); }
+.opcion-icono { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; background: var(--acento-suave); color: var(--acento-fuerte); }
+.opcion-texto { display: flex; flex-direction: column; gap: 2px; }
+.opcion-texto b { font-family: var(--letra-titulo); font-size: 1.12rem; font-weight: 700; }
+.opcion-texto span { color: var(--tenue); font-size: .9rem; }
+.opcion-flecha { color: var(--tenue); }
+
+.acceso-pie { display: flex; flex-wrap: wrap; gap: 4px 20px; justify-content: center; align-items: center; padding-top: 24px; font-size: .85rem; color: var(--tenue); }
+.acceso-pie a { color: var(--tenue); display: inline-flex; align-items: center; min-height: var(--toque); }
+
+@media (prefers-color-scheme: dark) {
+  .acceso { background: var(--fondo); }
+  .opcion-icono { color: color-mix(in srgb, var(--acento) 45%, #fff); }
+}
+
+/* Celular: franja corta con el logo; los dos botones se ven sin bajar. */
+@media (max-width: 860px) {
+  .acceso { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+  .acceso-marca { padding: 16px; gap: 0; }
+  .acceso-logo { width: 44px; height: 44px; }
+  .acceso-nombre { font-size: 1.05rem; }
+  .escena { display: none; }
+  .forma-circulo { width: 200px; height: 200px; left: auto; right: -60px; bottom: -120px; }
+  .forma-cuadro { width: 70px; height: 70px; border-radius: 18px; right: 90px; top: -30px; }
+  .acceso-panel { padding: 20px 16px 8px; }
+  .acceso-contenido { justify-content: flex-start; gap: 12px; }
+  .acceso-contenido h1 { font-size: 1.75rem; }
+  .opcion-ingreso { min-height: 84px; padding: 14px; gap: 12px; grid-template-columns: 46px minmax(0, 1fr) 20px; }
+  .opcion-icono { width: 46px; height: 46px; }
+  .acceso-pie { padding-top: 12px; gap: 0 14px; }
+}
+@media (max-width: 1100px) and (min-width: 861px) {
+  .acceso-marca { padding: 32px; }
+  .escena { flex-direction: column; gap: 20px; transform: scale(.85); }
+}

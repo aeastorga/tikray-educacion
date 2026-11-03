@@ -53,7 +53,7 @@ test('reunión de padres: el padre llena su ficha, el tutor la aprueba y el padr
   await padre.getByLabel('Repite el PIN').fill('274815')
   await padre.getByRole('button', { name: 'Activar mi cuenta' }).click()
   await expect(padre).toHaveURL(/\/familia$/)
-  await expect(padre.getByText('Ana')).toBeVisible()
+  await expect(padre.locator('.en-vivo')).toContainText('Ana')
 
   // Quién faltó: los otros dos alumnos del aula.
   await tutor.getByRole('button', { name: 'Quién faltó' }).click()

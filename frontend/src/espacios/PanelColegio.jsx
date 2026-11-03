@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { api, descargar, ErrorApi, guardarToken, leerToken } from '../api.js'
 import { aplicarImagen } from '../App.jsx'
 import { borrarPadron } from '../porteria/almacen.js'
 import Asistencia from './Asistencia.jsx'
-import Cabecera from './Cabecera.jsx'
 import CambiarClave from './CambiarClave.jsx'
+import Menu from './Menu.jsx'
 import Cuaderno from './Cuaderno.jsx'
 import CuentasPadres from './CuentasPadres.jsx'
 import Padron from './Padron.jsx'
@@ -13,7 +13,7 @@ import Resumen from './Resumen.jsx'
 import Reunion from './Reunion.jsx'
 
 const NIVEL = { ver: 1, editar: 2 }
-const puede = (yo, modulo, nivel = 'ver') => (NIVEL[yo.permisos[modulo]] || 0) >= NIVEL[nivel]
+export const puede = (yo, modulo, nivel = 'ver') => (NIVEL[yo.permisos[modulo]] || 0) >= NIVEL[nivel]
 const CLAVE_YO = 'tikray.yo'
 
 // Sin internet (portería) se usa la última sesión conocida; el servidor sigue validando el token al enviar.
@@ -49,28 +49,11 @@ export default function PanelColegio({ colegio, setColegio }) {
   }
 
   return (
-    <div className="panel">
-      <Cabecera colegio={colegio}>
-        <div className="usuario">
-          <span>{yo.nombres} · {yo.rol}</span>
-          <button className="enlace" onClick={salir}>Salir</button>
-        </div>
-      </Cabecera>
-      <nav className="pestanas">
-        <NavLink to="/panel" end>Inicio</NavLink>
-        {puede(yo, 'asistencia') && <NavLink to="/panel/asistencia">Asistencia</NavLink>}
-        {puede(yo, 'cuaderno') && <NavLink to="/panel/cuaderno">Cuaderno</NavLink>}
-        {puede(yo, 'padron') && <NavLink to="/panel/padron">Padrón</NavLink>}
-        {puede(yo, 'familias') && <NavLink to="/panel/familias">Cuentas de padres</NavLink>}
-        {puede(yo, 'reuniones') && <NavLink to="/panel/reunion">Reunión de padres</NavLink>}
-        {puede(yo, 'personal') && <NavLink to="/panel/personal">Personal</NavLink>}
-        {puede(yo, 'roles') && <NavLink to="/panel/roles">Roles</NavLink>}
-        {puede(yo, 'configuracion') && <NavLink to="/panel/imagen">Imagen del colegio</NavLink>}
-        <NavLink to="/panel/clave">Mi clave</NavLink>
-      </nav>
+    <div className="marco">
+      <Menu colegio={colegio} yo={yo} puede={(m, n) => puede(yo, m, n)} salir={salir} />
       <main className="contenido">
         <Routes>
-          <Route index element={<Resumen yo={yo} />} />
+          <Route index element={<Resumen yo={yo} puede={(m, n) => puede(yo, m, n)} />} />
           <Route path="asistencia/*" element={<Asistencia yo={yo} marcar={puede(yo, 'asistencia', 'editar')}
             licencias={puede(yo, 'personal', 'editar')} reglas={puede(yo, 'configuracion', 'editar')} />} />
           <Route path="cuaderno/*" element={<Cuaderno editar={puede(yo, 'cuaderno', 'editar')}
@@ -81,7 +64,8 @@ export default function PanelColegio({ colegio, setColegio }) {
           <Route path="reunion/*" element={<Reunion colegio={colegio} editar={puede(yo, 'reuniones', 'editar')} />} />
           <Route path="personal" element={<Personal yo={yo} />} />
           <Route path="roles" element={<Roles yo={yo} />} />
-          <Route path="imagen" element={<Imagen yo={yo} colegio={colegio} setColegio={setColegio} />} />
+          <Route path="configuracion" element={<Configuracion yo={yo} colegio={colegio} setColegio={setColegio} />} />
+          <Route path="imagen" element={<Navigate to="/panel/configuracion" replace />} />
           <Route path="clave" element={<CambiarClave alTerminar={() => navegar('/panel')} />} />
         </Routes>
       </main>
@@ -283,7 +267,7 @@ function Roles({ yo }) {
   )
 }
 
-function Imagen({ yo, colegio, setColegio }) {
+function Configuracion({ yo, colegio, setColegio }) {
   const [colores, setColores] = useState({ color_primario: colegio.color_primario, color_secundario: colegio.color_secundario })
   const [mensaje, setMensaje] = useState(null)
   const editar = puede(yo, 'configuracion', 'editar')
@@ -294,6 +278,14 @@ function Imagen({ yo, colegio, setColegio }) {
     e.preventDefault()
     aplicar(await api('/api/colegio/imagen', { metodo: 'PUT', datos: colores }))
     setMensaje('Colores guardados')
+  }
+
+  async function cambiarMenu(claro) {
+    try {
+      aplicar(await api('/api/colegio/imagen', { metodo: 'PUT', datos: { ...colores, color_primario: colegio.color_primario,
+        color_secundario: colegio.color_secundario, menu_claro: claro } }))
+      setMensaje(claro ? 'Menú claro activado' : 'Menú oscuro activado')
+    } catch (err) { setMensaje(err.message) }
   }
 
   async function subirLogo(e) {
@@ -310,28 +302,46 @@ function Imagen({ yo, colegio, setColegio }) {
   }
 
   return (
-    <section>
-      <h2>Imagen del colegio</h2>
-      <form onSubmit={guardarColores} className="fila-form">
-        <label>Color principal
-          <input type="color" value={colores.color_primario} disabled={!editar}
-                 onChange={(e) => setColores({ ...colores, color_primario: e.target.value })} />
-        </label>
-        <label>Color secundario
-          <input type="color" value={colores.color_secundario} disabled={!editar}
-                 onChange={(e) => setColores({ ...colores, color_secundario: e.target.value })} />
-        </label>
-        {editar && <button className="boton">Guardar colores</button>}
-      </form>
-      {editar && (
-        <div className="fila-form">
-          <label>Logo (PNG, JPG o WEBP, hasta 200 KB)
-            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={subirLogo} />
+    <section className="configuracion">
+      <h2>Configuración</h2>
+      <div className="tarjeta-panel">
+        <h2>Imagen del colegio</h2>
+        <p className="tenue">El color principal es el acento de todo el sistema: botones, menú, la tarjeta en vivo de las familias.
+          Si no se lee bien con texto blanco, se oscurece solo en los botones.</p>
+        <form onSubmit={guardarColores} className="fila-form">
+          <label>Color principal
+            <input type="color" value={colores.color_primario} disabled={!editar}
+                   onChange={(e) => setColores({ ...colores, color_primario: e.target.value })} />
           </label>
-          {colegio.logo_url && <button className="enlace" onClick={quitarLogo}>Quitar logo</button>}
+          <label>Color secundario
+            <input type="color" value={colores.color_secundario} disabled={!editar}
+                   onChange={(e) => setColores({ ...colores, color_secundario: e.target.value })} />
+          </label>
+          {editar && <button className="boton">Guardar colores</button>}
+        </form>
+        {editar && (
+          <div className="fila-form">
+            <label>Logo (PNG, JPG o WEBP, hasta 200 KB)
+              <input type="file" accept="image/png,image/jpeg,image/webp" onChange={subirLogo} />
+            </label>
+            {colegio.logo_url && <button className="enlace" onClick={quitarLogo}>Quitar logo</button>}
+          </div>
+        )}
+      </div>
+      <fieldset className="tarjeta-panel elegir-menu" disabled={!editar}>
+        <legend><h2>Menú lateral</h2></legend>
+        <p className="tenue">Cómo ve el menú todo el personal del colegio.</p>
+        <div className="opciones-menu">
+          {[[false, 'Oscuro'], [true, 'Claro']].map(([claro, texto]) => (
+            <label key={texto} className={`opcion-menu ${claro ? 'claro' : 'oscuro'}`}>
+              <input type="radio" name="menu" checked={Boolean(colegio.menu_claro) === claro} onChange={() => cambiarMenu(claro)} />
+              <span className="muestra-menu" aria-hidden="true"><i /><i /><i /></span>
+              {texto}
+            </label>
+          ))}
         </div>
-      )}
-      {mensaje && <p className="tenue">{mensaje}</p>}
+      </fieldset>
+      {mensaje && <p className="tenue" role="status">{mensaje}</p>}
     </section>
   )
 }
