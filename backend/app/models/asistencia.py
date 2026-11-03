@@ -23,7 +23,9 @@ RESULTADOS = ("entrada", "salida", "duplicada")
 ESTADOS_ALUMNO = ("presente", "tarde", "falta")
 ESTADOS_PERSONAL = ("presente", "tarde", "falta", "licencia")
 TIPOS_LICENCIA = ("salud", "personal", "vacaciones", "comision", "maternidad", "otro")
-TIPOS_AVISO = ("ingreso", "tarde", "salida", "falta", "cuenta")
+TIPOS_AVISO = ("ingreso", "tarde", "salida", "falta", "cuenta", "cuaderno")
+# Los que van a un apoderado (y no a los apoderados de un alumno).
+AVISOS_A_APODERADO = ("cuenta", "cuaderno")
 ESTADOS_AVISO = ("pendiente", "enviado", "sin_destinatarios", "descartado", "error")
 
 
@@ -137,8 +139,8 @@ class LicenciaPersonal(ConColegio, Base):
 
 
 class ColaAviso(ConColegio, Base):
-    """Avisos a familias. De un alumno (ingreso, tarde, salida, falta) o de la cuenta de un
-    apoderado ("cuenta": p. ej. cambió su celular en el colegio)."""
+    """Avisos a familias. De un alumno (ingreso, tarde, salida, falta) o a un apoderado:
+    "cuenta" (p. ej. cambió su celular en el colegio) o "cuaderno" (una novedad en el cuaderno)."""
 
     __tablename__ = "cola_aviso"
     __table_args__ = (
@@ -147,7 +149,8 @@ class ColaAviso(ConColegio, Base):
         UniqueConstraint("colegio_id", "alumno_id", "fecha", "tipo"),
         UniqueConstraint("colegio_id", "id"),
         CheckConstraint("(alumno_id IS NULL) <> (apoderado_id IS NULL)", name="un_destino"),
-        CheckConstraint("(tipo = 'cuenta') = (apoderado_id IS NOT NULL)", name="tipo_segun_destino"),
+        CheckConstraint(f"({_en('tipo', AVISOS_A_APODERADO)}) = (apoderado_id IS NOT NULL)",
+                        name="tipo_segun_destino"),
         CheckConstraint(_en("tipo", TIPOS_AVISO), name="tipo_valido"),
         CheckConstraint(_en("estado", ESTADOS_AVISO), name="estado_valido"),
         # Lo que busca el proceso de envío: pendientes cuyo turno ya llegó.

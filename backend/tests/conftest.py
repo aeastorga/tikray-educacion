@@ -13,6 +13,7 @@ os.environ["SECRET_KEY"] = "clave-de-pruebas-" + "x" * 32
 os.environ["DOMINIO_BASE"] = "tikray.test"
 os.environ["TAREAS_EN_FONDO"] = "false"
 os.environ["CARPETA_ARCHIVOS"] = tempfile.mkdtemp(prefix="tikray-archivos-")
+os.environ["CARPETA_PRIVADA"] = tempfile.mkdtemp(prefix="tikray-privados-")
 
 from datetime import UTC, datetime  # noqa: E402
 

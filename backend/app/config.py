@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     database_url: str
     dominio_base: str = "localhost"
     carpeta_archivos: str = "archivos"
+    # Archivos que no son públicos (adjuntos del cuaderno): se sirven solo con sesión.
+    carpeta_privada: str = "archivos-privados"
     # Redes (CIDR, separadas por comas) de los proxies propios, por ejemplo el
     # balanceador de Render. Solo de ellas se acepta X-Forwarded-For.
     proxies_confianza: str = ""

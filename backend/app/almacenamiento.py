@@ -1,7 +1,9 @@
 """Archivos (logos, fotos, adjuntos) fuera de la base.
 
-Por ahora solo hay almacenamiento en disco local, servido en /archivos.
-El de S3 se agrega cuando se elija proveedor; la interfaz es la misma.
+Por ahora solo hay almacenamiento en disco local. El público (logos) se sirve en
+/archivos; el privado (adjuntos del cuaderno) no se sirve directo: lo entrega una
+ruta que revisa la sesión. El de S3 (con un bucket privado) se agrega cuando se
+elija proveedor; la interfaz es la misma.
 """
 
 from functools import lru_cache
@@ -45,3 +47,8 @@ class AlmacenamientoLocal:
 @lru_cache
 def get_almacenamiento() -> Almacenamiento:
     return AlmacenamientoLocal(Path(get_settings().carpeta_archivos))
+
+
+@lru_cache
+def get_almacenamiento_privado() -> Almacenamiento:
+    return AlmacenamientoLocal(Path(get_settings().carpeta_privada), url_base="")

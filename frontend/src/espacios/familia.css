@@ -48,3 +48,12 @@
 .enlace-generado input { font-family: ui-monospace, monospace; font-size: .85rem; }
 .detalle-apoderado { display: grid; gap: 16px; }
 .detalle-apoderado h3 { margin: 8px 0 4px; font-size: 1rem; }
+
+.cuaderno-familia h2 { margin-bottom: 8px; }
+.acciones-familia { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.lista-cuaderno { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.lista-cuaderno li { background: var(--superficie); border: 1px solid var(--borde); border-radius: 10px; }
+.lista-cuaderno li.nueva { border-left: 4px solid var(--secundario); }
+.lista-cuaderno a { display: block; padding: 10px 12px; color: var(--texto); text-decoration: none; }
+.firmado { color: #15803d; font-weight: 600; }
+@media (prefers-color-scheme: dark) { .firmado { color: #4ade80; } }

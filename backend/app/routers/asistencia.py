@@ -21,6 +21,7 @@ from app.fechas import hoy_lima
 from app.models import (Alumno, AnioEscolar, AsistenciaAlumno, AsistenciaPersonal, ConfigAsistencia,
                         LicenciaPersonal, Marcacion, Matricula, Rol, Seccion, Turno, Usuario)
 from app.models.asistencia import TIPOS_LICENCIA
+from app.routers.cuaderno import permisos_salida
 from app.routers.estructura import anio_activo, es_dia_lectivo
 from app.routers.importacion import XLSX, _secciones
 
@@ -60,14 +61,19 @@ def recibir(datos: LoteIn, s: Sesion = Depends(marcar), db: Session = Depends(ge
     Solo guarda y responde; los avisos quedan en la cola. Cada marcación se confirma por separado,
     así un lote que llega de una portería sin internet no se pierde entero por una mala."""
     resultados = []
+    permisos = None  # del cuaderno: la portería ve el permiso de salida al marcar la salida
     for m in datos.marcaciones:
         lectura = asistencia.Lectura(
             id_cliente=m.id_cliente, momento=m.momento or datetime.now(UTC),
             origen="manual" if m.codigo is None else m.origen,
             codigo=m.codigo, alumno_id=m.alumno_id, usuario_id=m.usuario_id, equipo=m.equipo)
         try:
-            resultados.append(asistencia.registrar(db, s.colegio.id, lectura, s.usuario.id))
+            r = asistencia.registrar(db, s.colegio.id, lectura, s.usuario.id)
             db.commit()
+            if r.get("resultado") == "salida" and r["persona"]["tipo"] == "alumno":
+                permisos = permisos if permisos is not None else permisos_salida(db, s.colegio.id)
+                r["permiso_salida"] = permisos.get(r["persona"]["id"])
+            resultados.append(r)
         except Exception:
             db.rollback()
             asistencia.log.exception("Marcación %s", m.id_cliente)
@@ -118,6 +124,8 @@ def porteria(s: Sesion = Depends(marcar), db: Session = Depends(get_db)) -> dict
                     for i, c, ap, no, sid in alumnos],
         "personal": [{"id": i, "codigo": c, "nombre": f"{ap}, {no}", "turno_id": t}
                      for i, c, ap, no, t in personal],
+        # Permisos de salida de hoy por alumno (cuaderno), para verlos al marcar la salida sin internet.
+        "permisos_salida": {str(k): v for k, v in permisos_salida(db, cid).items()},
     }
 
 

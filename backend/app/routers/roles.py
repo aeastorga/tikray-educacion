@@ -15,6 +15,8 @@ router = APIRouter(prefix="/roles", tags=["roles"])
 class DatosRol(BaseModel):
     nombre: str = Field(min_length=1, max_length=80)
     permisos: dict[str, str] = {}
+    # Cuaderno: solo ve y escribe lo de las secciones a su cargo (docente, tutor).
+    solo_sus_secciones: bool = False
 
     @field_validator("permisos")
     @classmethod
@@ -32,11 +34,13 @@ class RolOut(BaseModel):
     nombre: str
     es_director: bool
     permisos: dict[str, str]
+    solo_sus_secciones: bool
 
 
 def _salida(r: Rol) -> RolOut:
     permisos = {m: "editar" for m in MODULOS} if r.es_director else {p.modulo: p.nivel for p in r.permisos}
-    return RolOut(id=r.id, nombre=r.nombre, es_director=r.es_director, permisos=permisos)
+    return RolOut(id=r.id, nombre=r.nombre, es_director=r.es_director, permisos=permisos,
+                  solo_sus_secciones=r.solo_sus_secciones and not r.es_director)
 
 
 def _rol(db: Session, colegio_id: int, rol_id: int) -> Rol:
@@ -69,7 +73,7 @@ def listar(s: Sesion = Depends(requerir_permiso("roles")), db: Session = Depends
 def crear(
     datos: DatosRol, s: Sesion = Depends(requerir_permiso("roles", "editar")), db: Session = Depends(get_db),
 ) -> RolOut:
-    rol = Rol(colegio_id=s.colegio.id, nombre=datos.nombre.strip())
+    rol = Rol(colegio_id=s.colegio.id, nombre=datos.nombre.strip(), solo_sus_secciones=datos.solo_sus_secciones)
     rol.permisos = [PermisoRol(colegio_id=s.colegio.id, modulo=m, nivel=n) for m, n in datos.permisos.items()]
     db.add(rol)
     _guardar(db, rol)
@@ -84,7 +88,7 @@ def editar(
     rol = _rol(db, s.colegio.id, rol_id)
     if rol.es_director:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El rol del director no se modifica")
-    rol.nombre = datos.nombre.strip()
+    rol.nombre, rol.solo_sus_secciones = datos.nombre.strip(), datos.solo_sus_secciones
     rol.permisos = [PermisoRol(colegio_id=s.colegio.id, modulo=m, nivel=n) for m, n in datos.permisos.items()]
     _guardar(db, rol)
     return _salida(rol)

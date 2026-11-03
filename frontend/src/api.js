@@ -30,13 +30,16 @@ export class ErrorApi extends Error {
 }
 
 // `sinSalir`: ante un 401 la pantalla se queda (la portería sigue marcando sin sesión y avisa).
-export async function api(ruta, { metodo = 'GET', datos, archivo, sinSalir = false } = {}) {
+// `formulario`: un FormData ya armado (datos + varios archivos).
+export async function api(ruta, { metodo = 'GET', datos, archivo, formulario, sinSalir = false } = {}) {
   const cabeceras = {}
   const clave = deFamilia(ruta) ? CLAVE_TOKEN_FAMILIA : CLAVE_TOKEN
   const token = leerToken(clave)
   if (token) cabeceras.Authorization = `Bearer ${token}`
   let cuerpo
-  if (archivo) {
+  if (formulario) {
+    cuerpo = formulario
+  } else if (archivo) {
     cuerpo = new FormData()
     cuerpo.append('archivo', archivo)
   } else if (datos !== undefined) {
@@ -59,7 +62,7 @@ export async function api(ruta, { metodo = 'GET', datos, archivo, sinSalir = fal
 
 // Descarga un archivo protegido (PDF, Excel) con el token y lo abre o guarda.
 export async function descargar(ruta, nombre) {
-  const token = leerToken()
+  const token = leerToken(deFamilia(ruta) ? CLAVE_TOKEN_FAMILIA : CLAVE_TOKEN)
   const r = await fetch(ruta, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
   if (!r.ok) {
     const json = await r.json().catch(() => null)

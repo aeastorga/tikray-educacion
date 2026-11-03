@@ -1,0 +1,30 @@
+textarea {
+  font: inherit; padding: 9px 10px; border: 1px solid var(--borde); border-radius: 8px;
+  background: var(--superficie); color: var(--texto); min-width: 0; resize: vertical;
+}
+.fila-form > textarea { flex: 1 1 260px; }
+.pequeno { font-size: .85rem; }
+
+.tipo-cuaderno { display: inline-block; font-size: .8rem; padding: 1px 8px; border-radius: 999px; background: var(--fondo); border: 1px solid var(--borde); white-space: nowrap; }
+.tipo-cuaderno.incidencia { border-color: #b45309; }
+.tipo-cuaderno.citacion { border-color: #7c3aed; }
+.tipo-cuaderno.justificacion, .tipo-cuaderno.permiso_salida { border-color: #0e7490; }
+.estado-cuaderno { display: inline-block; margin-left: 4px; font-size: .8rem; font-weight: 600; }
+.estado-cuaderno.pendiente { color: #b45309; }
+.estado-cuaderno.aprobada { color: #15803d; }
+.estado-cuaderno.rechazada { color: var(--error); }
+.punto { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--secundario); margin-right: 6px; vertical-align: middle; }
+
+.cuaderno-detalle h2 { margin: 4px 0; }
+.cuaderno-detalles { color: var(--tenue); margin: 4px 0; }
+.cuaderno-cuerpo { white-space: pre-wrap; line-height: 1.5; }
+.adjuntos { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.adjuntos .chip { cursor: pointer; font: inherit; color: var(--texto); }
+.hilo { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.hilo li { padding: 8px 12px; border-radius: 10px; max-width: 85%; }
+.hilo li p { margin: 2px 0 0; white-space: pre-wrap; }
+.hilo .de-familia { background: var(--superficie); border: 1px solid var(--borde); align-self: flex-start; }
+.hilo .del-colegio { background: color-mix(in srgb, var(--primario) 12%, var(--superficie)); align-self: flex-end; }
+.falta-firma { color: var(--error); }
+.lista-elegir { list-style: none; padding: 0; margin: 6px 0 0; max-height: 220px; overflow-y: auto; }
+.lista-elegir li { padding: 4px 0; }

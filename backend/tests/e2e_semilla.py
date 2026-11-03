@@ -9,7 +9,7 @@ Imprime en JSON lo que las pruebas necesitan (códigos de carnet, usuario).
 import json
 import os
 import sys
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 from pathlib import Path
 
 URL = os.environ.get("E2E_DATABASE_URL")
@@ -24,12 +24,13 @@ from sqlalchemy import text  # noqa: E402
 
 from app.db import get_engine, get_sessionmaker  # noqa: E402
 from app.fechas import hoy_lima  # noqa: E402
-from app.models import (Alumno, AnioEscolar, Colegio, Grado, Matricula, Nivel, Rol, Seccion, Turno,  # noqa: E402
-                        Usuario)
+from app.models import (Alumno, AlumnoApoderado, AnioEscolar, Apoderado, Colegio, CuentaFamilia,  # noqa: E402
+                        Grado, Matricula, Nivel, Rol, Seccion, Turno, Usuario)
 from app.seguridad import hashear_clave  # noqa: E402
 
 SUBDOMINIO = "e2e"
 DIRECTOR = {"usuario": "40000001", "clave": "ClaveE2e2026"}
+FAMILIA = {"documento": "41234567", "pin": "481937"}  # madre de Lucía, con la cuenta ya activada
 ALUMNOS = [("QUISPE MAMANI", "Lucía", "LUCAAAAA"), ("HUAMAN TORRES", "Diego", "DGAAAAAA"),
            ("ROJAS PAREDES", "Ana", "ANAAAAAA")]
 
@@ -64,14 +65,25 @@ def main() -> None:
         sec = Seccion(colegio_id=c.id, anio_id=anio.id, grado_id=grado.id, turno_id=turno.id, nombre="A")
         db.add(sec)
         db.flush()
+        alumnos = []
         for i, (apellidos, nombres, codigo) in enumerate(ALUMNOS):
             a = Alumno(colegio_id=c.id, numero_documento=f"7900000{i}", nombres=nombres, apellidos=apellidos,
                        codigo=codigo)
             db.add(a)
             db.flush()
             db.add(Matricula(colegio_id=c.id, anio_id=anio.id, alumno_id=a.id, seccion_id=sec.id))
+            alumnos.append(a)
+        cuenta = CuentaFamilia(tipo_documento="DNI", numero_documento=FAMILIA["documento"],
+                               pin_hash=hashear_clave(FAMILIA["pin"]))
+        db.add(cuenta)
+        db.flush()
+        madre = Apoderado(colegio_id=c.id, numero_documento=FAMILIA["documento"], nombres="Rosa", apellidos="Mamani",
+                          celular="987654321", cuenta_id=cuenta.id, estado_acceso="activo", activado_en=datetime.now(UTC))
+        db.add(madre)
+        db.flush()
+        db.add(AlumnoApoderado(colegio_id=c.id, alumno_id=alumnos[0].id, apoderado_id=madre.id, parentesco="Madre"))
         db.commit()
-    print(json.dumps({"subdominio": SUBDOMINIO, "director": DIRECTOR,
+    print(json.dumps({"subdominio": SUBDOMINIO, "director": DIRECTOR, "familia": FAMILIA,
                       "alumnos": [{"nombre": f"{ap}, {no}", "codigo": co} for ap, no, co in ALUMNOS]}))
 
 

@@ -62,6 +62,8 @@ def mensaje(aviso: ColaAviso, colegio: Colegio, alumno: Alumno | None) -> dict:
     hora = aviso.datos.get("hora")
     if aviso.tipo == "cuenta":
         titulo, cuerpo = colegio.nombre, aviso.datos.get("mensaje", "Hubo un cambio en tu cuenta.")
+    elif aviso.tipo == "cuaderno":
+        titulo, cuerpo = colegio.nombre, aviso.datos.get("mensaje", "Tienes una novedad en el cuaderno.")
     else:
         n = _primer_nombre(alumno)
         cuerpo = {
@@ -71,6 +73,9 @@ def mensaje(aviso: ColaAviso, colegio: Colegio, alumno: Alumno | None) -> dict:
             "falta": f"{n} no ha llegado hoy al colegio.",
         }[aviso.tipo]
         titulo = colegio.nombre
+    if aviso.tipo == "cuaderno":  # cada novedad del cuaderno es su propia notificación
+        return {"titulo": titulo, "cuerpo": cuerpo, "url": aviso.datos.get("url", "/familia"),
+                "etiqueta": f"cuaderno-{aviso.id}"}
     return {"titulo": titulo, "cuerpo": cuerpo, "url": "/familia",
             "etiqueta": f"{aviso.tipo}-{aviso.alumno_id or aviso.apoderado_id}-{aviso.fecha}"}
 
@@ -91,8 +96,10 @@ def _sigue_vigente(db: Session, aviso: ColaAviso, ahora: datetime) -> str | None
 
 def _destinatarios(db: Session, aviso: ColaAviso) -> list[Apoderado]:
     if aviso.apoderado_id is not None:
+        # De su cuenta se le avisa aunque esté pendiente; del cuaderno, solo si ya tiene acceso.
+        estados = ("activo",) if aviso.tipo == "cuaderno" else ("activo", "pendiente")
         q = select(Apoderado).where(Apoderado.colegio_id == aviso.colegio_id, Apoderado.id == aviso.apoderado_id,
-                                    Apoderado.estado_acceso.in_(("activo", "pendiente")))
+                                    Apoderado.estado_acceso.in_(estados))
     else:
         q = (select(Apoderado)
              .join(AlumnoApoderado, (AlumnoApoderado.colegio_id == Apoderado.colegio_id)

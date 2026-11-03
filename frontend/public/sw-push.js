@@ -17,7 +17,13 @@ self.addEventListener('notificationclick', (evento) => {
   const url = evento.notification.data?.url || '/familia'
   evento.waitUntil((async () => {
     for (const c of await self.clients.matchAll({ type: 'window', includeUncontrolled: true })) {
-      if (new URL(c.url).pathname.startsWith('/familia') && 'focus' in c) return c.focus()
+      if (new URL(c.url).pathname.startsWith('/familia') && 'focus' in c) {
+        // La app ya está abierta: llevarla a lo que avisa (p. ej. una entrada del cuaderno).
+        if (new URL(c.url).pathname !== url && 'navigate' in c) {
+          try { return (await c.navigate(url))?.focus() } catch { /* sin control del service worker */ }
+        }
+        return c.focus()
+      }
     }
     return self.clients.openWindow(url)
   })())
