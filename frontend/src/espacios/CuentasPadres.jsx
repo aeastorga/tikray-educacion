@@ -259,5 +259,5 @@ function Detalle() {
 
 function fechaHora(iso) {
   return new Date(iso).toLocaleString('es-PE', { timeZone: 'America/Lima', day: 'numeric', month: 'short',
-    hour: '2-digit', minute: '2-digit' })
+    hour: '2-digit', minute: '2-digit' }).replace(/\s/g, '\u00A0')
 }

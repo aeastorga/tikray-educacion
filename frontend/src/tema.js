@@ -23,11 +23,83 @@ export function contraste(a, b) {
   return (x + 0.05) / (y + 0.05)
 }
 
-// Oscurece de a poco (mismo tono) hasta que el blanco se lea bien encima.
+// El acento al 9 % sobre un fondo: así se ven las cajas y chips "suaves".
+function suave(color, fondo) {
+  const a = rgb(color), f = rgb(fondo)
+  return hex(f.map((x, i) => x + (a[i] - x) * 0.09))
+}
+
+// Oscurece de a poco (mismo tono) hasta 4.5:1 con el blanco encima y como texto sobre el fondo de la app
+// y sobre su propia versión suave.
 export function paraTextoBlanco(color) {
   let c = rgb(color)
-  for (let i = 0; i < 40 && contraste(hex(c), '#FFFFFF') < 4.5; i++) c = c.map((x) => x * 0.94)
+  const fondos = ['#FFFFFF', '#F3F5F9', suave(color, '#FFFFFF')]
+  for (let i = 0; i < 40 && Math.min(...fondos.map((f) => contraste(hex(c), f))) < 4.5; i++) {
+    c = c.map((x) => x * 0.94)
+  }
   return hex(c)
+}
+
+// Aclara de a poco (mezcla con blanco) hasta 4.5:1 sobre las tarjetas del tema oscuro, también con el
+// fondo suave del acento detrás.
+export function paraFondoOscuro(color) {
+  let c = rgb(color)
+  const fondos = ['#131A26', '#0B0F17', suave(color, '#131A26'), '#1F2937']
+  for (let i = 0; i < 40 && Math.min(...fondos.map((f) => contraste(hex(c), f))) < 4.5; i++) {
+    c = c.map((x) => x + (255 - x) * 0.08)
+  }
+  return hex(c)
+}
+
+const FONDO_OSCURO = '#0B0F17'
+
+// --- Apariencia: claro, oscuro o automático (lo que diga el celular). Se guarda en el equipo. ---
+
+export const TEMAS = ['claro', 'oscuro', 'auto']
+const CLAVE_TEMA = 'tikray-tema'
+
+export function temaGuardado() {
+  try {
+    const t = localStorage.getItem(CLAVE_TEMA)
+    return TEMAS.includes(t) ? t : 'claro'
+  } catch {
+    return 'claro'
+  }
+}
+
+function oscuroDelSistema() {
+  try {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  } catch {
+    return false
+  }
+}
+
+export function esOscuro(tema = temaGuardado()) {
+  return tema === 'oscuro' || (tema === 'auto' && oscuroDelSistema())
+}
+
+function pintarBarra() {
+  const acento = document.documentElement.style.getPropertyValue('--acento-fuerte') || '#1F4E79'
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', esOscuro() ? FONDO_OSCURO : acento)
+}
+
+export function elegirTema(tema) {
+  const t = TEMAS.includes(tema) ? tema : 'claro'
+  try {
+    localStorage.setItem(CLAVE_TEMA, t)
+  } catch {
+    // modo privado o almacenamiento bloqueado: vale solo para esta visita
+  }
+  document.documentElement.dataset.tema = t
+  pintarBarra()
+  window.dispatchEvent(new CustomEvent('tikray-tema', { detail: t }))
+}
+
+try {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', pintarBarra)
+} catch {
+  // navegador sin matchMedia
 }
 
 export function aplicarTema(imagen) {
@@ -38,10 +110,11 @@ export function aplicarTema(imagen) {
   raiz.setProperty('--acento-fuerte', paraTextoBlanco(acento))
   raiz.setProperty('--acento-suave', `rgba(${r}, ${g}, ${b}, 0.09)`)
   raiz.setProperty('--acento-medio', `rgba(${r}, ${g}, ${b}, 0.18)`)
+  raiz.setProperty('--acento-luz', paraFondoOscuro(acento))
   // Nombres de antes, que aún usan algunos estilos de módulos.
   raiz.setProperty('--primario', paraTextoBlanco(acento))
   raiz.setProperty('--secundario', imagen.color_secundario)
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', paraTextoBlanco(acento))
+  pintarBarra()
 }
 
 export function iniciales(nombre = '') {

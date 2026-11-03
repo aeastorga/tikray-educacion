@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { api } from '../api.js'
 import { iniciales } from '../tema.js'
+import { Apariencia } from '../Apariencia.jsx'
 import { Logo } from './Acceso.jsx'
 import './menu.css'
 
@@ -107,6 +108,7 @@ export default function Menu({ colegio, yo, puede, salir }) {
               <LogOut size={18} aria-hidden="true" />
             </button>
           </div>
+          <Apariencia />
           <small className="menu-tikray">Plataforma de Tikray Labs</small>
         </div>
       </aside>

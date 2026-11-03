@@ -14,7 +14,7 @@ test('el director ve el resumen del colegio al entrar', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Avisos a familias' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Cuaderno de control' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Accesos rápidos' })).toBeVisible()
-  await expect(page.getByText(/apoderados? no activ/)).toBeVisible()
+  await expect(page.getByText(/Ningún apoderado tiene los avisos activos|apoderados? reciben? los avisos/)).toBeVisible()
   await page.getByRole('link', { name: /Justificaciones por revisar/ }).click()
   await expect(page).toHaveURL(/\/panel\/cuaderno/)
 })
@@ -60,4 +60,42 @@ test('las fuentes vienen de la propia app, no de Google', async ({ page }) => {
   })
   expect(cargadas).toEqual([true, true])
   expect(externas).toEqual([])
+})
+
+test.describe('apariencia', () => {
+  test.use({ colorScheme: 'dark' }) // el celular está en modo oscuro
+
+  test('abre en claro aunque el equipo esté en oscuro; Oscuro se aplica y se recuerda', async ({ page }) => {
+    const fondo = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor)
+    const barra = () => page.locator('meta[name="theme-color"]').getAttribute('content')
+    const { director: d } = semilla()
+    await page.goto('/personal')
+    await expect(page.locator('html')).toHaveAttribute('data-tema', 'claro')
+    expect(await fondo()).toBe('rgb(243, 245, 249)')
+    await page.getByLabel('Usuario (DNI)').fill(d.usuario)
+    await page.getByLabel('Clave').fill(d.clave)
+    await page.getByRole('button', { name: 'Ingresar' }).click()
+    await expect(page.getByRole('heading', { name: 'Ingreso de hoy' })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Abrir menú' }).click()
+    const menu = page.getByRole('group', { name: 'Apariencia' })
+    await expect(menu.getByRole('radio', { name: 'Claro' })).toBeChecked()
+    await menu.getByRole('radio', { name: 'Oscuro' }).check()
+    await expect(page.locator('html')).toHaveAttribute('data-tema', 'oscuro')
+    expect(await fondo()).toBe('rgb(11, 15, 23)')
+    expect(await barra()).toBe('#0B0F17')
+
+    await page.reload()
+    await expect(page.getByRole('heading', { name: 'Ingreso de hoy' })).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('data-tema', 'oscuro')
+    expect(await fondo()).toBe('rgb(11, 15, 23)')
+
+    // Automático sigue al equipo (aquí, oscuro); Claro vuelve aunque el equipo siga en oscuro.
+    await page.getByRole('button', { name: 'Abrir menú' }).click()
+    await menu.getByRole('radio', { name: 'Automático' }).check()
+    expect(await fondo()).toBe('rgb(11, 15, 23)')
+    await menu.getByRole('radio', { name: 'Claro' }).check()
+    expect(await fondo()).toBe('rgb(243, 245, 249)')
+    expect(await barra()).not.toBe('#0B0F17')
+  })
 })

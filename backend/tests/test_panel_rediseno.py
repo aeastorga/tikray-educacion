@@ -80,7 +80,7 @@ def test_personal_presentes_y_listas_cortas(client, db, monkeypatch):
     _marcar(db, e, None, 7, 40, personal=nombres["Ana"])
     _marcar(db, e, None, 8, 5, personal=nombres["Beto"])  # 20 min tarde
 
-    p = _panel(client)["asistencia"]["personal"]
+    p = _panel(client)["personal"]
     assert p["total"] == 4 and p["presente"] == 1 and p["tarde"] == 1
     assert p["lista"]["tardanzas"] == [{"nombre": "Beto 20000002", "minutos": 20}]
     assert p["lista"]["licencias"] == [{"nombre": "Dino 20000004", "tipo": "salud"}]
@@ -90,7 +90,7 @@ def test_personal_presentes_y_listas_cortas(client, db, monkeypatch):
     # Si a Carla ya le cayó la falta automática, sigue sin marcar.
     asistencia.marcar_faltas(db, HOY, time(23, 59), e.colegio.id, avisar=False)
     db.commit()
-    p = _panel(client)["asistencia"]["personal"]
+    p = _panel(client)["personal"]
     assert p["sin_marcar"] == 1 and p["falta"] == 1
     assert sin_turno.nombres not in str(p)
 
@@ -234,7 +234,7 @@ def test_sin_marcar_solo_despues_de_la_hora_de_su_turno(client, db, monkeypatch)
     db.commit()
 
     def sin_marcar():
-        p = _panel(client)["asistencia"]["personal"]
+        p = _panel(client)["personal"]
         return p["sin_marcar"], [x["nombre"] for x in p["lista"]["sin_marcar"]]
 
     _reloj(monkeypatch, 7, 30)  # nadie debía haber llegado todavía
@@ -246,4 +246,63 @@ def test_sin_marcar_solo_despues_de_la_hora_de_su_turno(client, db, monkeypatch)
     _reloj(monkeypatch, 13, 5)  # ya pasó también la de la tarde
     assert sin_marcar() == (2, ["P 20000001", "P 20000002"])
     # El total con turno no depende de la hora.
-    assert _panel(client)["asistencia"]["personal"]["total"] == 2
+    assert _panel(client)["personal"]["total"] == 2
+
+
+# --- Permisos en Inicio ------------------------------------------------------------------------
+
+def _panel_de(client, dni, sub="uno"):
+    r = client.get("/api/panel/resumen", headers=auth(sub, token(client, sub, usuario=dni)))
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_tarjeta_del_personal_solo_con_permiso(client, db):
+    e = preparar(db, "uno")
+    crear_personal(db, e.colegio, "30000001", {"asistencia": "ver"})
+    crear_personal(db, e.colegio, "30000002", {"asistencia": "ver", "personal": "ver"})
+    sin = _panel_de(client, "30000001")
+    assert "asistencia" in sin and "personal" not in sin
+    con = _panel_de(client, "30000002")
+    assert con["personal"]["total"] == 0
+    assert "personal" in _panel(client)  # el director ve todo
+
+
+def test_docente_con_solo_sus_secciones_ve_solo_lo_suyo(client, db):
+    from app.models import SeccionDocente, Seccion
+
+    e = preparar(db, "uno", alumnos=5, dias_semana="1234567")
+    otra = Seccion(colegio_id=e.colegio.id, anio_id=e.seccion.anio_id, grado_id=e.seccion.grado_id,
+                   turno_id=e.turno.id, nombre="B")
+    db.add(otra)
+    db.flush()
+    from app.models import Matricula
+    for a in e.alumnos[3:]:
+        db.execute(Matricula.__table__.update().where(Matricula.alumno_id == a.id).values(seccion_id=otra.id))
+    docente = crear_personal(db, e.colegio, "30000003", {"asistencia": "ver", "cuaderno": "editar"})
+    docente.rol.solo_sus_secciones = True
+    db.add(SeccionDocente(colegio_id=e.colegio.id, seccion_id=e.seccion.id, usuario_id=docente.id))
+    db.commit()
+
+    _marcar(db, e, e.alumnos[0], 7, 35, "Puerta A")             # sección A
+    _marcar(db, e, e.alumnos[3], 7, 52, "Puerta B")             # sección B
+    _marcar(db, e, e.alumnos[4], 8, 5, "Puerta B")              # sección B, tarde y la última
+    for a, sec in ((e.alumnos[1], e.seccion.id), (e.alumnos[2], e.seccion.id)):
+        db.add(AsistenciaAlumno(colegio_id=e.colegio.id, alumno_id=a.id, fecha=HOY, seccion_id=sec,
+                                estado="falta", minutos_tarde=0))
+    db.commit()
+
+    d = _panel_de(client, "30000003")
+    assert "personal" not in d
+    a = d["asistencia"]
+    assert a["solo_sus_secciones"] is True
+    assert a["alumnos"] == 3
+    assert a["hoy"]["presente"] == 1 and a["hoy"]["tarde"] == 0 and a["hoy"]["falta"] == 2
+    assert sum(t["a_tiempo"] + t["tarde"] for t in a["llegadas"]["tramos"]) == 1
+    assert a["ultima_marcacion"]["equipo"] == "Puerta A"
+    assert {s["id"] for s in a["secciones_con_faltas"]} <= {e.seccion.id}
+
+    todo = _panel(client)["asistencia"]
+    assert todo["solo_sus_secciones"] is False and todo["alumnos"] == 5
+    assert todo["ultima_marcacion"]["hora"] == "08:05"
+    assert sum(t["a_tiempo"] + t["tarde"] for t in todo["llegadas"]["tramos"]) == 3

@@ -33,7 +33,10 @@
 .ficha-bloque dd { margin: 0; overflow-wrap: anywhere; }
 .ficha-bloque mark { background: #fff1d6; color: #5c3800; padding: 0 3px; border-radius: 3px; }
 .ficha-bloque del { color: var(--tenue); }
-@media (prefers-color-scheme: dark) { .ficha-bloque mark { background: #5c3d00; color: #ffe3a8; } }
+[data-tema="oscuro"] .ficha-bloque mark { background: #5c3d00; color: #ffe3a8; }
+@media (prefers-color-scheme: dark) {
+  [data-tema="auto"] .ficha-bloque mark { background: #5c3d00; color: #ffe3a8; }
+}
 
 .fichas-revisadas, .lista-faltan { list-style: none; padding: 0; margin: 0; }
 .fichas-revisadas li { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--borde); }
@@ -50,7 +53,9 @@
 @media (prefers-reduced-motion: reduce) { .espera-punto { animation: none; } }
 .verificar-dni { margin: 10px 0 4px; padding: 8px 10px; border-radius: 8px; border: 1px solid #f0d49a; background: #fff8e8; }
 .verificar-dni.hecho { border-color: #b4e2c0; background: #eef9f1; }
+[data-tema="oscuro"] .verificar-dni { background: #3a2c0c; border-color: #6b5320; }
+[data-tema="oscuro"] .verificar-dni.hecho { background: #13301d; border-color: #2c6a40; }
 @media (prefers-color-scheme: dark) {
-  .verificar-dni { background: #3a2c0c; border-color: #6b5320; }
-  .verificar-dni.hecho { background: #13301d; border-color: #2c6a40; }
+  [data-tema="auto"] .verificar-dni { background: #3a2c0c; border-color: #6b5320; }
+  [data-tema="auto"] .verificar-dni.hecho { background: #13301d; border-color: #2c6a40; }
 }

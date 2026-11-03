@@ -1,0 +1,21 @@
+.apariencia { border: 0; margin: 0; padding: 0; min-width: 0; }
+.apariencia legend { padding: 0; margin-bottom: 6px; font-size: .78rem; font-weight: 700; color: var(--tenue); }
+.apariencia-opciones {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; padding: 3px;
+  border-radius: var(--radio-chico); background: var(--fondo); border: 1px solid var(--borde);
+}
+.apariencia-opcion {
+  position: relative; flex-direction: row; align-items: center; justify-content: center; gap: 6px; min-height: 38px;
+  padding: 0 6px; border-radius: 9px; cursor: pointer; color: var(--tenue); font-size: .8rem; font-weight: 600;
+  white-space: nowrap;
+}
+.apariencia-opcion input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.apariencia-opcion:has(input:checked) { background: var(--superficie); color: var(--texto); box-shadow: 0 1px 2px rgba(17, 24, 39, .12); }
+.apariencia-opcion:has(input:focus-visible) { outline: 3px solid var(--acento); outline-offset: 1px; }
+
+/* Dentro del menú lateral: con los colores del menú (oscuro o claro). */
+.menu .apariencia legend { color: var(--menu-titulo); padding: 0 4px; }
+.menu .apariencia-opciones { background: var(--menu-hover); border-color: var(--menu-borde); }
+.menu .apariencia-opcion { color: var(--menu-tenue); font-size: .74rem; gap: 4px; padding: 0 2px; }
+.menu .apariencia-opcion:has(input:checked) { background: var(--menu-fondo); color: var(--menu-texto); box-shadow: 0 0 0 1px var(--menu-borde); }
+.menu .apariencia-opcion svg { display: none; }

@@ -8,7 +8,7 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app import cuaderno
@@ -74,9 +74,9 @@ def _llegadas(db: Session, cid: int, hoy, matriculados) -> dict:
     return {"tramo_minutos": TRAMO_MINUTOS, "tramos": lista, "limite": limite}
 
 
-def _ultima_marcacion(db: Session, cid: int, hoy) -> dict | None:
+def _ultima_marcacion(db: Session, cid: int, hoy, matriculados) -> dict | None:
     m = db.scalar(select(Marcacion).where(Marcacion.colegio_id == cid, Marcacion.fecha == hoy,
-                                          Marcacion.alumno_id.is_not(None))
+                                          Marcacion.alumno_id.in_(select(matriculados.c.alumno_id)))
                   .order_by(Marcacion.momento.desc(), Marcacion.id.desc()).limit(1))
     if m is None:
         return None
@@ -129,12 +129,16 @@ def _personal(db: Session, cid: int, hoy) -> dict:
     }
 
 
-def _asistencia(db: Session, cid: int) -> dict:
+def _asistencia(db: Session, cid: int, permitidas: set[int] | None) -> dict:
+    """Asistencia de hoy. Con `permitidas` (rol con "solo sus secciones"), solo de esas secciones."""
     hoy = hoy_lima()
     anio = db.scalar(select(AnioEscolar.id).where(AnioEscolar.colegio_id == cid, AnioEscolar.activo))
-    matriculados = (select(Matricula.alumno_id, Matricula.seccion_id)
-                    .join(Alumno, and_(Alumno.colegio_id == Matricula.colegio_id, Alumno.id == Matricula.alumno_id))
-                    .where(Matricula.colegio_id == cid, Matricula.anio_id == anio, Alumno.activo).subquery())
+    q = (select(Matricula.alumno_id, Matricula.seccion_id)
+         .join(Alumno, and_(Alumno.colegio_id == Matricula.colegio_id, Alumno.id == Matricula.alumno_id))
+         .where(Matricula.colegio_id == cid, Matricula.anio_id == anio, Alumno.activo))
+    if permitidas is not None:
+        q = q.where(Matricula.seccion_id.in_(permitidas))
+    matriculados = q.subquery()
     total = db.scalar(select(func.count()).select_from(matriculados)) or 0
     estados = dict(db.execute(
         select(AsistenciaAlumno.estado, func.count())
@@ -161,7 +165,8 @@ def _asistencia(db: Session, cid: int) -> dict:
     for fecha, vino, registrados in db.execute(
             select(AsistenciaAlumno.fecha,
                    func.count(case((AsistenciaAlumno.estado.in_(("presente", "tarde")), 1))), func.count())
-            .where(AsistenciaAlumno.colegio_id == cid, AsistenciaAlumno.fecha.between(desde, hoy))
+            .where(AsistenciaAlumno.colegio_id == cid, AsistenciaAlumno.fecha.between(desde, hoy),
+                   AsistenciaAlumno.alumno_id.in_(select(matriculados.c.alumno_id)))
             .group_by(AsistenciaAlumno.fecha)):
         por_dia[fecha] = (vino, registrados)
     tendencia = []
@@ -175,12 +180,14 @@ def _asistencia(db: Session, cid: int) -> dict:
 
     return {
         "lectivo": es_dia_lectivo(db, cid, hoy), "alumnos": total, "hoy": hoy_d,
-        "porcentaje": round(100 * (hoy_d["presente"] + hoy_d["tarde"]) / total) if total else None,
+        # Sin ningún registro todavía (antes del ingreso) no hay porcentaje: no es 0 %.
+        "porcentaje": (round(100 * (hoy_d["presente"] + hoy_d["tarde"]) / total)
+                       if total and hoy_d["sin_registro"] < total else None),
+        "solo_sus_secciones": permitidas is not None,
         "secciones_con_faltas": [{"id": i, "nombre": f"{g} {s}", "faltas": n} for i, g, s, n in peores],
         "tendencia": list(reversed(tendencia)),
-        "personal": _personal(db, cid, hoy),
         "llegadas": _llegadas(db, cid, hoy, matriculados),
-        "ultima_marcacion": _ultima_marcacion(db, cid, hoy),
+        "ultima_marcacion": _ultima_marcacion(db, cid, hoy, matriculados),
     }
 
 
@@ -233,9 +240,16 @@ def _familias(db: Session, cid: int) -> dict:
     hoy = hoy_lima()
     estados = dict(db.execute(select(Apoderado.estado_acceso, func.count()).where(Apoderado.colegio_id == cid)
                               .group_by(Apoderado.estado_acceso)).all())
-    con_push = db.scalar(select(func.count(Apoderado.id.distinct()))
-                         .join(SuscripcionPush, SuscripcionPush.cuenta_id == Apoderado.cuenta_id)
-                         .where(Apoderado.colegio_id == cid, Apoderado.estado_acceso == "activo")) or 0
+    # Reciben avisos: tienen un celular suscrito o hoy ya les llegó alguno (lo segundo cubre la demo, que
+    # simula entregas sin crear suscripciones).
+    con_push = db.scalar(select(func.count()).select_from(Apoderado).where(
+        Apoderado.colegio_id == cid, Apoderado.estado_acceso == "activo",
+        or_(Apoderado.cuenta_id.in_(select(SuscripcionPush.cuenta_id)),
+            Apoderado.id.in_(select(EntregaAviso.apoderado_id)
+                             .join(ColaAviso, and_(ColaAviso.colegio_id == EntregaAviso.colegio_id,
+                                                   ColaAviso.id == EntregaAviso.aviso_id))
+                             .where(EntregaAviso.colegio_id == cid, EntregaAviso.estado == "enviado",
+                                    ColaAviso.fecha == hoy))))) or 0
     entregas = dict(db.execute(
         select(EntregaAviso.estado, func.count())
         .join(ColaAviso, and_(ColaAviso.colegio_id == EntregaAviso.colegio_id, ColaAviso.id == EntregaAviso.aviso_id))
@@ -257,7 +271,9 @@ def resumen(s: Sesion = Depends(usuario_actual), db: Session = Depends(get_db)) 
     cid, u = s.colegio.id, s.usuario
     salida: dict = {"fecha": hoy_lima().isoformat(), "colegio": s.colegio.nombre}
     if tiene_permiso(u, "asistencia", "ver"):
-        salida["asistencia"] = _asistencia(db, cid)
+        salida["asistencia"] = _asistencia(db, cid, cuaderno.secciones_permitidas(db, u))
+    if tiene_permiso(u, "personal", "ver"):  # nombres, licencias y quién no marcó: solo con este permiso
+        salida["personal"] = _personal(db, cid, hoy_lima())
     if tiene_permiso(u, "cuaderno", "ver"):
         salida["cuaderno"] = _cuaderno(db, s)
     if tiene_permiso(u, "familias", "ver"):

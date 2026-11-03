@@ -351,23 +351,37 @@ def aplicar_licencia(db: Session, lic: LicenciaPersonal, quitar: bool = False) -
         fila.estado = despues
 
 
+def vuelta_faltas(anterior: datetime | None, ahora: datetime, sesiones=None) -> datetime | None:
+    """Una vuelta del proceso de fondo. Devuelve la nueva hora "anterior" (la misma si las faltas fallaron,
+    para reintentar desde ahí). La demo va aparte, en su propia sesión y después: si falla, no afecta a las
+    faltas de los colegios reales."""
+    if sesiones is None:
+        from app.db import get_sessionmaker
+        sesiones = get_sessionmaker()
+    try:
+        with sesiones() as db:
+            for fecha, desde, hasta in ventanas_faltas(anterior, ahora):
+                marcar_faltas(db, fecha, hasta, desde=desde)
+            db.commit()
+            for fecha, hasta in revisiones_completas(anterior, ahora):
+                if n := marcar_faltas(db, fecha, hasta, avisar=False):
+                    log.info("Revisión completa de faltas del %s: %s nuevas", fecha, n)
+                db.commit()
+        anterior = ahora
+    except Exception:
+        log.exception("Faltas automáticas")
+    try:
+        from app import demo_dia
+        with sesiones() as db:
+            demo_dia.simular_demos(db, ahora)  # solo colegios demo: el día avanza solo
+            db.commit()
+    except Exception:
+        log.exception("Día simulado de la demo")
+    return anterior
+
+
 def bucle_faltas(parar: threading.Event, cada: int = 60) -> None:
     """Proceso en segundo plano del servidor. Varias instancias a la vez no duplican nada (ON CONFLICT)."""
-    from app.db import get_sessionmaker
-
     anterior = None
     while not parar.wait(cada):
-        ahora = datetime.now(LIMA)
-        try:
-            with get_sessionmaker()() as db:
-                for fecha, desde, hasta in ventanas_faltas(anterior, ahora):
-                    marcar_faltas(db, fecha, hasta, desde=desde)
-                db.commit()
-                for fecha, hasta in revisiones_completas(anterior, ahora):
-                    if n := marcar_faltas(db, fecha, hasta, avisar=False):
-                        log.info("Revisión completa de faltas del %s: %s nuevas", fecha, n)
-                    db.commit()
-            anterior = ahora  # si falló, la próxima vuelta vuelve a intentar desde la misma hora
-        except Exception:
-            log.exception("Faltas automáticas")
-
+        anterior = vuelta_faltas(anterior, datetime.now(LIMA))
