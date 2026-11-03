@@ -14,7 +14,7 @@ toca (quien ya tiene asistencia hoy se salta).
 import random
 from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -97,6 +97,14 @@ def simular_dia(db: Session, colegio: Colegio, ahora: datetime | None = None) ->
                 db.add(dia)
                 eventos.append((alumno_id, nombres, "falta", dia, corte))
             continue
+        if dia is not None and _falta_automatica(dia) and plan["entrada"] <= ahora:
+            # Las faltas automáticas corren antes que la demo: si el servidor arrancó a media mañana, ya
+            # marcaron falta a quien en la demo "llegó". Se reemplazan por su llegada (solo en la demo).
+            db.execute(delete(ColaAviso).where(ColaAviso.colegio_id == cid, ColaAviso.alumno_id == alumno_id,
+                                               ColaAviso.fecha == fecha, ColaAviso.tipo == "falta"))
+            db.delete(dia)
+            db.flush()
+            dia = None
         clave_e, clave_s = f"demo-{fecha}-a{alumno_id}-e", f"demo-{fecha}-a{alumno_id}-s"
         if dia is None and plan["entrada"] <= ahora:
             minutos = asistencia.minutos_tarde(turno, plan["entrada"])
@@ -119,6 +127,10 @@ def simular_dia(db: Session, colegio: Colegio, ahora: datetime | None = None) ->
     if eventos:
         _avisos(db, colegio, fecha, eventos)
     return len(eventos) + _personal(db, cid, fecha, ahora)
+
+
+def _falta_automatica(dia: AsistenciaAlumno) -> bool:
+    return dia.estado == "falta" and dia.entrada is None and dia.justificacion_id is None
 
 
 def _avisos(db: Session, colegio: Colegio, fecha: date, eventos: list) -> None:
