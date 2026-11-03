@@ -91,20 +91,22 @@ def test_padre_llena_su_ficha_el_tutor_aprueba_y_activa_en_el_momento(client, db
     assert fi["apoderado"]["estado"] == "registrado"
     assert fi["apoderado"]["cambios"] == {"celular": [None, "912345678"], "correo": [None, "juan@correo.pe"]}
     assert fi["otro"]["estado"] == "registrado" and fi["otro"]["con_cuenta"]
-    assert fi["otro"]["cambios"] == {"celular": ["987654321", "999888777"]}
+    # La madre tiene cuenta propia: su celular distinto se muestra, pero no se aplicará.
+    assert fi["otro"]["cambios"] == {} and fi["otro"]["sin_aplicar"] == {"celular": ["987654321", "999888777"]}
+    assert fi["requiere_verificacion"]  # el padre cambia su celular
 
-    ap = client.post(f"/api/reuniones/{r['id']}/fichas/{fi['id']}/aprobar", json={"activar": True}, headers=hd)
+    ap = client.post(f"/api/reuniones/{r['id']}/fichas/{fi['id']}/aprobar", json={"activar": True, "dni_verificado": True}, headers=hd)
     assert ap.status_code == 200, ap.text
     ap = ap.json()
     assert ap["activacion"]["en_su_celular"] and ap["activacion"]["token"] is None
     # La madre tiene cuenta propia: su celular no lo cambia lo que escribió otro.
-    assert any("Rosa" in n for n in ap["notas"])
+    assert any("Rosa" in n and "secretaría" in n for n in ap["notas"])
     db.expire_all()
     padre = db.get(Apoderado, e.padre.id)
     assert (padre.celular, padre.correo) == ("912345678", "juan@correo.pe")
     assert db.get(Apoderado, e.madre.id).celular == "987654321"
     assert {c.campo for c in db.scalars(select(CambioApoderado).where(CambioApoderado.origen == "reunion"))} == {
-        "celular", "correo"}
+        "celular", "correo", "dni_verificado"}
     consentimiento = db.scalar(select(ConsentimientoApoderado).where(ConsentimientoApoderado.apoderado_id == padre.id))
     assert consentimiento is not None and consentimiento.version
 
@@ -129,7 +131,7 @@ def test_activacion_presencial_no_espera_otra_aprobacion(client, db, e, h):
     r = abrir(client, h, e.sec_a)
     codigo = ficha(client, r["token"]).json()["codigo"]
     fid = detalle(client, h, r["id"])["fichas"][0]["id"]
-    client.post(f"/api/reuniones/{r['id']}/fichas/{fid}/aprobar", json={"activar": True}, headers=h)
+    client.post(f"/api/reuniones/{r['id']}/fichas/{fid}/aprobar", json={"activar": True, "dni_verificado": True}, headers=h)
     act = client.post("/api/familia/reunion/activar", json={"codigo": codigo, "pin": "271828"}, headers=host("alfa"))
     assert act.json()["estado"] == "activo"
 
@@ -160,7 +162,7 @@ def test_apoderado_nuevo_se_crea_y_se_une_al_alumno_al_aprobar(client, db, e, h)
     assert ficha(client, r["token"], apoderado=nuevo).status_code == 201
     fi = detalle(client, h, r["id"])["fichas"][0]
     assert fi["apoderado"]["estado"] == "nuevo"
-    client.post(f"/api/reuniones/{r['id']}/fichas/{fi['id']}/aprobar", json={}, headers=h)
+    client.post(f"/api/reuniones/{r['id']}/fichas/{fi['id']}/aprobar", json={"dni_verificado": True}, headers=h)
     ap = db.scalar(select(Apoderado).where(Apoderado.numero_documento == "45555555"))
     assert ap.colegio_id == e.colegio.id and ap.estado_acceso == "sin_cuenta"
     vinculo = db.scalar(select(AlumnoApoderado).where(AlumnoApoderado.apoderado_id == ap.id))
@@ -188,7 +190,7 @@ def test_reenviar_reemplaza_la_ficha_pendiente_y_hay_tope_por_alumno(client, db,
     fichas = detalle(client, h, r["id"])["fichas"]
     assert len(fichas) == 1 and fichas[0]["datos"]["apoderado"]["celular"] == "922222222"
     assert fichas[0]["reenviada"]
-    client.post(f"/api/reuniones/{r['id']}/fichas/{fichas[0]['id']}/aprobar", json={}, headers=h)
+    client.post(f"/api/reuniones/{r['id']}/fichas/{fichas[0]['id']}/aprobar", json={"dni_verificado": True}, headers=h)
     assert ficha(client, r["token"]).status_code == 409  # ya aprobada
     for dni in ("46000001", "46000002", "46000003"):
         assert ficha(client, r["token"], apoderado=persona(dni)).status_code == 201
@@ -200,6 +202,106 @@ def test_ficha_exige_consentimiento_y_celular(client, e, h):
     assert ficha(client, r["token"], acepto=False).status_code == 422
     assert ficha(client, r["token"], apoderado=persona(celular=None)).status_code == 422
     assert ficha(client, r["token"], otro=persona()).status_code == 422  # mismo documento
+
+
+# --- Contacto de quien tiene cuenta y DNI verificado en persona ------------------------------
+
+def test_quien_llena_con_cuenta_no_cambia_su_contacto_desde_la_ficha(client, db, e, h):
+    """La madre tiene cuenta activa: su propia ficha no le cambia el celular ni el correo (alguien con su
+    DNI y el del hijo podría desviar sus avisos). Lo pide en persona en secretaría."""
+    r = abrir(client, h, e.sec_a)
+    ficha(client, r["token"], apoderado=persona("41234567", nombres="Rosa", apellidos="Mamani", celular="955000111",
+                                                correo="nuevo@correo.pe", parentesco="Madre"))
+    fi = detalle(client, h, r["id"])["fichas"][0]
+    assert fi["apoderado"]["con_cuenta"] and fi["apoderado"]["cambios"] == {}
+    assert fi["apoderado"]["sin_aplicar"] == {"celular": ["987654321", "955000111"], "correo": [None, "nuevo@correo.pe"]}
+    # No suma apoderado ni cambia un celular que se vaya a aplicar: no exige verificar el DNI.
+    assert not fi["requiere_verificacion"]
+    res = client.post(f"/api/reuniones/{r['id']}/fichas/{fi['id']}/aprobar", json={}, headers=h)
+    assert res.status_code == 200, res.text
+    assert any("secretaría" in n for n in res.json()["notas"])
+    db.expire_all()
+    madre = db.get(Apoderado, e.madre.id)
+    assert (madre.celular, madre.correo) == ("987654321", None)
+    assert not db.scalars(select(CambioApoderado).where(CambioApoderado.apoderado_id == madre.id)).all()
+    assert db.scalar(select(ConsentimientoApoderado).where(ConsentimientoApoderado.apoderado_id == madre.id))
+
+
+@pytest.mark.parametrize("caso", ["nuevo", "nuevo_vinculo", "celular"])
+def test_aprobar_exige_verificar_el_dni_y_lo_registra(client, db, e, h, caso):
+    if caso == "nuevo":  # apoderado que no está en el padrón
+        apoderado = persona("45555555", nombres="Lucía", apellidos="Torres", parentesco="Abuela")
+    elif caso == "nuevo_vinculo":  # el del otro alumno (a3), ahora también de a1
+        apoderado = persona("42222222", nombres="Rosa", apellidos="Mamani", celular="987654321")
+    else:  # el padre, sin cuenta, cambia su celular
+        apoderado = persona()
+    r = abrir(client, h, e.sec_a)
+    ficha(client, r["token"], apoderado=apoderado)
+    fi = detalle(client, h, r["id"])["fichas"][0]
+    assert fi["requiere_verificacion"]
+    url = f"/api/reuniones/{r['id']}/fichas/{fi['id']}/aprobar"
+    sin = client.post(url, json={"activar": True}, headers=h)
+    assert sin.status_code == 422 and "Verifiqué su DNI en persona" in sin.json()["detail"]
+    db.expire_all()
+    assert db.get(FichaReunion, fi["id"]).estado == "pendiente"
+    assert not db.scalars(select(CambioApoderado)).all()
+
+    assert client.post(url, json={"dni_verificado": True}, headers=h).status_code == 200
+    db.expire_all()
+    f = db.get(FichaReunion, fi["id"])
+    assert f.dni_verificado_por == "Dir alfa" and f.dni_verificado_en is not None
+    assert f.dni_verificado_por_id is not None
+    registro = db.scalar(select(CambioApoderado).where(CambioApoderado.apoderado_id == f.apoderado_id,
+                                                       CambioApoderado.campo == "dni_verificado"))
+    assert registro.despues == f"DNI visto en persona por Dir alfa (reunión #{r['id']})"
+    assert registro.cambiado_por_id == f.dni_verificado_por_id
+    # El tutor lo ve en la ficha revisada, y el colegio en el historial del apoderado.
+    revisada = detalle(client, h, r["id"])["fichas"][0]
+    assert revisada["dni_verificado_por"] == "Dir alfa" and revisada["dni_verificado_en"]
+    historial = client.get(f"/api/familias/apoderados/{f.apoderado_id}", headers=h).json()["cambios"]
+    assert any(c["campo"] == "dni_verificado" and c["por"] for c in historial)
+
+
+def test_otro_apoderado_nuevo_tambien_exige_verificar(client, db, e, h):
+    r = abrir(client, h, e.sec_a)
+    # Quien llena no cambia nada (el padre, mismo celular que ya tenía: ninguno); el otro es nuevo.
+    padre = persona(celular="912345678")
+    db.get(Apoderado, e.padre.id).celular = "912345678"
+    db.commit()
+    ficha(client, r["token"], apoderado=padre, otro=persona("47777777", nombres="Ana", apellidos="Rojas",
+                                                            parentesco="Tía"))
+    fi = detalle(client, h, r["id"])["fichas"][0]
+    assert fi["apoderado"]["cambios"] == {} and fi["otro"]["estado"] == "nuevo" and fi["requiere_verificacion"]
+    url = f"/api/reuniones/{r['id']}/fichas/{fi['id']}/aprobar"
+    assert client.post(url, json={}, headers=h).status_code == 422
+    assert client.post(url, json={"dni_verificado": True}, headers=h).status_code == 200
+    otra = db.scalar(select(Apoderado).where(Apoderado.numero_documento == "47777777"))
+    assert db.scalar(select(CambioApoderado).where(CambioApoderado.apoderado_id == otra.id,
+                                                   CambioApoderado.campo == "dni_verificado"))
+
+
+def test_ficha_sin_cambios_de_riesgo_se_aprueba_sin_verificar(client, db, e, h):
+    """Solo corrige el nombre: no suma apoderado ni cambia celular."""
+    r = abrir(client, h, e.sec_a)
+    db.get(Apoderado, e.padre.id).celular = "912345678"
+    db.commit()
+    ficha(client, r["token"], apoderado=persona(nombres="Juan Carlos"))
+    fi = detalle(client, h, r["id"])["fichas"][0]
+    assert fi["apoderado"]["cambios"] == {"nombres": ["Juan", "Juan Carlos"]} and not fi["requiere_verificacion"]
+    assert client.post(f"/api/reuniones/{r['id']}/fichas/{fi['id']}/aprobar", json={}, headers=h).status_code == 200
+    f = db.get(FichaReunion, fi["id"])
+    assert f.dni_verificado_por is None and f.dni_verificado_en is None
+
+
+def test_la_base_exige_verificacion_completa(db, e):
+    r = ReunionPadres(colegio_id=e.colegio.id, seccion_id=e.sec_a.id, nonce="x",
+                      vence_en=datetime.now(UTC) + timedelta(hours=1))
+    db.add(r)
+    db.commit()
+    db.add(FichaReunion(colegio_id=e.colegio.id, reunion_id=r.id, alumno_id=e.a1.id, origen="papel", datos={},
+                        documento="1", consentimiento_version="v", dni_verificado_por="Alguien"))
+    with pytest.raises(IntegrityError):
+        db.commit()
 
 
 # --- Sin registro libre -----------------------------------------------------------------------
@@ -286,7 +388,7 @@ def test_quiosco_no_guarda_codigo_y_el_tutor_da_el_enlace(client, db, e, h):
     assert f.status_code == 201 and f.json()["codigo"] is None
     fi = detalle(client, h, r["id"])["fichas"][0]
     assert fi["origen"] == "quiosco"
-    res = client.post(f"/api/reuniones/{r['id']}/fichas/{fi['id']}/aprobar", json={"activar": True}, headers=h).json()
+    res = client.post(f"/api/reuniones/{r['id']}/fichas/{fi['id']}/aprobar", json={"activar": True, "dni_verificado": True}, headers=h).json()
     tok = res["activacion"]["token"]
     assert tok and not res["activacion"]["en_su_celular"] and res["activacion"]["celular"] == "912345678"
     # Con ese enlace activa como siempre (el tutor le muestra el QR o se lo manda por WhatsApp).

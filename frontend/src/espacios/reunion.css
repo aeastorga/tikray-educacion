@@ -48,3 +48,9 @@
 .espera-punto { color: var(--secundario); font-size: 1.6rem; text-align: center; animation: late 1.4s ease-in-out infinite; }
 @keyframes late { 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .espera-punto { animation: none; } }
+.verificar-dni { margin: 10px 0 4px; padding: 8px 10px; border-radius: 8px; border: 1px solid #f0d49a; background: #fff8e8; }
+.verificar-dni.hecho { border-color: #b4e2c0; background: #eef9f1; }
+@media (prefers-color-scheme: dark) {
+  .verificar-dni { background: #3a2c0c; border-color: #6b5320; }
+  .verificar-dni.hecho { background: #13301d; border-color: #2c6a40; }
+}

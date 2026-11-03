@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app import familias
 from app.config import get_settings
 from app.models import (Alumno, AlumnoApoderado, Apoderado, CambioApoderado, ConsentimientoApoderado, FichaReunion,
-                        Matricula, ReunionPadres)
+                        Matricula, ReunionPadres, Usuario)
 from app.proteccion import LimitadorVentana
 
 HORAS_POR_DEFECTO = 3
@@ -100,28 +100,57 @@ def _registrado(db: Session, colegio_id: int, alumno_id: int, persona: dict) -> 
     return ap, vinculo.parentesco if vinculo else None
 
 
+def tiene_cuenta(ap: Apoderado | None) -> bool:
+    """Con cuenta propia, su celular y correo solo los cambia él en persona en secretaría, nunca una
+    ficha: ni la que llena otro, ni la suya (alguien con su DNI y el del hijo podría desviar sus avisos)."""
+    return ap is not None and ap.cuenta_id is not None
+
+
 def cambios_persona(db: Session, colegio_id: int, alumno_id: int, persona: dict | None) -> dict | None:
-    """Qué es nuevo o distinto frente al padrón: {estado: nuevo|nuevo_vinculo|registrado, cambios: {campo: [antes, después]}}."""
+    """Qué es nuevo o distinto frente al padrón: {estado: nuevo|nuevo_vinculo|registrado, cambios: {campo: [antes, después]}}.
+    Con cuenta propia, el celular y el correo distintos van en `sin_aplicar`: no se cambian al aprobar."""
     if not persona:
         return None
     ap, parentesco = _registrado(db, colegio_id, alumno_id, persona)
     if ap is None:
-        return {"estado": "nuevo", "apoderado_id": None, "cambios": {}, "con_cuenta": False}
+        return {"estado": "nuevo", "apoderado_id": None, "cambios": {}, "sin_aplicar": {}, "con_cuenta": False}
     actual = {"nombres": ap.nombres, "apellidos": ap.apellidos, "celular": ap.celular, "correo": ap.correo,
               "parentesco": parentesco}
     cambios = {c: [actual[c], persona.get(c)] for c in actual
                if persona.get(c) and (persona.get(c) or "") != (actual[c] or "")}
+    sin_aplicar = {c: cambios.pop(c) for c in ("celular", "correo") if c in cambios and tiene_cuenta(ap)}
     return {"estado": "registrado" if parentesco else "nuevo_vinculo", "apoderado_id": ap.id, "cambios": cambios,
-            "con_cuenta": ap.estado_acceso in ("activo", "pendiente")}
+            "sin_aplicar": sin_aplicar, "con_cuenta": tiene_cuenta(ap)}
+
+
+def requiere_verificacion(db: Session, ficha: FichaReunion) -> bool:
+    """El tutor debe ver el DNI en persona antes de aprobar si la ficha suma un apoderado al alumno
+    (nuevo en el padrón, o ya registrado pero no como apoderado de este alumno) o cambia un celular."""
+    for persona in (ficha.datos["apoderado"], ficha.datos.get("otro")):
+        c = cambios_persona(db, ficha.colegio_id, ficha.alumno_id, persona)
+        if c and (c["estado"] != "registrado" or "celular" in c["cambios"]):
+            return True
+    return False
+
+
+class FaltaVerificar(Exception):
+    pass
+
+
+class Bloqueado(Exception):
+    pass
 
 
 # --- Aprobar -------------------------------------------------------------------------------
 
 def _aplicar_persona(db: Session, ficha: FichaReunion, persona: dict, usuario_id: int,
-                     tocar_contacto: bool) -> tuple[Apoderado, list[str]]:
-    """Crea o actualiza el apoderado y lo une al alumno. Devuelve también lo que no se aplicó y por qué."""
+                     verificado: str | None) -> tuple[Apoderado, list[str]]:
+    """Crea o actualiza el apoderado y lo une al alumno. Devuelve también lo que no se aplicó y por qué.
+    `verificado`: texto de quién vio el DNI en persona, que queda en el registro de cambios."""
     cid, notas = ficha.colegio_id, []
     ap, parentesco = _registrado(db, cid, ficha.alumno_id, persona)
+    nuevo_vinculo = parentesco is None
+    cambia_celular = False
     if ap is None:
         ap = Apoderado(colegio_id=cid, tipo_documento=persona["tipo_documento"],
                        numero_documento=persona["numero_documento"], nombres=persona["nombres"],
@@ -138,11 +167,15 @@ def _aplicar_persona(db: Session, ficha: FichaReunion, persona: dict, usuario_id
                 db.add(CambioApoderado(colegio_id=cid, apoderado_id=ap.id, campo=campo, antes=getattr(ap, campo),
                                        despues=nuevo, origen="reunion", cambiado_por_id=usuario_id))
                 setattr(ap, campo, nuevo)
-        if tocar_contacto:
+        distinto = (persona.get("celular") and persona["celular"] != ap.celular) or \
+            (persona.get("correo") and persona["correo"] != ap.correo)
+        if tiene_cuenta(ap):
+            if distinto:
+                notas.append(f"No se cambió el celular ni el correo de {ap.nombres}: tiene cuenta propia; "
+                             "debe pedirlo en persona en secretaría.")
+        else:
+            cambia_celular = bool(persona.get("celular")) and persona["celular"] != ap.celular
             familias.cambiar_contacto(db, ap, persona.get("celular"), persona.get("correo"), "reunion", usuario_id)
-        elif (persona.get("celular") and persona["celular"] != ap.celular) or \
-                (persona.get("correo") and persona["correo"] != ap.correo):
-            notas.append(f"No se cambió el contacto de {ap.nombres}: tiene cuenta propia y debe pedirlo en persona.")
     if parentesco is None:
         db.add(AlumnoApoderado(colegio_id=cid, alumno_id=ficha.alumno_id, apoderado_id=ap.id,
                                parentesco=persona.get("parentesco") or "Apoderado"))
@@ -151,25 +184,37 @@ def _aplicar_persona(db: Session, ficha: FichaReunion, persona: dict, usuario_id
             AlumnoApoderado.colegio_id == cid, AlumnoApoderado.alumno_id == ficha.alumno_id,
             AlumnoApoderado.apoderado_id == ap.id))
         vinculo.parentesco = persona["parentesco"]
+    if verificado and (nuevo_vinculo or cambia_celular):
+        db.add(CambioApoderado(colegio_id=cid, apoderado_id=ap.id, campo="dni_verificado", antes=None,
+                               despues=verificado, origen="reunion", cambiado_por_id=usuario_id))
     db.flush()
     return ap, notas
 
 
-def aprobar(db: Session, ficha: FichaReunion, usuario_id: int) -> tuple[Apoderado, list[str]]:
+def aprobar(db: Session, ficha: FichaReunion, usuario: Usuario, dni_verificado: bool) -> tuple[Apoderado, list[str]]:
     """Pasa la ficha al padrón: el que la llenó (con su consentimiento, de la fecha en que lo dio) y el
-    otro apoderado. El contacto del otro no se toca si ya tiene cuenta: no lo pidió él. No hace commit."""
-    ap, notas = _aplicar_persona(db, ficha, ficha.datos["apoderado"], usuario_id, tocar_contacto=True)
-    if ap.estado_acceso == "bloqueado":
-        raise ValueError("Ese apoderado está bloqueado en el colegio")
+    otro apoderado. A quien tiene cuenta propia no se le cambia el contacto. Si suma un apoderado o
+    cambia un celular, exige que el tutor haya visto el DNI en persona y lo deja registrado. No hace commit."""
+    if requiere_verificacion(db, ficha) and not dni_verificado:
+        raise FaltaVerificar("Esta ficha suma un apoderado o cambia un celular: marca «Verifiqué su DNI en "
+                             "persona» después de ver su documento")
+    principal, _ = _registrado(db, ficha.colegio_id, ficha.alumno_id, ficha.datos["apoderado"])
+    if principal is not None and principal.estado_acceso == "bloqueado":
+        raise Bloqueado("Ese apoderado está bloqueado en el colegio")
+    ahora = datetime.now(UTC)
+    nombre = f"{usuario.nombres} {usuario.apellidos}"
+    verificado = None
+    if dni_verificado:
+        ficha.dni_verificado_por_id, ficha.dni_verificado_por, ficha.dni_verificado_en = usuario.id, nombre, ahora
+        verificado = f"DNI visto en persona por {nombre} (reunión #{ficha.reunion_id})"[:254]
+    ap, notas = _aplicar_persona(db, ficha, ficha.datos["apoderado"], usuario.id, verificado)
     db.add(ConsentimientoApoderado(colegio_id=ficha.colegio_id, apoderado_id=ap.id,
                                    version=ficha.consentimiento_version, aceptado_en=ficha.actualizado_en,
                                    ip=ficha.ip))
     ficha.apoderado_id = ap.id
     if ficha.datos.get("otro"):
-        otro, _ = _registrado(db, ficha.colegio_id, ficha.alumno_id, ficha.datos["otro"])
-        con_cuenta = otro is not None and otro.cuenta_id is not None
-        otro, mas = _aplicar_persona(db, ficha, ficha.datos["otro"], usuario_id, tocar_contacto=not con_cuenta)
+        otro, mas = _aplicar_persona(db, ficha, ficha.datos["otro"], usuario.id, verificado)
         ficha.otro_apoderado_id = otro.id
         notas += mas
-    ficha.estado, ficha.revisado_por_id, ficha.revisado_en = "aprobada", usuario_id, datetime.now(UTC)
+    ficha.estado, ficha.revisado_por_id, ficha.revisado_en = "aprobada", usuario.id, ahora
     return ap, notas

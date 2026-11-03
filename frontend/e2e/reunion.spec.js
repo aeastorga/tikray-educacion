@@ -40,8 +40,12 @@ test('reunión de padres: el padre llena su ficha, el tutor la aprueba y el padr
   const ficha = tutor.locator('article.ficha-reunion')
   await expect(ficha).toContainText('ROJAS PAREDES, Ana', { timeout: 10000 })
   await expect(ficha).toContainText('Nuevo en el padrón')
+  // Apoderado nuevo: sin ver su DNI en persona no se puede aprobar.
+  await expect(ficha.getByRole('button', { name: 'Aprobar' })).toBeDisabled()
+  await ficha.getByLabel(/Verifiqué su DNI en persona/).check()
   await ficha.getByRole('button', { name: 'Aprobar' }).click()
   await expect(tutor.getByRole('heading', { name: 'Revisadas' })).toBeVisible()
+  await expect(tutor.getByText(/DNI verificado por Directora Pruebas/)).toBeVisible()
 
   // El celular del padre cambia solo: crea su PIN y entra.
   await expect(padre.getByRole('heading', { name: /Ficha aprobada, Carlos/ })).toBeVisible({ timeout: 10000 })

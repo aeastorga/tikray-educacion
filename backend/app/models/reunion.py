@@ -63,6 +63,8 @@ class FichaReunion(ConColegio, Base):
         _fk("otro_apoderado_id", "apoderado", "SET NULL"),
         _fk("invitacion_id", "invitacion_familia", "SET NULL"),
         _fk("revisado_por_id", "usuario", "SET NULL"),
+        _fk("dni_verificado_por_id", "usuario", "SET NULL"),
+        CheckConstraint("(dni_verificado_en IS NULL) = (dni_verificado_por IS NULL)", name="verificacion_completa"),
         CheckConstraint(_en("origen", ORIGENES), name="origen_valido"),
         CheckConstraint(_en("estado", ESTADOS), name="estado_valido"),
         CheckConstraint("estado = 'pendiente' OR revisado_en IS NOT NULL", name="revisada_con_fecha"),
@@ -87,5 +89,10 @@ class FichaReunion(ConColegio, Base):
     revisado_por_id: Mapped[int | None]
     revisado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     motivo_rechazo: Mapped[str | None] = mapped_column(String(200))
+    # "Verifiqué su DNI en persona": obligatorio al aprobar si suma un apoderado o cambia un celular.
+    # El nombre se copia para que el registro no dependa de que el usuario siga existiendo.
+    dni_verificado_por_id: Mapped[int | None]
+    dni_verificado_por: Mapped[str | None] = mapped_column(String(250))
+    dni_verificado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     creado_en: Mapped[datetime] = creado_en()
     actualizado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora_utc)

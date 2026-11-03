@@ -143,8 +143,8 @@ function EnVivo({ colegio, editar }) {
     } catch (err) { setError(err.message) }
   }
 
-  async function aprobar(f, activar) {
-    const res = await accion(`/fichas/${f.id}/aprobar`, { activar })
+  async function aprobar(f, activar, dniVerificado) {
+    const res = await accion(`/fichas/${f.id}/aprobar`, { activar, dni_verificado: dniVerificado })
     if (!res) return
     setNuevas((n) => { const c = new Set(n); c.delete(f.id); return c })
     if (res.notas.length) setError(res.notas.join(' '))
@@ -227,6 +227,7 @@ function EnVivo({ colegio, editar }) {
                     <span>
                       <span className={`etiqueta ${f.estado === 'aprobada' ? 'activo' : 'bloqueado'}`}>{f.estado}</span>{' '}
                       {f.cuenta && <span className="tenue">cuenta: {f.cuenta.replace('_', ' ')}</span>}
+                      {f.dni_verificado_por && <span className="tenue"> · DNI verificado por {f.dni_verificado_por} a las {hora(f.dni_verificado_en)}</span>}
                       {f.motivo_rechazo && <span className="tenue">{f.motivo_rechazo}</span>}
                     </span>
                   </li>
@@ -244,10 +245,12 @@ function EnVivo({ colegio, editar }) {
 
 function FichaPendiente({ f, nueva, editar, aprobar, rechazar }) {
   const [activar, setActivar] = useState(true)
+  const [verificado, setVerificado] = useState(false)
   const [enviando, setEnviando] = useState(false)
+  const falta = f.requiere_verificacion && !verificado
   async function ok() {
     setEnviando(true)
-    try { await aprobar(f, activar) } finally { setEnviando(false) }
+    try { await aprobar(f, activar, f.requiere_verificacion && verificado) } finally { setEnviando(false) }
   }
   return (
     <article className={`ficha-reunion${nueva ? ' nueva' : ''}`}>
@@ -257,9 +260,17 @@ function FichaPendiente({ f, nueva, editar, aprobar, rechazar }) {
       </header>
       <Persona titulo="Quien llena" datos={f.datos.apoderado} cambios={f.apoderado} />
       {f.datos.otro && <Persona titulo="Otro apoderado" datos={f.datos.otro} cambios={f.otro} />}
+      {editar && f.requiere_verificacion && (
+        <label className={`casilla verificar-dni${verificado ? ' hecho' : ''}`}>
+          <input type="checkbox" checked={verificado} onChange={(e) => setVerificado(e.target.checked)} />
+          <span><b>Verifiqué su DNI en persona</b>
+            <span className="tenue chico"> · La ficha suma un apoderado o cambia un celular. Queda registrado con tu nombre.</span></span>
+        </label>
+      )}
       {editar && (
         <div className="acciones">
-          <button className="boton" disabled={enviando} onClick={ok}>Aprobar</button>
+          <button className="boton" disabled={enviando || falta} onClick={ok}
+                  title={falta ? 'Primero marca «Verifiqué su DNI en persona»' : undefined}>Aprobar</button>
           <label className="casilla en-linea">
             <input type="checkbox" checked={activar} onChange={(e) => setActivar(e.target.checked)} />
             Activar su cuenta ahora
@@ -274,18 +285,29 @@ function FichaPendiente({ f, nueva, editar, aprobar, rechazar }) {
 
 function Persona({ titulo, datos, cambios }) {
   const distinto = cambios?.cambios || {}
+  const sinAplicar = cambios?.sin_aplicar || {}
   return (
     <div className="ficha-bloque">
       <div className="ficha-titulo">
         <span>{titulo}</span>
         {cambios && cambios.estado !== 'registrado' && <span className="etiqueta pendiente">{ESTADO_PERSONA[cambios.estado]}</span>}
-        {cambios?.con_cuenta && titulo !== 'Quien llena' && <span className="tenue">tiene cuenta: su contacto no se cambia</span>}
+        {cambios?.con_cuenta && <span className="tenue">tiene cuenta: su celular y correo no se cambian aquí</span>}
       </div>
       <dl>
         {CAMPOS.map(([clave, etiqueta]) => {
           const valor = clave === 'numero_documento' ? `${datos.tipo_documento} ${datos.numero_documento}` : datos[clave]
           if (!valor) return null
           const cambio = distinto[clave]
+          const ignorado = sinAplicar[clave]
+          if (ignorado) {
+            // Tiene cuenta propia: se ve lo que escribió, pero queda lo registrado.
+            return (
+              <div key={clave} className="sin-aplicar">
+                <dt>{etiqueta}</dt>
+                <dd>{ignorado[0] || '—'} <span className="tenue chico">(escribió {valor}; lo pide en persona en secretaría)</span></dd>
+              </div>
+            )
+          }
           return (
             <div key={clave} className={cambio ? 'cambio' : ''}>
               <dt>{etiqueta}</dt>

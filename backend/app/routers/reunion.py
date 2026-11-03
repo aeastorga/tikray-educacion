@@ -126,6 +126,8 @@ def _ficha_salida(db: Session, f: FichaReunion, alumnos: dict[int, str]) -> dict
         # Los cambios frente al padrón se calculan ahora (si alguien cambió el padrón mientras tanto, se ve).
         "apoderado": reunion.cambios_persona(db, cid, f.alumno_id, f.datos["apoderado"]) if pendiente else None,
         "otro": reunion.cambios_persona(db, cid, f.alumno_id, f.datos.get("otro")) if pendiente else None,
+        "requiere_verificacion": reunion.requiere_verificacion(db, f) if pendiente else False,
+        "dni_verificado_por": f.dni_verificado_por, "dni_verificado_en": _iso(f.dni_verificado_en),
         "motivo_rechazo": f.motivo_rechazo, "revisado_en": _iso(f.revisado_en),
         "cuenta": _estado_cuenta(db, f) if f.estado == "aprobada" else None,
     }
@@ -262,6 +264,7 @@ def generar_qr(d: TextoQr, s: Sesion = Depends(ver)) -> dict:
 
 class Aprobacion(BaseModel):
     activar: bool = False  # crear la cuenta del padre ahora (el PIN lo pone él, en su celular)
+    dni_verificado: bool = False  # "Verifiqué su DNI en persona"
 
 
 @router.post("/{reunion_id}/fichas/{ficha_id}/aprobar")
@@ -275,8 +278,11 @@ def aprobar(reunion_id: int, ficha_id: int, d: Aprobacion, s: Sesion = Depends(e
     if f.estado != "pendiente":
         raise HTTPException(status.HTTP_409_CONFLICT, "La ficha ya fue revisada")
     try:
-        ap, notas = reunion.aprobar(db, f, s.usuario.id)
-    except ValueError as e:
+        ap, notas = reunion.aprobar(db, f, s.usuario, d.dni_verificado)
+    except reunion.FaltaVerificar as e:
+        db.rollback()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from None
+    except reunion.Bloqueado as e:
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
     salida: dict = {"ficha": f.id, "apoderado_id": ap.id, "notas": notas, "activacion": None}
