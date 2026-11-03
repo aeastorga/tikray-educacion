@@ -2,13 +2,15 @@ import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, FastAPI
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import asistencia as reglas_asistencia
 from app import avisos
 from app.config import get_settings
 from app.deps import colegio_del_host, familia_sesion, usuario_actual, usuario_sesion
+from app.proteccion import ip_cliente
 from app.routers import (alumnos, asistencia, auth, colegio, cuaderno, estructura, familia, familia_cuaderno, familias,
                          importacion, panel, personal, plataforma, reunion, roles)
 
@@ -66,7 +68,45 @@ def crear_app() -> FastAPI:
     def salud() -> dict:
         return {"ok": True}
 
+    @app.get("/salud/ip", include_in_schema=False)
+    def salud_ip(request: Request) -> dict:
+        """Para revisar PROXIES_CONFIANZA tras un proxy: lo que llega y la IP que el sistema usa
+        para los límites de intentos. Solo muestra datos de la propia petición."""
+        return {"ip_cliente": ip_cliente(request), "directa": request.client.host if request.client else None,
+                "x_forwarded_for": request.headers.get("x-forwarded-for")}
+
+    if settings.carpeta_frontend:
+        servir_frontend(app, Path(settings.carpeta_frontend))
+
     return app
+
+
+# Rutas del backend: nunca caen en el index.html de la app.
+_DEL_BACKEND = ("api", "plataforma", "archivos", "salud", "docs", "openapi.json", "redoc")
+
+
+def servir_frontend(app: FastAPI, carpeta: Path) -> None:
+    """La PWA compilada desde el mismo servidor: los archivos tal cual y, para cualquier otra ruta
+    (/panel, /familia/activar…), el index.html. index.html y el service worker sin caché, para que
+    un despliegue nuevo llegue a los celulares; lo de /assets lleva hash en el nombre y se cachea."""
+    carpeta = carpeta.resolve()
+    indice = carpeta / "index.html"
+    if not indice.is_file():
+        raise RuntimeError(f"CARPETA_FRONTEND={carpeta} no tiene index.html: compila el frontend (npm run build)")
+    sin_cache = {"Cache-Control": "no-cache"}
+
+    @app.get("/{ruta:path}", include_in_schema=False)
+    def frontend(ruta: str):
+        if ruta.split("/", 1)[0] in _DEL_BACKEND:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "No encontrado")
+        archivo = (carpeta / ruta).resolve()
+        if ruta and archivo.is_file() and archivo.is_relative_to(carpeta):
+            if ruta.startswith("assets/"):
+                return FileResponse(archivo, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+            return FileResponse(archivo, headers=sin_cache)
+        if "." in ruta.rsplit("/", 1)[-1]:  # un archivo que no existe: 404, no la app
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "No encontrado")
+        return FileResponse(indice, headers=sin_cache)
 
 
 app = crear_app()
