@@ -1,16 +1,19 @@
 import { useState } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, guardarToken, leerToken } from '../api.js'
 import Cabecera from './Cabecera.jsx'
 
 export default function IngresoPersonal({ colegio }) {
   const navegar = useNavigate()
+  const [params] = useSearchParams()
+  // Volver a donde estaba (p. ej. la portería tras una sesión vencida); solo rutas del panel.
+  const volver = /^\/panel(\/[\w/-]*)?$/.test(params.get('volver') || '') ? params.get('volver') : '/panel'
   const [usuario, setUsuario] = useState('')
   const [clave, setClave] = useState('')
   const [error, setError] = useState(null)
   const [enviando, setEnviando] = useState(false)
 
-  if (leerToken()) return <Navigate to="/panel" replace />
+  if (leerToken()) return <Navigate to={volver} replace />
 
   async function enviar(e) {
     e.preventDefault()
@@ -19,7 +22,7 @@ export default function IngresoPersonal({ colegio }) {
     try {
       const r = await api('/api/auth/ingreso', { metodo: 'POST', datos: { usuario, clave } })
       guardarToken(r.token)
-      navegar('/panel', { replace: true })
+      navegar(volver, { replace: true })
     } catch (err) {
       setError(err.message)
     } finally {

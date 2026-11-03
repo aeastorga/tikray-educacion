@@ -1,16 +1,29 @@
+import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app import asistencia as reglas_asistencia
 from app.config import get_settings
 from app.deps import colegio_del_host, usuario_actual, usuario_sesion
-from app.routers import alumnos, auth, colegio, estructura, importacion, personal, plataforma, roles
+from app.routers import alumnos, asistencia, auth, colegio, estructura, importacion, personal, plataforma, roles
 
 
 def crear_app() -> FastAPI:
     settings = get_settings()  # falla aquí si falta SECRET_KEY o DATABASE_URL
-    app = FastAPI(title="Tikray Educación")
+
+    @asynccontextmanager
+    async def ciclo(_: FastAPI):
+        parar = threading.Event()
+        if settings.tareas_en_fondo:
+            threading.Thread(target=reglas_asistencia.bucle_faltas, args=(parar,), daemon=True,
+                             name="faltas").start()
+        yield
+        parar.set()
+
+    app = FastAPI(title="Tikray Educación", lifespan=ciclo)
 
     # /api: todo lo del colegio del Host. Tres niveles de acceso, cada uno
     # aplicado al router entero para que ninguna ruta nueva se lo salte.
@@ -25,7 +38,7 @@ def crear_app() -> FastAPI:
     # Sesión completa: token del mismo colegio del Host y clave ya cambiada.
     api_privada = APIRouter(dependencies=[Depends(usuario_actual)])
     for r in (colegio.privado, roles.router, personal.router, estructura.router, alumnos.router,
-              importacion.router):
+              importacion.router, asistencia.router):
         api_privada.include_router(r)
 
     for r in (api_publica, api_sesion, api_privada):

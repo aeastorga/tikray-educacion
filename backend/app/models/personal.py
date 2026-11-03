@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import CheckConstraint, ForeignKeyConstraint, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.codigos import aleatorio
 from app.db import Base, ConColegio, creado_en
 
 
@@ -49,6 +50,9 @@ class Usuario(ConColegio, Base):
     __table_args__ = (
         UniqueConstraint("colegio_id", "usuario"),
         UniqueConstraint("colegio_id", "tipo_documento", "numero_documento"),
+        UniqueConstraint("colegio_id", "codigo"),
+        UniqueConstraint("colegio_id", "id"),
+        ForeignKeyConstraint(["colegio_id", "turno_id"], ["turno.colegio_id", "turno.id"], ondelete="RESTRICT"),
         CheckConstraint("tipo_documento IN ('DNI', 'CE')", name="tipo_documento_valido"),
         ForeignKeyConstraint(
             ["colegio_id", "rol_id"], ["rol.colegio_id", "rol.id"], ondelete="RESTRICT",
@@ -69,6 +73,11 @@ class Usuario(ConColegio, Base):
     # Se incrementa para invalidar todos los tokens emitidos (cerrar sesiones).
     version_sesion: Mapped[int] = mapped_column(default=0)
     rol_id: Mapped[int]
+    # Horario del personal: con turno se calcula tardanza y falta automática; sin turno, no.
+    turno_id: Mapped[int | None]
+    # Lo que lleva el QR de su carnet (TK1P:...). Con 32^8 combinaciones, el choque es
+    # despreciable y lo atrapa la restricción única.
+    codigo: Mapped[str] = mapped_column(String(12), default=aleatorio)
     creado_en: Mapped[datetime] = creado_en()
 
     rol: Mapped[Rol] = relationship(lazy="joined", overlaps="colegio_id")

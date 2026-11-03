@@ -1,0 +1,48 @@
+/* Asistencia y portería. */
+
+.estado { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .85rem; }
+.estado.presente { background: #dcfce7; color: #14532d; }
+.estado.tarde { background: #fef3c7; color: #78350f; }
+.estado.falta { background: #fee2e2; color: #7f1d1d; }
+.estado.licencia { background: #dbeafe; color: #1e3a8a; }
+.aviso-chico { padding: 6px 10px; border-radius: 8px; background: var(--fondo); border: 1px solid var(--borde); }
+
+.totales { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 16px 0; }
+.total { background: var(--superficie); border: 1px solid var(--borde); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; }
+.total b { font-size: 1.6rem; }
+.total span { color: var(--tenue); font-size: .85rem; }
+.total.presente { border-left: 4px solid #16a34a; }
+.total.tarde { border-left: 4px solid #d97706; }
+.total.falta { border-left: 4px solid #dc2626; }
+
+.porteria-estado { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: .9rem; margin-bottom: 12px; }
+.punto { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.punto.en-linea { background: #16a34a; }
+.punto.sin-linea { background: #dc2626; }
+.porteria-lectura { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; align-items: start; }
+@media (max-width: 720px) { .porteria-lectura { grid-template-columns: 1fr; } }
+.porteria-entrada { display: flex; flex-direction: column; gap: 8px; }
+.porteria-video { width: 100%; max-height: 320px; border-radius: 12px; background: #000; object-fit: cover; }
+.porteria-tarjeta { border-radius: 14px; padding: 20px; min-height: 180px; display: flex; flex-direction: column; justify-content: center; gap: 4px; color: #fff; }
+.porteria-tarjeta.vacia { background: var(--superficie); border: 2px dashed var(--borde); color: var(--tenue); align-items: center; }
+.porteria-tarjeta.bien { background: #15803d; }
+.porteria-tarjeta.tarde { background: #b45309; }
+.porteria-tarjeta.repetida { background: #475569; }
+.porteria-tarjeta.mal { background: #b91c1c; }
+.porteria-hora { font-size: 1rem; opacity: .9; }
+.porteria-nombre { font-size: 1.6rem; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.porteria-resultado { font-size: 1.15rem; font-weight: 600; margin-top: 6px; }
+.porteria-buscar { width: 100%; }
+.porteria-busqueda { list-style: none; padding: 0; margin: 8px 0; }
+.porteria-busqueda li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--borde); }
+.porteria-ajustes { margin-top: 16px; }
+.porteria-sesion { background: #fef3c7; color: #78350f; border-left: 4px solid #d97706; padding: 12px; border-radius: 8px; margin-bottom: 12px; line-height: 1.8; }
+.porteria-sesion .boton { display: inline-block; text-decoration: none; padding: 6px 12px; }
+.marca-tardia { font-size: .8rem; color: var(--tenue); font-style: italic; }
+
+@media (prefers-color-scheme: dark) {
+  .estado.presente { background: #14532d; color: #dcfce7; }
+  .estado.tarde { background: #78350f; color: #fef3c7; }
+  .estado.falta { background: #7f1d1d; color: #fee2e2; }
+  .estado.licencia { background: #1e3a8a; color: #dbeafe; }
+}

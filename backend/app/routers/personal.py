@@ -1,14 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import validacion
+from app import codigos, pdf, validacion
+from app.comun import guardar
 from app.db import get_db
 from app.deps import Sesion, requerir_permiso
-from app.models import Rol, Usuario
+from app.models import Rol, Turno, Usuario
 from app.proteccion import generar_clave_temporal
+from app.routers.importacion import imagen_pdf
 from app.seguridad import hashear_clave
 
 router = APIRouter(prefix="/personal", tags=["personal"])
@@ -43,8 +45,24 @@ class PersonalOut(BaseModel):
     apellidos: str
     rol_id: int
     rol: str
+    turno_id: int | None
+    codigo: str
     activo: bool
     debe_cambiar_clave: bool
+
+
+class EdicionPersonal(BaseModel):
+    nombres: str
+    apellidos: str
+    rol_id: int
+    turno_id: int | None = None  # con turno se le calcula tardanza y falta automática
+    activo: bool = True
+
+    @model_validator(mode="after")
+    def _normalizar(self):
+        self.nombres = validacion.nombre(self.nombres)
+        self.apellidos = validacion.nombre(self.apellidos)
+        return self
 
 
 class ConClaveTemporal(BaseModel):
@@ -55,7 +73,7 @@ class ConClaveTemporal(BaseModel):
 def _salida(u: Usuario) -> PersonalOut:
     return PersonalOut(
         id=u.id, tipo_documento=u.tipo_documento, numero_documento=u.numero_documento, usuario=u.usuario, nombres=u.nombres, apellidos=u.apellidos,
-        rol_id=u.rol_id, rol=u.rol.nombre, activo=u.activo, debe_cambiar_clave=u.debe_cambiar_clave,
+        rol_id=u.rol_id, rol=u.rol.nombre, turno_id=u.turno_id, codigo=u.codigo, activo=u.activo, debe_cambiar_clave=u.debe_cambiar_clave,
     )
 
 
@@ -115,3 +133,58 @@ def reiniciar_clave(
     u.version_sesion += 1
     db.commit()
     return ConClaveTemporal(personal=_salida(u), clave_temporal=clave)
+
+
+@router.put("/{usuario_id}")
+def editar(
+    usuario_id: int, datos: EdicionPersonal,
+    s: Sesion = Depends(requerir_permiso("personal", "editar")), db: Session = Depends(get_db),
+) -> PersonalOut:
+    u = _persona(db, s.colegio.id, usuario_id)
+    rol = db.scalar(select(Rol).where(Rol.id == datos.rol_id, Rol.colegio_id == s.colegio.id))
+    if rol is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Rol no encontrado")
+    if (u.rol.es_director or rol.es_director) and not s.usuario.rol.es_director:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el director cambia a un director")
+    if u.id == s.usuario.id and (rol.id != u.rol_id or not datos.activo):
+        raise HTTPException(status.HTTP_409_CONFLICT, "No puedes cambiar tu propio rol ni desactivarte")
+    if datos.turno_id is not None and db.scalar(
+            select(Turno.id).where(Turno.id == datos.turno_id, Turno.colegio_id == s.colegio.id)) is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Turno no encontrado")
+    u.nombres, u.apellidos, u.rol, u.turno_id = datos.nombres, datos.apellidos, rol, datos.turno_id
+    if u.activo and not datos.activo:
+        u.version_sesion += 1  # quien deja el colegio pierde la sesión al instante
+    u.activo = datos.activo
+    guardar(db)
+    return _salida(u)
+
+
+@router.post("/{usuario_id}/nuevo-codigo")
+def nuevo_codigo(
+    usuario_id: int,
+    s: Sesion = Depends(requerir_permiso("personal", "editar")), db: Session = Depends(get_db),
+) -> dict:
+    """Para un carnet perdido: el código anterior deja de servir en la portería."""
+    u = _persona(db, s.colegio.id, usuario_id)
+    u.codigo = codigos.aleatorio()
+    guardar(db, repetido="Intenta de nuevo")
+    return {"codigo": u.codigo}
+
+
+@router.get("/carnets")
+def carnets(
+    usuario_id: int | None = None,
+    s: Sesion = Depends(requerir_permiso("personal", "editar")), db: Session = Depends(get_db),
+) -> Response:
+    """Carnets del personal activo (o de una persona) para marcar su asistencia en la portería."""
+    consulta = select(Usuario).where(Usuario.colegio_id == s.colegio.id, Usuario.activo)
+    if usuario_id is not None:
+        consulta = consulta.where(Usuario.id == _persona(db, s.colegio.id, usuario_id).id)
+    filas = db.scalars(consulta.order_by(Usuario.apellidos, Usuario.nombres)).all()
+    contenido = pdf.carnets(imagen_pdf(s.colegio), [
+        pdf.FilaCarnet(apellidos=u.apellidos, nombres=u.nombres, seccion=u.rol.nombre, anio=None,
+                       qr=codigos.contenido_qr(u.codigo, personal=True), codigo=u.codigo)
+        for u in filas
+    ])
+    return Response(contenido, media_type="application/pdf",
+                    headers={"Content-Disposition": 'inline; filename="carnets-personal.pdf"'})

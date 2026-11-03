@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # balanceador de Render. Solo de ellas se acepta X-Forwarded-For.
     proxies_confianza: str = ""
 
+    # Faltas automáticas cada minuto dentro del servidor. En pruebas se apaga.
+    tareas_en_fondo: bool = True
+
     token_colegio_minutos: int = 60 * 12
     token_plataforma_minutos: int = 60 * 2
 

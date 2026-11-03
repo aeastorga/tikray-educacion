@@ -30,7 +30,7 @@ class FilaCarnet:
     apellidos: str
     nombres: str
     seccion: str
-    anio: int
+    anio: int | None  # None en los carnets del personal
     qr: str
     codigo: str
 
@@ -141,8 +141,9 @@ def carnets(imagen: Imagen, filas: list[FilaCarnet]) -> bytes:
         fila_y -= 1.5 * mm
         c.setFont("Helvetica", _ajustar(f.seccion, "Helvetica", 8.5, ancho_texto))
         c.drawString(x + 3 * mm, fila_y, f.seccion)
-        c.setFont("Helvetica", 8.5)
-        c.drawString(x + 3 * mm, fila_y - 4 * mm, f"Año escolar {f.anio}")
+        if f.anio:
+            c.setFont("Helvetica", 8.5)
+            c.drawString(x + 3 * mm, fila_y - 4 * mm, f"Año escolar {f.anio}")
         c.setFont("Courier-Bold", 9)
         c.drawCentredString(qr_x + lado_qr / 2, y + 1.5 * mm, f.codigo)
 
