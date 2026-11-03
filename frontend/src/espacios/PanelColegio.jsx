@@ -6,6 +6,7 @@ import { borrarPadron } from '../porteria/almacen.js'
 import Asistencia from './Asistencia.jsx'
 import Cabecera from './Cabecera.jsx'
 import CambiarClave from './CambiarClave.jsx'
+import Cuaderno from './Cuaderno.jsx'
 import CuentasPadres from './CuentasPadres.jsx'
 import Padron from './Padron.jsx'
 
@@ -56,6 +57,7 @@ export default function PanelColegio({ colegio, setColegio }) {
       <nav className="pestanas">
         <NavLink to="/panel" end>Inicio</NavLink>
         {puede(yo, 'asistencia') && <NavLink to="/panel/asistencia">Asistencia</NavLink>}
+        {puede(yo, 'cuaderno') && <NavLink to="/panel/cuaderno">Cuaderno</NavLink>}
         {puede(yo, 'padron') && <NavLink to="/panel/padron">Padrón</NavLink>}
         {puede(yo, 'familias') && <NavLink to="/panel/familias">Cuentas de padres</NavLink>}
         {puede(yo, 'personal') && <NavLink to="/panel/personal">Personal</NavLink>}
@@ -68,6 +70,8 @@ export default function PanelColegio({ colegio, setColegio }) {
           <Route index element={<p>Bienvenido, {yo.nombres}.</p>} />
           <Route path="asistencia/*" element={<Asistencia yo={yo} marcar={puede(yo, 'asistencia', 'editar')}
             licencias={puede(yo, 'personal', 'editar')} reglas={puede(yo, 'configuracion', 'editar')} />} />
+          <Route path="cuaderno/*" element={<Cuaderno editar={puede(yo, 'cuaderno', 'editar')}
+            docentes={puede(yo, 'padron', 'editar')} />} />
           <Route path="padron/*" element={<Padron editar={puede(yo, 'padron', 'editar')} />} />
           <Route path="familias/*" element={<CuentasPadres colegio={colegio} editar={puede(yo, 'familias', 'editar')}
             reglas={puede(yo, 'configuracion', 'editar')} />} />
@@ -208,8 +212,9 @@ function Roles({ yo }) {
     setError(null)
     const permisos = Object.fromEntries(Object.entries(editando.permisos).filter(([, n]) => n))
     try {
-      if (editando.id) await api(`/api/roles/${editando.id}`, { metodo: 'PUT', datos: { nombre: editando.nombre, permisos } })
-      else await api('/api/roles', { metodo: 'POST', datos: { nombre: editando.nombre, permisos } })
+      const datos = { nombre: editando.nombre, permisos, solo_sus_secciones: Boolean(editando.solo_sus_secciones) }
+      if (editando.id) await api(`/api/roles/${editando.id}`, { metodo: 'PUT', datos })
+      else await api('/api/roles', { metodo: 'POST', datos })
       setEditando(null)
       cargar()
     } catch (err) { setError(err.message) }
@@ -227,7 +232,8 @@ function Roles({ yo }) {
         {roles.map((r) => (
           <li key={r.id}>
             <b>{r.nombre}</b>{' '}
-            <span className="tenue">{r.es_director ? 'Todos los permisos' : Object.keys(r.permisos).map((m) => modulos[m] || m).join(', ') || 'Sin permisos'}</span>
+            <span className="tenue">{r.es_director ? 'Todos los permisos' : Object.keys(r.permisos).map((m) => modulos[m] || m).join(', ') || 'Sin permisos'}
+              {r.solo_sus_secciones && ' · solo sus secciones'}</span>
             {editar && !r.es_director && <>
               {' '}<button className="enlace" onClick={() => setEditando({ ...r })}>Editar</button>
               <button className="enlace" onClick={() => borrar(r)}>Borrar</button>
@@ -235,7 +241,7 @@ function Roles({ yo }) {
           </li>
         ))}
       </ul>
-      {editar && !editando && <button className="boton" onClick={() => setEditando({ nombre: '', permisos: {} })}>Nuevo rol</button>}
+      {editar && !editando && <button className="boton" onClick={() => setEditando({ nombre: '', permisos: {}, solo_sus_secciones: false })}>Nuevo rol</button>}
       {editando && (
         <form onSubmit={guardar} className="tarjeta ancho">
           <label>Nombre del rol
@@ -257,6 +263,11 @@ function Roles({ yo }) {
               ))}
             </tbody>
           </table>
+          <label className="check">
+            <input type="checkbox" checked={Boolean(editando.solo_sus_secciones)}
+                   onChange={(e) => setEditando({ ...editando, solo_sus_secciones: e.target.checked })} />
+            Solo ve las secciones a su cargo (cuaderno de control: docentes y tutores)
+          </label>
           {error && <p className="error">{error}</p>}
           <div className="acciones">
             <button className="boton">Guardar</button>

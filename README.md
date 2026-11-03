@@ -33,7 +33,7 @@ cd backend
 TEST_DATABASE_URL=postgresql+psycopg://usuario:clave@localhost/tikray_test .venv/bin/pytest
 ```
 
-Pruebas de navegador (Playwright) de la portería: levantan su propio backend (puerto 8001) y Vite (5174) contra otra base, que se borra y se siembra con datos ficticios en cada corrida (su nombre debe terminar en `e2e`):
+Pruebas de navegador (Playwright) de la portería y del cuaderno: levantan su propio backend (puerto 8001) y Vite (5174) contra otra base, que se borra y se siembra con datos ficticios en cada corrida (su nombre debe terminar en `e2e`):
 
 ```bash
 cd frontend
@@ -90,6 +90,18 @@ Las faltas automáticas las marca un hilo del servidor cada minuto (`TAREAS_EN_F
 - **Tarjeta en vivo** de cada hijo (ingresó, llegó tarde, faltó, salió) y la lista de avisos recibidos.
 - **Avisos push** (PWA): un hilo del servidor vacía `cola_aviso` cada 3 s y deja el estado por padre (le llegó, sin notificaciones, no se pudo entregar), visible en el detalle de cada apoderado. Antes de enviar una falta revisa que el alumno siga con falta. Los avisos de más de 6 horas se descartan.
 - **Cambio de celular**: si una carga de Excel o el panel cambia el celular de un apoderado, queda registrado quién lo cambió; se anula su enlace pendiente y, si ya activó su cuenta, se le avisa.
+
+## Cuaderno de control (paso 4)
+
+- **Comunicados** (`/panel/cuaderno`, módulo "Cuaderno de control") para todo el colegio, un nivel, un grado, una sección o un alumno, con hasta 5 adjuntos (PDF, imágenes, Word, Excel; 10 MB cada uno). A quién le llega se guarda al enviarlo: una fila por alumno y apoderado (`destino_cuaderno`), aunque después cambie el padrón.
+- **Firma de lectura** por apoderado: el colegio ve quién lo vio, quién firmó y quién no (y quién aún no tiene la app). Incidencias ("enterado") y citaciones (fecha, hora, lugar; "confirmo que asistiré") también se firman.
+- **Justificaciones** de faltas que envía el padre (con certificado opcional) y **permisos de salida** (día, hora, quién lo recoge); el colegio los aprueba o rechaza. Lo que registra el propio colegio queda aprobado.
+- **Portería**: el padrón del celular trae los permisos de salida del día, y al marcar la salida de un alumno la tarjeta muestra el permiso (o que aún no está aprobado).
+- **Respuestas** en el hilo de cada entrada, del padre y del colegio. "Solo lo que espera al colegio" filtra lo pendiente de aprobar o con la última palabra de la familia.
+- **Docentes**: un rol marcado "Solo ve las secciones a su cargo" solo ve y escribe lo de las secciones que se le asignan en "Docentes por sección" (requiere permiso de editar el padrón).
+- **Avisos**: cada novedad (entrada nueva, respuesta del colegio, aprobación) deja un aviso `cuaderno` por apoderado con cuenta activa en `cola_aviso`; lo envía el mismo proceso de los avisos de asistencia y la notificación abre la entrada.
+- **Adjuntos fuera de la base**: en `CARPETA_PRIVADA` (en producción, un bucket privado). No se sirven en `/archivos`; se descargan por `/api/cuaderno/adjuntos/{id}` o `/api/familia/cuaderno/adjuntos/{id}`, que revisan colegio, sección y destinatario. El tipo se comprueba por el contenido del archivo.
+- La familia ve el cuaderno del colegio por cuya dirección entró y solo con el acceso activo.
 
 Las notificaciones necesitan claves VAPID; sin ellas los avisos quedan en la cola:
 

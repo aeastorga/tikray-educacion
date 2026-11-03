@@ -9,8 +9,8 @@ from app import asistencia as reglas_asistencia
 from app import avisos
 from app.config import get_settings
 from app.deps import colegio_del_host, familia_sesion, usuario_actual, usuario_sesion
-from app.routers import (alumnos, asistencia, auth, colegio, estructura, familia, familias, importacion, personal,
-                         plataforma, roles)
+from app.routers import (alumnos, asistencia, auth, colegio, cuaderno, estructura, familia, familia_cuaderno, familias,
+                         importacion, personal, plataforma, roles)
 
 
 def crear_app() -> FastAPI:
@@ -42,11 +42,12 @@ def crear_app() -> FastAPI:
     # Padres y apoderados: su propio tipo de token, del mismo colegio del Host.
     api_familia = APIRouter(dependencies=[Depends(familia_sesion)])
     api_familia.include_router(familia.privado)
+    api_familia.include_router(familia_cuaderno.privado)
 
     # Sesión completa: token del mismo colegio del Host y clave ya cambiada.
     api_privada = APIRouter(dependencies=[Depends(usuario_actual)])
     for r in (colegio.privado, roles.router, personal.router, estructura.router, alumnos.router,
-              importacion.router, asistencia.router, familias.router):
+              importacion.router, asistencia.router, familias.router, cuaderno.router):
         api_privada.include_router(r)
 
     for r in (api_publica, api_sesion, api_familia, api_privada):

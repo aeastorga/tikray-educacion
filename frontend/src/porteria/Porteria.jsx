@@ -61,6 +61,12 @@ export default function Porteria({ yo }) {
           setRecientes((rs) => rs.map((x) => (rechazos[x.id] ? { ...x, rechazo: rechazos[x.id] } : x)))
           setTarjeta((t) => (t && rechazos[t.id] ? { ...t, rechazo: rechazos[t.id] } : t))
         }
+        // Un permiso de salida que el padrón del celular aún no tenía (lo pidieron después).
+        const permisos = Object.fromEntries(r.resultados.filter((x) => x.permiso_salida)
+          .map((x) => [x.id_cliente, x.permiso_salida]))
+        if (Object.keys(permisos).length) {
+          setTarjeta((t) => (t && permisos[t.id] && !t.permiso ? { ...t, permiso: permisos[t.id] } : t))
+        }
         setEnLinea(true)
       }
     } catch (e) {
@@ -109,7 +115,9 @@ export default function Porteria({ yo }) {
     }
     const id = nuevoId()
     await pendientes.agregar({ id_cliente: id, momento: momento.toISOString(), equipo, ...envio })
-    const leida = { id, persona, resultado, tarde, hora: horaLima(momento) }
+    // Al salir, el permiso de salida del cuaderno (si el padre lo pidió para hoy).
+    const permiso = persona?.tipo === 'alumno' && resultado === 'salida' ? padron.permisos_salida?.[persona.id] : null
+    const leida = { id, persona, resultado, tarde, permiso, hora: horaLima(momento) }
     setTarjeta(leida)
     setRecientes((rs) => [leida, ...rs].slice(0, 15))
     avisar(persona ? (resultado === 'duplicada' ? 'repetida' : 'bien') : 'mal')
@@ -248,6 +256,13 @@ function Tarjeta({ t }) {
       <div className="porteria-resultado">
         {t.rechazo || (t.persona ? estadoTexto(t) : 'No está en el padrón de este celular; se enviará para revisar')}
       </div>
+      {t.permiso && (
+        <div className="porteria-permiso">
+          Permiso de salida {t.permiso.hora} · Recoge: {t.permiso.recoge}
+          {t.permiso.estado !== 'aprobada' && <b> · Aún sin aprobar por el colegio</b>}
+          <div>{t.permiso.motivo}</div>
+        </div>
+      )}
     </div>
   )
 }

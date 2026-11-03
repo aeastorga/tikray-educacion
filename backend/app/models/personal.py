@@ -19,6 +19,8 @@ class Rol(ConColegio, Base):
     nombre: Mapped[str] = mapped_column(String(80))
     # El rol del director se crea con el colegio, tiene todos los permisos y no se borra.
     es_director: Mapped[bool] = mapped_column(default=False)
+    # Cuaderno de control: solo ve y escribe lo de las secciones a su cargo (docente, tutor).
+    solo_sus_secciones: Mapped[bool] = mapped_column(default=False, server_default="false")
     creado_en: Mapped[datetime] = creado_en()
 
     permisos: Mapped[list["PermisoRol"]] = relationship(

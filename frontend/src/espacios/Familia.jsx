@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { api, CLAVE_TOKEN_FAMILIA, guardarToken, leerToken } from '../api.js'
+import { DetalleCuaderno, ListaCuaderno, PedidoCuaderno } from '../familia/Cuaderno.jsx'
 import { crearPasskey, hayPasskeys, llaveVapid, usarPasskey } from '../familia/webauthn.js'
 import Cabecera from './Cabecera.jsx'
 import './familia.css'
@@ -14,9 +15,23 @@ export default function Familia({ colegio }) {
     <Routes>
       <Route index element={tokenFamilia() ? <Inicio colegio={colegio} /> : <Ingreso colegio={colegio} />} />
       <Route path="activar" element={<Activar colegio={colegio} />} />
+      <Route path="cuaderno/nuevo/:tipo" element={<ConSesion colegio={colegio}><PedidoCuaderno /></ConSesion>} />
+      <Route path="cuaderno/:id" element={<ConSesion colegio={colegio}><DetalleCuaderno /></ConSesion>} />
       <Route path="*" element={<Navigate to="/familia" replace />} />
     </Routes>
   )
+}
+
+// Pantallas del cuaderno: con sesión (si no, al ingreso) y la cabecera del colegio.
+function ConSesion({ colegio, children }) {
+  const navegar = useNavigate()
+  useEffect(() => {
+    const salir = () => navegar('/familia', { replace: true })
+    window.addEventListener('sesion-familia-cerrada', salir)
+    return () => window.removeEventListener('sesion-familia-cerrada', salir)
+  }, [navegar])
+  if (!tokenFamilia()) return <Navigate to="/familia" replace />
+  return <div className="familia"><Cabecera colegio={colegio} />{children}</div>
 }
 
 // --- Ingreso: documento + PIN, o huella ------------------------------------------------
@@ -204,6 +219,7 @@ function Inicio({ colegio }) {
   const [datos, setDatos] = useState(null)
   const [avisos, setAvisos] = useState([])
   const [error, setError] = useState(null)
+  const [vuelta, setVuelta] = useState(0)  // cambia para recargar el cuaderno
 
   const salir = useCallback(() => {
     guardar(null)
@@ -213,6 +229,7 @@ function Inicio({ colegio }) {
   const cargar = useCallback(() => {
     api('/api/familia/hijos').then(setDatos).catch((e) => setError(e.message))
     api('/api/familia/avisos').then(setAvisos).catch(() => {})
+    setVuelta((v) => v + 1)
   }, [])
 
   useEffect(() => {
@@ -259,6 +276,7 @@ function Inicio({ colegio }) {
                                                 varios={new Set(datos.hijos.map((x) => x.colegio)).size > 1} />)}
         </div>
         {yo && <Notificaciones yo={yo} />}
+        {yo?.estado === 'activo' && <ListaCuaderno recargar={vuelta} />}
         <h2>Avisos</h2>
         {avisos.length === 0 ? <p className="tenue">Aún no hay avisos.</p> : (
           <ul className="lista-avisos">
@@ -337,7 +355,7 @@ function Notificaciones({ yo }) {
   }
   return (
     <section className="aviso">
-      <p><b>Recibe un aviso cuando tu hijo ingrese, llegue tarde, falte o salga.</b></p>
+      <p><b>Recibe un aviso cuando tu hijo ingrese, llegue tarde, falte o salga, y cuando el colegio te escriba.</b></p>
       {texto ? <p className="tenue">{texto}</p>
         : <button className="boton" onClick={activar}>Activar avisos</button>}
       {error && <p className="error">{error}</p>}

@@ -26,6 +26,7 @@ backup_*.sql
 .idea/
 .DS_Store
 archivos/
+archivos-privados/
 
 # Pruebas de navegador
 frontend/e2e/.semilla.json

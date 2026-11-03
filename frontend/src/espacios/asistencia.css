@@ -28,6 +28,7 @@
 .porteria-tarjeta.bien { background: #15803d; }
 .porteria-tarjeta.tarde { background: #b45309; }
 .porteria-tarjeta.repetida { background: #475569; }
+.porteria-permiso { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: rgba(255, 255, 255, .18); font-size: .95rem; }
 .porteria-tarjeta.mal { background: #b91c1c; }
 .porteria-hora { font-size: 1rem; opacity: .9; }
 .porteria-nombre { font-size: 1.6rem; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
