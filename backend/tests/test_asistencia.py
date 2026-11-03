@@ -227,6 +227,42 @@ def test_faltas_por_colegio_con_su_calendario_y_su_corte(client, db):
         AsistenciaAlumno.fecha == LUNES + timedelta(days=1)))} == {b.colegio.id}
 
 
+def test_faltas_solo_de_los_turnos_cuyo_corte_acaba_de_pasar(db):
+    """El proceso de cada minuto no recalcula todos los colegios: solo los turnos cuyo corte cayó
+    entre la vuelta anterior y esta."""
+    a, b = preparar(db, "alfa"), preparar(db, "beta")
+    # beta entra a la tarde: corte a las 14:30.
+    b.turno.hora_entrada, b.turno.hora_salida = time(13, 0), time(18, 0)
+    db.commit()
+    # Vuelta de las 09:15 a las 09:16: solo el turno mañana de alfa (corte 09:15 exacto, 90 min tras 07:45).
+    assert asistencia.turnos_por_cortar(db, LUNES, time(9, 14), time(9, 15)) == {a.colegio.id: [a.turno.id]}
+    assert asistencia.marcar_faltas(db, LUNES, time(9, 15), desde=time(9, 14)) == 2
+    db.commit()
+    assert {f.colegio_id for f in db.scalars(select(AsistenciaAlumno))} == {a.colegio.id}
+    # Vueltas en las que no corta ningún turno: nada que hacer, en ningún colegio.
+    assert asistencia.turnos_por_cortar(db, LUNES, time(9, 15), time(14, 29)) == {}
+    assert asistencia.marcar_faltas(db, LUNES, time(14, 29), desde=time(9, 15)) == 0
+    # La de las 14:30 toma a beta.
+    assert asistencia.marcar_faltas(db, LUNES, time(14, 30), desde=time(14, 29)) == 2
+    db.commit()
+    assert {f.colegio_id for f in db.scalars(select(AsistenciaAlumno))} == {a.colegio.id, b.colegio.id}
+    # Solo avisa a los recién marcados, una vez.
+    assert len(db.scalars(select(ColaAviso).where(ColaAviso.tipo == "falta")).all()) == 4
+
+
+def test_ventanas_del_proceso_de_faltas():
+    lunes = datetime(2026, 6, 1, 10, 0, tzinfo=LIMA)
+    # Al arrancar: todo lo que ya cortó hoy (recupera lo de un servidor caído).
+    assert asistencia.ventanas_faltas(None, lunes) == [(lunes.date(), None, time(10, 0))]
+    # Cada minuto: desde la vuelta anterior.
+    assert asistencia.ventanas_faltas(lunes - timedelta(minutes=1), lunes) == [
+        (lunes.date(), time(9, 59), time(10, 0))]
+    # Pasó la medianoche: cierra el día anterior y empieza el nuevo.
+    noche, madrugada = datetime(2026, 6, 1, 23, 59, 30, tzinfo=LIMA), datetime(2026, 6, 2, 0, 0, 30, tzinfo=LIMA)
+    assert asistencia.ventanas_faltas(noche, madrugada) == [
+        (noche.date(), time(23, 59, 30), None), (madrugada.date(), None, time(0, 0, 30))]
+
+
 def test_colegio_suspendido_no_recibe_faltas(db):
     e = preparar(db, "alfa")
     e.colegio.estado = "suspendido"
@@ -417,7 +453,7 @@ def test_reporte_del_dia_y_del_mes(client, db):
     h = auth("alfa", token(client, "alfa"))
     r = client.get(f"/api/asistencia/dia?fecha={LUNES}", headers=h).json()
     assert r["lectivo"] is True
-    assert r["totales"] == {"total": 3, "presente": 1, "tarde": 1, "falta": 1, "sin_registro": 0}
+    assert r["totales"] == {"total": 3, "presente": 1, "tarde": 1, "falta": 1, "justificada": 0, "sin_registro": 0}
     detalle = client.get(f"/api/asistencia/dia?fecha={LUNES}&seccion_id={e.seccion.id}", headers=h).json()
     assert [(x["estado"], x["entrada"]) for x in detalle["alumnos"]] == [
         ("presente", "07:40"), ("tarde", "08:05"), ("falta", None)]
@@ -426,7 +462,7 @@ def test_reporte_del_dia_y_del_mes(client, db):
     ws = load_workbook(BytesIO(x.content)).active
     columna = [c.value for c in ws[2]].index(LUNES.day) + 1
     assert [ws.cell(fila, columna).value for fila in (3, 4, 5)] == ["P", "T", "F"]
-    assert [c.value for c in ws[2]][-3:] == ["Asistió", "Tardanzas", "Faltas"]
+    assert [c.value for c in ws[2]][-4:] == ["Asistió", "Tardanzas", "Faltas", "Justificadas"]
     assert client.get("/api/asistencia/mensual.xlsx?anio=2026&mes=13", headers=h).status_code == 422
     xp = client.get(f"/api/asistencia/personal/mensual.xlsx?anio={LUNES.year}&mes={LUNES.month}", headers=h)
     assert xp.status_code == 200 and load_workbook(BytesIO(xp.content)).active.title == "Personal"

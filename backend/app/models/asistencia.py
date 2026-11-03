@@ -20,7 +20,8 @@ from app.db import Base, ConColegio, ahora_utc, creado_en
 
 ORIGENES = ("qr", "manual", "equipo")
 RESULTADOS = ("entrada", "salida", "duplicada")
-ESTADOS_ALUMNO = ("presente", "tarde", "falta")
+# justificada: una falta cubierta por una justificación aprobada del cuaderno.
+ESTADOS_ALUMNO = ("presente", "tarde", "falta", "justificada")
 ESTADOS_PERSONAL = ("presente", "tarde", "falta", "licencia")
 TIPOS_LICENCIA = ("salud", "personal", "vacaciones", "comision", "maternidad", "otro")
 TIPOS_AVISO = ("ingreso", "tarde", "salida", "falta", "cuenta", "cuaderno")
@@ -86,6 +87,8 @@ class AsistenciaAlumno(ConColegio, Base):
         UniqueConstraint("colegio_id", "alumno_id", "fecha"),
         _fk("alumno_id", "alumno", "CASCADE"),
         _fk("seccion_id", "seccion", "SET NULL"),
+        ForeignKeyConstraint(["colegio_id", "justificacion_id"], ["entrada_cuaderno.colegio_id", "entrada_cuaderno.id"],
+                             ondelete="SET NULL (justificacion_id)"),
         CheckConstraint(_en("estado", ESTADOS_ALUMNO), name="estado_valido"),
         Index("ix_asistencia_alumno_colegio_fecha", "colegio_id", "fecha"),
     )
@@ -95,10 +98,12 @@ class AsistenciaAlumno(ConColegio, Base):
     fecha: Mapped[date] = mapped_column(Date)
     # Sección de ese día: los reportes no cambian si después el alumno cambia de sección.
     seccion_id: Mapped[int | None]
-    estado: Mapped[str] = mapped_column(String(10))
+    estado: Mapped[str] = mapped_column(String(12))
     entrada: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     salida: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     minutos_tarde: Mapped[int] = mapped_column(default=0)
+    # La justificación que convirtió la falta en "justificada" (para revertirla si se anula).
+    justificacion_id: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class AsistenciaPersonal(ConColegio, Base):

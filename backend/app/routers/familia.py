@@ -207,7 +207,7 @@ def ingresar(d: IngresoPin, request: Request, colegio: Colegio = Depends(colegio
     if not permitir_intento(cuenta_lim, ip):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Demasiados intentos. Espera 15 minutos")
     cuentas = db.scalars(select(CuentaFamilia).where(CuentaFamilia.numero_documento == doc)).all()
-    # Además del límite en memoria, el PIN se bloquea un día tras 10 fallidos seguidos (en la base).
+    # Además del límite por ventana (tabla intento_fallido), el PIN se bloquea un día tras 10 fallidos seguidos (en la base).
     abiertas = [c for c in cuentas if not familias.pin_bloqueado_hasta(c)]
     if cuentas and not abiertas:
         hasta = min(c.pin_bloqueado_hasta for c in cuentas)

@@ -524,3 +524,126 @@ def test_borrar_la_seccion_conserva_las_entradas(db, e):
     db.commit()
     db.refresh(ent)
     assert ent.seccion_id is None and ent.colegio_id == e.colegio.id
+
+
+# --- Justificación aprobada -> falta "justificada" ------------------------------------------
+
+def _falta(db, e: Escuela, alumno: Alumno, fecha: date) -> None:
+    from app.models import AsistenciaAlumno
+    db.add(AsistenciaAlumno(colegio_id=e.colegio.id, alumno_id=alumno.id, fecha=fecha, seccion_id=e.sec_a.id,
+                            estado="falta"))
+    db.add(ColaAviso(colegio_id=e.colegio.id, alumno_id=alumno.id, fecha=fecha, tipo="falta"))
+    db.commit()
+
+
+def _estado(db, alumno: Alumno, fecha: date) -> tuple[str, int | None]:
+    from app.models import AsistenciaAlumno
+    db.expire_all()
+    f = db.scalar(select(AsistenciaAlumno).where(AsistenciaAlumno.alumno_id == alumno.id,
+                                                 AsistenciaAlumno.fecha == fecha))
+    return (f.estado, f.justificacion_id) if f else (None, None)
+
+
+def _justificar(client, hf, alumno, desde, hasta=None):
+    r = client.post("/api/familia/cuaderno/justificaciones", headers=hf, data={"datos": json.dumps({
+        "alumno_id": alumno.id, "desde": str(desde), "hasta": str(hasta or desde), "motivo": "Fiebre"})})
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def test_justificacion_aprobada_cambia_la_falta_y_se_revierte_al_anular(client, db, e, h, hf):
+    ayer, anteayer = HOY - timedelta(days=1), HOY - timedelta(days=2)
+    _falta(db, e, e.a1, ayer)
+    _falta(db, e, e.a1, anteayer)
+    eid = _justificar(client, hf, e.a1, anteayer, ayer)
+    assert _estado(db, e.a1, ayer) == ("falta", None)  # pendiente: aún no cambia nada
+
+    r = client.post(f"/api/cuaderno/entradas/{eid}/resolver", json={"estado": "aprobada"}, headers=h)
+    assert r.json()["faltas_justificadas"] == 2
+    assert _estado(db, e.a1, ayer) == ("justificada", eid)
+    # El aviso de falta que no había salido ya no sale.
+    assert db.scalar(select(ColaAviso.id).where(ColaAviso.tipo == "falta")) is None
+    # En los reportes.
+    dia = client.get(f"/api/asistencia/dia?fecha={ayer}", headers=h).json()
+    assert dia["totales"]["justificada"] == 1 and dia["totales"]["falta"] == 0
+    detalle = client.get(f"/api/asistencia/dia?fecha={ayer}&seccion_id={e.sec_a.id}", headers=h).json()
+    assert [a["estado"] for a in detalle["alumnos"]] == ["justificada"]
+    hoja = client.get(f"/api/asistencia/mensual.xlsx?anio={ayer.year}&mes={ayer.month}&seccion_id={e.sec_a.id}",
+                      headers=h)
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+    ws = load_workbook(BytesIO(hoja.content)).active
+    assert "J" in [c.value for c in ws[3]] and ws.cell(2, ws.max_column).value == "Justificadas"
+
+    r = client.post(f"/api/cuaderno/entradas/{eid}/anular", json={"motivo": "Certificado no válido"}, headers=h)
+    assert r.status_code == 200 and r.json() == {"id": eid, "estado": "anulada", "faltas_restituidas": 2}
+    assert _estado(db, e.a1, ayer) == ("falta", None)
+    assert "anulada" in cola_cuaderno(db, e.colegio)[-1].datos["mensaje"]
+    det = client.get(f"/api/cuaderno/entradas/{eid}", headers=h).json()
+    assert det["motivo_anulacion"] == "Certificado no válido" and det["anulada_por"] == "Dir alfa"
+    assert client.post(f"/api/cuaderno/entradas/{eid}/anular", json={"motivo": "x"}, headers=h).status_code == 409
+
+
+def test_falta_marcada_despues_ya_nace_justificada(client, db, e, h, hf):
+    from app import asistencia
+    eid = _justificar(client, hf, e.a1, HOY)
+    client.post(f"/api/cuaderno/entradas/{eid}/resolver", json={"estado": "aprobada"}, headers=h)
+    asistencia.marcar_faltas(db, HOY)
+    db.commit()
+    assert _estado(db, e.a1, HOY) == ("justificada", eid)
+    assert _estado(db, e.a2, HOY) == ("falta", None)
+    avisos_falta = db.scalars(select(ColaAviso.alumno_id).where(ColaAviso.tipo == "falta")).all()
+    assert sorted(avisos_falta) == [e.a2.id, e.a3.id]  # al justificado no se le avisa falta
+
+
+def test_anular_una_deja_la_otra_justificacion(client, db, e, h, hf):
+    ayer = HOY - timedelta(days=1)
+    _falta(db, e, e.a1, ayer)
+    primera = _justificar(client, hf, e.a1, ayer)
+    segunda = _justificar(client, hf, e.a1, ayer - timedelta(days=1), ayer)
+    for eid in (primera, segunda):
+        client.post(f"/api/cuaderno/entradas/{eid}/resolver", json={"estado": "aprobada"}, headers=h)
+    assert _estado(db, e.a1, ayer) == ("justificada", primera)
+    client.post(f"/api/cuaderno/entradas/{primera}/anular", json={"motivo": "Duplicada"}, headers=h)
+    assert _estado(db, e.a1, ayer) == ("justificada", segunda)
+
+
+def test_si_llega_el_dia_justificado_queda_presente(client, db, e, h, hf):
+    from datetime import UTC, datetime
+    eid = _justificar(client, hf, e.a1, HOY)
+    client.post(f"/api/cuaderno/entradas/{eid}/resolver", json={"estado": "aprobada"}, headers=h)
+    r = client.post("/api/asistencia/marcaciones", headers=h, json={"marcaciones": [
+        {"id_cliente": uuid.uuid4().hex, "alumno_id": e.a1.id, "momento": datetime.now(UTC).isoformat()}]})
+    assert r.json()["resultados"][0]["estado_dia"] in ("presente", "tarde")
+
+
+def test_solo_se_anula_lo_aprobado(client, db, e, h, hf):
+    pendiente = _justificar(client, hf, e.a1, HOY)
+    assert client.post(f"/api/cuaderno/entradas/{pendiente}/anular", json={"motivo": "x"},
+                       headers=h).status_code == 409
+    incidencia = escribir(client, h, tipo="incidencia", alumno_id=e.a1.id).json()["id"]
+    assert client.post(f"/api/cuaderno/entradas/{incidencia}/anular", json={"motivo": "x"},
+                       headers=h).status_code == 409
+
+
+def test_otro_colegio_no_anula(client, db, e, h, hf):
+    preparar(db, "beta")
+    eid = _justificar(client, hf, e.a1, HOY)
+    client.post(f"/api/cuaderno/entradas/{eid}/resolver", json={"estado": "aprobada"}, headers=h)
+    hb = auth("beta", token(client, "beta"))
+    assert client.post(f"/api/cuaderno/entradas/{eid}/anular", json={"motivo": "x"}, headers=hb).status_code == 404
+    assert db.get(EntradaCuaderno, eid).estado == "aprobada"
+
+
+def test_base_rechaza_justificacion_de_otro_colegio_en_la_asistencia(db, e):
+    from app.models import AsistenciaAlumno
+    beta = preparar(db, "beta")
+    j = EntradaCuaderno(colegio_id=beta.colegio.id, tipo="justificacion", alcance="alumno", alumno_id=beta.a1.id,
+                        titulo="x", desde=HOY, hasta=HOY, estado="aprobada")
+    db.add(j)
+    db.commit()
+    db.add(AsistenciaAlumno(colegio_id=e.colegio.id, alumno_id=e.a1.id, fecha=HOY, estado="justificada",
+                            justificacion_id=j.id))
+    with pytest.raises(IntegrityError):
+        db.commit()

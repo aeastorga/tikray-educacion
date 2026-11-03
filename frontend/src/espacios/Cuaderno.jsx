@@ -7,7 +7,7 @@ export const TIPOS = {
   comunicado: 'Comunicado', incidencia: 'Incidencia', citacion: 'Citación',
   justificacion: 'Justificación', permiso_salida: 'Permiso de salida',
 }
-const ESTADOS = { pendiente: 'Por aprobar', aprobada: 'Aprobada', rechazada: 'Rechazada' }
+const ESTADOS = { pendiente: 'Por aprobar', aprobada: 'Aprobada', rechazada: 'Rechazada', anulada: 'Anulada' }
 const ALCANCES = { colegio: 'Todo el colegio', nivel: 'Un nivel', grado: 'Un grado', seccion: 'Una sección', alumno: 'Un alumno' }
 // Lo que firma el padre según el tipo.
 export const FIRMA = { comunicado: 'Firmó', incidencia: 'Enterado', citacion: 'Confirmó' }
@@ -27,7 +27,8 @@ export function Detalles({ e }) {
   if (e.cita_en) partes.push(`Cita: ${fechaHora(e.cita_en)}${e.lugar ? ` · ${e.lugar}` : ''}`)
   if (e.tipo === 'justificacion') partes.push(e.hasta && e.hasta !== e.desde ? `Del ${fechaCorta(e.desde)} al ${fechaCorta(e.hasta)}` : `Día ${fechaCorta(e.desde)}`)
   if (e.tipo === 'permiso_salida') partes.push(`Sale el ${fechaCorta(e.desde)} a las ${e.hora_salida} · Recoge: ${e.recoge}`)
-  if (e.estado) partes.push(ESTADOS[e.estado] + (e.nota_resolucion ? `: ${e.nota_resolucion}` : ''))
+  if (e.estado === 'anulada') partes.push(`Anulada: ${e.motivo_anulacion}`)
+  else if (e.estado) partes.push(ESTADOS[e.estado] + (e.nota_resolucion ? `: ${e.nota_resolucion}` : ''))
   return partes.length ? <p className="cuaderno-detalles">{partes.join(' · ')}</p> : null
 }
 
@@ -148,6 +149,15 @@ function Detalle({ editar }) {
     } catch (err) { setError(err.message) }
   }
 
+  async function anular() {
+    const motivo = prompt(e.tipo === 'justificacion'
+      ? 'Motivo de la anulación (las faltas que justificaba vuelven a ser faltas):' : 'Motivo de la anulación:')
+    if (!motivo?.trim()) return
+    setError(null)
+    try { await api(`/api/cuaderno/entradas/${id}/anular`, { metodo: 'POST', datos: { motivo } }); cargar() }
+    catch (err) { setError(err.message) }
+  }
+
   async function resolver(estado) {
     setError(null)
     try {
@@ -184,6 +194,10 @@ function Detalle({ editar }) {
             <button className="boton secundario" onClick={() => resolver('rechazada')}>Rechazar</button>
           </div>
         </div>
+      )}
+
+      {editar && e.estado === 'aprobada' && (
+        <p><button className="enlace" onClick={anular}>Anular {e.tipo === 'justificacion' ? 'la justificación' : 'el permiso'}</button></p>
       )}
 
       <h3>Hilo</h3>

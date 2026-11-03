@@ -118,3 +118,34 @@ def test_token_manipulado(client, db):
     crear_colegio(db, "alfa")
     tok = token(client, "alfa")
     assert client.get("/api/auth/yo", headers=auth("alfa", tok[:-2] + "xx")).status_code == 401
+
+
+def test_limite_de_intentos_queda_en_la_base(client, db):
+    """Vale entre instancias del servidor y tras un reinicio: otra instancia del limitador lee lo mismo."""
+    from sqlalchemy import select
+
+    from app import proteccion
+    from app.models import IntentoFallido
+    crear_colegio(db, "alfa")
+    for _ in range(5):
+        _ingreso(client, "10000000", "ClaveMala1")
+    otra_instancia = proteccion.LimitadorVentana("cuenta", maximo=5, segundos=15 * 60)
+    assert otra_instancia.hay_cupo(next(iter(db.scalars(select(IntentoFallido.clave)
+                                                        .where(IntentoFallido.ambito == "cuenta"))))) is False
+    assert _ingreso(client, "10000000", CLAVE).status_code == 401  # bloqueado aunque la clave sea buena
+    claves = db.scalars(select(IntentoFallido.clave)).all()
+    assert len(claves) == 10 and not any("ClaveMala1" in c for c in claves)  # no guarda lo intentado
+
+
+def test_limite_de_intentos_vence_con_la_ventana(client, db):
+    from sqlalchemy import text
+
+    from app import proteccion
+    crear_colegio(db, "alfa")
+    for _ in range(5):
+        _ingreso(client, "10000000", "ClaveMala1")
+    assert _ingreso(client, "10000000", CLAVE).status_code == 401
+    db.execute(text("UPDATE intento_fallido SET momento = momento - interval '16 minutes'"))
+    db.commit()
+    assert _ingreso(client, "10000000", CLAVE).status_code == 200
+    assert proteccion.FALLOS_CUENTA.fallos("colegio:1:10000000") == 0

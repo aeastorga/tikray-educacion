@@ -176,6 +176,8 @@ async def escribir(datos: str = Form(...), archivos: list[UploadFile] | None = F
     e = crear_entrada(db, cid, d, destino, usuario_id=s.usuario.id, estado="aprobada")
     if e.estado == "aprobada":
         e.resuelto_por_id, e.resuelto_en = s.usuario.id, datetime.now(UTC)
+        if e.tipo == "justificacion":
+            cuaderno.aplicar_justificacion(db, e)
     apoderados = cuaderno.guardar_destinos(db, e, alumnos_ids)
     avisados = cuaderno.avisar(db, e, apoderados, cuaderno.texto_aviso(db, e))
     claves = cuaderno.guardar_adjuntos(db, e, adjuntos)
@@ -307,6 +309,7 @@ def detalle(entrada_id: int, s: Sesion = Depends(ver), db: Session = Depends(get
     return {
         **cuaderno.entrada_basica(e), "destino": _destino_texto(e, etiquetas, nombres, alumnos_n),
         "autor": autor, "resuelto_por": personal.get(e.resuelto_por_id),
+        "anulada_por": personal.get(e.anulada_por_id), "anulada_en": cuaderno.iso(e.anulada_en),
         "adjuntos": cuaderno.adjuntos_de(db, cid, [e.id]).get(e.id, []),
         "lectores": [{
             "alumno": f"{aa}, {an}", "apoderado": f"{ap.apellidos}, {ap.nombres}", "parentesco": par,
@@ -350,9 +353,32 @@ def resolver(entrada_id: int, d: ResolucionIn, s: Sesion = Depends(editar), db: 
         raise HTTPException(status.HTTP_409_CONFLICT, "Ya fue resuelta")
     e.estado, e.nota_resolucion = d.estado, (d.nota or "").strip() or None
     e.resuelto_por_id, e.resuelto_en = s.usuario.id, datetime.now(UTC)
+    faltas = 0
+    if e.tipo == "justificacion" and e.estado == "aprobada":
+        faltas = cuaderno.aplicar_justificacion(db, e)
     cuaderno.avisar(db, e, cuaderno.apoderados_de(db, e), cuaderno.texto_aviso(db, e, "resuelta"))
     guardar(db)
-    return {"id": e.id, "estado": e.estado}
+    return {"id": e.id, "estado": e.estado, "faltas_justificadas": faltas}
+
+
+class AnulacionIn(BaseModel):
+    motivo: str = Field(min_length=1, max_length=300)
+
+
+@router.post("/entradas/{entrada_id}/anular")
+def anular(entrada_id: int, d: AnulacionIn, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> dict:
+    """Deja sin efecto una justificación o un permiso ya aprobados (p. ej. el certificado era falso).
+    Las faltas que había justificado vuelven a ser faltas."""
+    e = _entrada(db, s, entrada_id)
+    if e.tipo not in CON_RESOLUCION or e.estado != "aprobada":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Solo se anula una justificación o un permiso aprobado")
+    e.estado, e.motivo_anulacion = "anulada", d.motivo.strip()
+    e.anulada_por_id, e.anulada_en = s.usuario.id, datetime.now(UTC)
+    db.flush()
+    faltas = cuaderno.quitar_justificacion(db, e) if e.tipo == "justificacion" else 0
+    cuaderno.avisar(db, e, cuaderno.apoderados_de(db, e), cuaderno.texto_aviso(db, e, "resuelta"))
+    guardar(db)
+    return {"id": e.id, "estado": e.estado, "faltas_restituidas": faltas}
 
 
 @router.get("/adjuntos/{adjunto_id}")

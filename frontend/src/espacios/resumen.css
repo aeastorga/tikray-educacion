@@ -1,0 +1,23 @@
+.resumen section { margin: 24px 0; }
+.resumen h4 { margin: 12px 0 6px; font-size: .95rem; }
+.cifra-enlace { color: inherit; text-decoration: none; }
+.cifra-enlace:hover { border-color: var(--primario); }
+.resumen-columnas { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 24px; }
+@media (max-width: 700px) { .resumen-columnas { grid-template-columns: minmax(0, 1fr); } }
+
+.tendencia { margin: 0; }
+.tendencia figcaption { font-size: .9rem; color: var(--tenue); margin-bottom: 8px; }
+.tendencia-barras { display: flex; gap: 2px; align-items: stretch; height: 180px; border-bottom: 1px solid var(--borde); }
+.tendencia-dia { flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.tendencia-dia:hover .tendencia-barra { opacity: .8; }
+.tendencia-valor { font-size: .7rem; white-space: nowrap; color: var(--tenue); }
+.tendencia-pista { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.tendencia-barra { width: min(28px, 70%); background: var(--primario); border-radius: 4px 4px 0 0; }
+.tendencia-fecha { font-size: .7rem; color: var(--tenue); margin-top: 4px; text-align: center; line-height: 1.2; }
+.tendencia-fecha b { display: block; font-weight: normal; }
+
+.resumen-lista { list-style: none; padding: 0; margin: 0; }
+.resumen-lista li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--borde); }
+.firma { flex: none; min-width: 150px; justify-content: flex-end; display: inline-flex; align-items: center; gap: 8px; color: var(--tenue); font-size: .85rem; white-space: nowrap; }
+.firma-pista { width: 80px; height: 6px; border-radius: 3px; background: var(--borde); overflow: hidden; display: inline-block; }
+.firma-pista span { display: block; height: 100%; background: var(--primario); }

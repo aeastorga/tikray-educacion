@@ -13,8 +13,8 @@ import threading
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 
-from sqlalchemy import and_, case, cast, delete, exists, literal, select, text
-from sqlalchemy.dialects.postgresql import JSONB, insert
+from sqlalchemy import and_, case, delete, exists, func, literal, select, text
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app import codigos
@@ -244,56 +244,80 @@ def corte(turno: Turno, minutos: int) -> time:
     return fin.time() if fin.date() == date.min else time(23, 59)
 
 
-def marcar_faltas(db: Session, fecha: date, hasta: time | None = None, colegio_id: int | None = None,
-                  avisar: bool = True) -> int:
-    """Pone falta a quien no tiene asistencia en `fecha`, en los turnos cuyo corte ya pasó a la
-    hora `hasta` (Lima). Sin `hasta`, el día está cerrado: todos los turnos. Solo días lectivos.
-    Se puede correr cuantas veces se quiera: lo ya marcado no se toca. No hace commit."""
-    total = 0
-    consulta = select(Colegio)
+def turnos_por_cortar(db: Session, fecha: date, desde: time | None, hasta: time | None,
+                      colegio_id: int | None = None) -> dict[int, list[int]]:
+    """Turnos cuyo corte de falta cae en (desde, hasta], por colegio, solo de colegios disponibles y
+    con clase ese día. Una sola consulta de turnos para todos los colegios; los demás no se tocan."""
+    q = (select(Turno.id, Turno.colegio_id, Turno.hora_entrada,
+                func.coalesce(ConfigAsistencia.minutos_corte_falta, MINUTOS_CORTE_FALTA))
+         .outerjoin(ConfigAsistencia, ConfigAsistencia.colegio_id == Turno.colegio_id))
     if colegio_id is not None:
-        consulta = consulta.where(Colegio.id == colegio_id)
-    for c in db.scalars(consulta).all():
-        if not c.disponible(fecha) or not es_dia_lectivo(db, c.id, fecha):
-            continue
-        minutos = config(db, c.id).minutos_corte_falta
-        turnos = [t.id for t in db.scalars(select(Turno).where(Turno.colegio_id == c.id))
-                  if hasta is None or corte(t, minutos) <= hasta]
-        if not turnos:
-            continue
+        q = q.where(Turno.colegio_id == colegio_id)
+    por_colegio: dict[int, list[int]] = {}
+    for turno_id, cid, entrada, minutos in db.execute(q):
+        c = corte(Turno(hora_entrada=entrada), minutos)
+        if (desde is None or c > desde) and (hasta is None or c <= hasta):
+            por_colegio.setdefault(cid, []).append(turno_id)
+    if not por_colegio:
+        return {}
+    colegios = db.scalars(select(Colegio).where(Colegio.id.in_(por_colegio))).all()
+    return {c.id: por_colegio[c.id] for c in colegios
+            if c.disponible(fecha) and es_dia_lectivo(db, c.id, fecha)}
 
+
+def marcar_faltas(db: Session, fecha: date, hasta: time | None = None, colegio_id: int | None = None,
+                  avisar: bool = True, desde: time | None = None) -> int:
+    """Pone falta a quien no tiene asistencia en `fecha`, en los turnos cuyo corte (hora Lima) cae
+    en (desde, hasta]. Sin `desde`: todos los que ya cortaron. Sin `hasta`: el día cerrado. Solo días
+    lectivos. Un alumno con una justificación aprobada para ese día queda "justificada" (y sin aviso).
+    Se puede correr cuantas veces se quiera: lo ya marcado no se toca. No hace commit."""
+    from app.cuaderno import justificacion_vigente
+
+    total = 0
+    for cid, turnos in turnos_por_cortar(db, fecha, desde, hasta, colegio_id).items():
+        justificacion = justificacion_vigente(cid, Matricula.alumno_id, literal(fecha))
         alumnos = (
-            select(literal(c.id), Matricula.alumno_id, literal(fecha), Matricula.seccion_id, literal("falta"),
-                   literal(0))
+            select(literal(cid), Matricula.alumno_id, literal(fecha), Matricula.seccion_id,
+                   case((justificacion.is_not(None), "justificada"), else_="falta"), literal(0), justificacion)
             .join(Seccion, and_(Seccion.colegio_id == Matricula.colegio_id, Seccion.id == Matricula.seccion_id))
             .join(Alumno, and_(Alumno.colegio_id == Matricula.colegio_id, Alumno.id == Matricula.alumno_id))
-            .where(Matricula.colegio_id == c.id, Matricula.anio_id == _anio_activo(c.id),
+            .where(Matricula.colegio_id == cid, Matricula.anio_id == _anio_activo(cid),
                    Seccion.turno_id.in_(turnos), Alumno.activo))
-        total += len(db.execute(insert(AsistenciaAlumno).from_select(
-            ["colegio_id", "alumno_id", "fecha", "seccion_id", "estado", "minutos_tarde"], alumnos,
-        ).on_conflict_do_nothing().returning(AsistenciaAlumno.id)).all())
+        nuevas = db.execute(insert(AsistenciaAlumno).from_select(
+            ["colegio_id", "alumno_id", "fecha", "seccion_id", "estado", "minutos_tarde", "justificacion_id"],
+            alumnos,
+        ).on_conflict_do_nothing().returning(AsistenciaAlumno.alumno_id, AsistenciaAlumno.estado)).all()
+        total += len(nuevas)
 
         con_licencia = exists().where(
-            LicenciaPersonal.colegio_id == c.id, LicenciaPersonal.usuario_id == Usuario.id,
+            LicenciaPersonal.colegio_id == cid, LicenciaPersonal.usuario_id == Usuario.id,
             LicenciaPersonal.desde <= fecha, LicenciaPersonal.hasta >= fecha)
         personal = (
-            select(literal(c.id), Usuario.id, literal(fecha), case((con_licencia, "licencia"), else_="falta"),
+            select(literal(cid), Usuario.id, literal(fecha), case((con_licencia, "licencia"), else_="falta"),
                    literal(0))
-            .where(Usuario.colegio_id == c.id, Usuario.activo, Usuario.turno_id.in_(turnos)))
+            .where(Usuario.colegio_id == cid, Usuario.activo, Usuario.turno_id.in_(turnos)))
         total += len(db.execute(insert(AsistenciaPersonal).from_select(
             ["colegio_id", "usuario_id", "fecha", "estado", "minutos_tarde"], personal,
         ).on_conflict_do_nothing().returning(AsistenciaPersonal.id)).all())
 
-        if avisar:
+        faltas = [a for a, estado in nuevas if estado == "falta"]
+        if avisar and faltas:
             ahora = datetime.now(UTC)
-            faltas = (select(literal(c.id), AsistenciaAlumno.alumno_id, literal(fecha), literal("falta"),
-                             cast(literal("{}"), JSONB), literal(ahora), literal(ahora))
-                      .where(AsistenciaAlumno.colegio_id == c.id, AsistenciaAlumno.fecha == fecha,
-                             AsistenciaAlumno.estado == "falta"))
-            db.execute(insert(ColaAviso).from_select(
-                ["colegio_id", "alumno_id", "fecha", "tipo", "datos", "procesar_desde", "creado_en"], faltas,
-            ).on_conflict_do_nothing())
+            db.execute(insert(ColaAviso).values([
+                {"colegio_id": cid, "alumno_id": a, "fecha": fecha, "tipo": "falta", "datos": {},
+                 "procesar_desde": ahora, "creado_en": ahora} for a in faltas]).on_conflict_do_nothing())
     return total
+
+
+def ventanas_faltas(anterior: datetime | None, ahora: datetime) -> list[tuple[date, time | None, time | None]]:
+    """Qué revisar en esta vuelta del proceso: los cortes entre la vuelta anterior y ahora (hora Lima).
+    La primera vez (o tras un reinicio) revisa todo lo que ya cortó hoy. Si cambió el día, cierra el anterior."""
+    if anterior is None:
+        return [(ahora.date(), None, ahora.time().replace(tzinfo=None))]
+    if anterior.date() == ahora.date():
+        return [(ahora.date(), anterior.time().replace(tzinfo=None), ahora.time().replace(tzinfo=None))]
+    return [(anterior.date(), anterior.time().replace(tzinfo=None), None),
+            (ahora.date(), None, ahora.time().replace(tzinfo=None))]
 
 
 def aplicar_licencia(db: Session, lic: LicenciaPersonal, quitar: bool = False) -> None:
@@ -310,12 +334,15 @@ def bucle_faltas(parar: threading.Event, cada: int = 60) -> None:
     """Proceso en segundo plano del servidor. Varias instancias a la vez no duplican nada (ON CONFLICT)."""
     from app.db import get_sessionmaker
 
+    anterior = None
     while not parar.wait(cada):
+        ahora = datetime.now(LIMA)
         try:
-            ahora = datetime.now(LIMA)
             with get_sessionmaker()() as db:
-                marcar_faltas(db, ahora.date(), ahora.time().replace(tzinfo=None))
+                for fecha, desde, hasta in ventanas_faltas(anterior, ahora):
+                    marcar_faltas(db, fecha, hasta, desde=desde)
                 db.commit()
+            anterior = ahora  # si falló, la próxima vuelta vuelve a intentar desde la misma hora
         except Exception:
             log.exception("Faltas automáticas")
 

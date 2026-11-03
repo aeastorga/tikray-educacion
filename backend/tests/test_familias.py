@@ -229,7 +229,7 @@ def bloquear_pin(client, sub="alfa", veces=10, dni="41234567"):
     from app.proteccion import limpiar_limites
     respuestas = []
     for _ in range(veces):
-        limpiar_limites()  # el límite en memoria (5 cada 15 min) no es lo que se prueba aquí
+        limpiar_limites()  # el límite por cuenta (5 cada 15 min) no es lo que se prueba aquí
         respuestas.append(client.post("/api/familia/ingreso", headers=host(sub),
                                       json={"documento": dni, "pin": "000001"}))
     return respuestas
@@ -246,7 +246,7 @@ def test_pin_se_bloquea_un_dia_tras_diez_fallidos(client, db, monkeypatch):
     respuestas = bloquear_pin(client, "alfa", 4)
     assert [r.status_code for r in respuestas] == [401, 401, 401, 429]
     assert "bloqueado hasta" in respuestas[-1].json()["detail"] and "huella" in respuestas[-1].json()["detail"]
-    limpiar_limites()  # guardado en la base, no en memoria
+    limpiar_limites()  # el bloqueo del PIN no depende del límite de intentos
     r = client.post("/api/familia/ingreso", headers=host("alfa"), json={"documento": "41234567", "pin": PIN})
     assert r.status_code == 429
     cuenta = db.scalar(select(CuentaFamilia))

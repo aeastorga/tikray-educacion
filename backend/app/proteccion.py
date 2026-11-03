@@ -1,19 +1,18 @@
 """Reglas de clave y límite de intentos fallidos (traído de sgi-platform).
 
-El límite vive en memoria: vale para una sola instancia y se reinicia con el
-servidor. Si se escala a varias instancias, pasa a la base o a Redis.
+El límite se guarda en la base (`intento_fallido`): vale con varias instancias
+del servidor y no se pierde al reiniciar. Usa el reloj de la base, el mismo para todos.
 """
 
 import ipaddress
 import secrets
 import string
 import threading
-import time
 import unicodedata
-from collections import deque
 from functools import lru_cache
 
 from fastapi import HTTPException, Request
+from sqlalchemy import text
 
 from app.config import get_settings
 
@@ -50,44 +49,57 @@ def generar_clave_temporal(largo: int = 10) -> str:
 
 
 class LimitadorVentana:
-    """Máximo de fallos por clave dentro de una ventana deslizante."""
+    """Máximo de fallos por clave dentro de una ventana deslizante, guardado en la base.
 
-    def __init__(self, maximo: int, segundos: int):
+    Usa su propia conexión: un fallo queda registrado aunque la petición haga rollback."""
+
+    # Cada cuántos registros se borran los fallos viejos (más de un día).
+    LIMPIAR_CADA = 200
+
+    def __init__(self, ambito: str, maximo: int, segundos: int):
+        self.ambito = ambito
         self.maximo = maximo
         self.segundos = segundos
-        self._marcas: dict[str, deque] = {}
+        self._cuenta = 0
         self._lock = threading.Lock()
 
-    def _vigentes(self, clave: str, ahora: float) -> deque:
-        marcas = self._marcas.setdefault(clave, deque())
-        while marcas and ahora - marcas[0] >= self.segundos:
-            marcas.popleft()
-        return marcas
+    def fallos(self, clave: str) -> int:
+        from app.db import get_engine
+
+        with get_engine().connect() as conn:
+            return conn.execute(text(
+                "SELECT count(*) FROM intento_fallido WHERE ambito = :a AND clave = :c "
+                "AND momento > now() - make_interval(secs => :s)"),
+                {"a": self.ambito, "c": clave[:300], "s": self.segundos}).scalar_one()
 
     def hay_cupo(self, clave: str) -> bool:
-        with self._lock:
-            return len(self._vigentes(clave, time.monotonic())) < self.maximo
+        return self.fallos(clave) < self.maximo
 
     def registrar(self, clave: str) -> None:
-        ahora = time.monotonic()
+        from app.db import get_engine
+
         with self._lock:
-            self._vigentes(clave, ahora).append(ahora)
-            # Limpieza ocasional para que el diccionario no crezca sin fin.
-            if len(self._marcas) > 10000:
-                for k in [k for k, v in self._marcas.items() if not v or ahora - v[-1] >= self.segundos]:
-                    del self._marcas[k]
+            self._cuenta += 1
+            limpiar = self._cuenta % self.LIMPIAR_CADA == 0
+        with get_engine().begin() as conn:
+            conn.execute(text("INSERT INTO intento_fallido (ambito, clave, momento) VALUES (:a, :c, now())"),
+                         {"a": self.ambito, "c": clave[:300]})
+            if limpiar:
+                conn.execute(text("DELETE FROM intento_fallido WHERE momento < now() - interval '1 day'"))
 
     def limpiar(self) -> None:
-        with self._lock:
-            self._marcas.clear()
+        from app.db import get_engine
+
+        with get_engine().begin() as conn:
+            conn.execute(text("DELETE FROM intento_fallido WHERE ambito = :a"), {"a": self.ambito})
 
 
 # Bloqueado o con clave errónea, la respuesta es la misma.
 # Por cuenta: 5 fallos cada 15 minutos.
-FALLOS_CUENTA = LimitadorVentana(maximo=5, segundos=15 * 60)
+FALLOS_CUENTA = LimitadorVentana("cuenta", maximo=5, segundos=15 * 60)
 # Por IP, mucho más alto: todo el personal de un colegio sale por la misma IP
 # (el wifi del colegio) y el primer día con claves temporales se equivocan muchos.
-FALLOS_IP = LimitadorVentana(maximo=50, segundos=15 * 60)
+FALLOS_IP = LimitadorVentana("ip", maximo=50, segundos=15 * 60)
 
 
 @lru_cache

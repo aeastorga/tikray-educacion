@@ -14,7 +14,8 @@ from tests.conftest import (auth, crear_admin, crear_colegio, crear_familia, cre
                             token_familia, token_plataforma)
 
 # Globales a propósito: la cuenta de familia (y sus passkeys) une hijos de varios colegios.
-SIN_COLEGIO = {"colegio", "admin_plataforma", "cuenta_familia", "passkey_familia"}
+SIN_COLEGIO = {"colegio", "admin_plataforma", "cuenta_familia", "passkey_familia",
+               "intento_fallido"}  # límite de intentos: claves de plataforma, de colegio o de IP
 RUTAS_PUBLICAS = {"/api/auth/ingreso", "/api/publico/colegio", "/plataforma/auth/ingreso",
                   "/api/familia/ingreso", "/api/familia/activacion/revisar", "/api/familia/activacion/completar",
                   "/api/familia/passkey/opciones-ingreso", "/api/familia/passkey/ingreso"}

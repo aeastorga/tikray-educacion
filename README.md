@@ -54,7 +54,7 @@ E2E_DATABASE_URL=postgresql+psycopg://usuario:clave@localhost/tikray_e2e npm run
 
 ## Intentos de ingreso
 
-5 fallos por cuenta y 50 por IP cada 15 minutos (todo el personal de un colegio suele salir por la misma IP). Detrás de un proxy, configura `PROXIES_CONFIANZA` para leer la IP real de `X-Forwarded-For`.
+5 fallos por cuenta y 50 por IP cada 15 minutos (todo el personal de un colegio suele salir por la misma IP). Los fallos se guardan en la base (`intento_fallido`), no en memoria: el límite vale aunque haya varias instancias del servidor y no se reinicia al reiniciarlo. No se guarda la clave intentada; las filas de más de un día se borran solas. Detrás de un proxy, configura `PROXIES_CONFIANZA` para leer la IP real de `X-Forwarded-For`.
 
 ## Padrón (paso 1)
 
@@ -74,7 +74,7 @@ E2E_DATABASE_URL=postgresql+psycopg://usuario:clave@localhost/tikray_e2e npm run
 - **Personal**: carnet con QR propio (`TK1P:XXXXXXXX`), turno, licencias (la licencia reemplaza la falta, también si se registra después).
 - **Reportes**: resumen del día por sección y detalle por alumno; personal del día; registro mensual en Excel (una hoja por sección) para alumnos y para el personal.
 
-Las faltas automáticas las marca un hilo del servidor cada minuto (`TAREAS_EN_FONDO=true`, por defecto). Si el servidor estuvo caído, se puede cerrar un día a mano sin avisar a las familias:
+Las faltas automáticas las marca un hilo del servidor cada minuto (`TAREAS_EN_FONDO=true`, por defecto), pero solo para los turnos cuyo corte (entrada + minutos de falta) cayó desde la pasada anterior, no todos los colegios cada vez. Al arrancar cierra lo que ya venció hoy, y al cambiar de día termina el anterior. Si una pasada falla, la siguiente vuelve a cubrir esa ventana. Si el servidor estuvo caído, se puede cerrar un día a mano sin avisar a las familias:
 
 ```bash
 .venv/bin/python -m app.cli faltas 2026-11-02
@@ -102,6 +102,7 @@ Las faltas automáticas las marca un hilo del servidor cada minuto (`TAREAS_EN_F
 - **Avisos**: cada novedad (entrada nueva, respuesta del colegio, aprobación) deja un aviso `cuaderno` por apoderado con cuenta activa en `cola_aviso`; lo envía el mismo proceso de los avisos de asistencia y la notificación abre la entrada.
 - **Adjuntos fuera de la base**: en `CARPETA_PRIVADA` (en producción, un bucket privado). No se sirven en `/archivos`; se descargan por `/api/cuaderno/adjuntos/{id}` o `/api/familia/cuaderno/adjuntos/{id}`, que revisan colegio, sección y destinatario. El tipo se comprueba por el contenido del archivo.
 - La familia ve el cuaderno del colegio por cuya dirección entró y solo con el acceso activo.
+- **Falta justificada**: al aprobar una justificación, las faltas de esos días pasan a `justificada` (también la que se marque después, y sin aviso de falta a la familia). Se ve en el día, la tarjeta de la familia y el Excel mensual (letra J). Una justificación o permiso aprobado se puede **anular** con motivo: las faltas vuelven a `falta`, salvo que otra justificación aprobada cubra el día.
 
 Las notificaciones necesitan claves VAPID; sin ellas los avisos quedan en la cola:
 
@@ -110,3 +111,23 @@ Las notificaciones necesitan claves VAPID; sin ellas los avisos quedan en la col
 ```
 
 En iPhone las notificaciones solo funcionan con la app agregada a la pantalla de inicio (iOS 16.4 o más).
+
+## Cierre del MVP (paso 5)
+
+- **Panel del director** (`/panel`, Inicio): asistencia de hoy (porcentaje, puntuales, tardanzas, faltas, justificadas, sin marcar), los últimos 10 días de clase, secciones con más faltas, personal; cuaderno (por aprobar, hilos con respuesta de la familia, firmas de los últimos comunicados y citaciones); familias (cuentas activas, con notificaciones, avisos de hoy y en cola). Cada bloque sale solo con permiso de ver ese módulo; se refresca cada minuto. `GET /api/panel/resumen`.
+- **Demo con datos ficticios** que se reinicia: 25 secciones (inicial, primaria, secundaria; mañana y tarde), alumnos, apoderados (60 % con cuenta), docentes por sección, 10 días de asistencia, licencias y cuaderno. Documentos ficticios (`D…`), nunca DNI reales. Solo funciona sobre un colegio marcado `es_demo`: nunca borra uno real.
+
+  ```bash
+  .venv/bin/python -m app.cli demo demo                          # crea o reinicia demo.<dominio>
+  .venv/bin/python -m app.cli demo demo --alumnos-por-seccion 40 # 1000 alumnos
+  ```
+
+  También desde el panel de Tikray Labs: "Crear colegio demo" y "Reiniciar demo" en cada colegio demo. Claves: personal `Demo2026Tikray` (director 90000001, portería 90000004), familia PIN `135790`.
+- **Prueba de carga**: 1000 marcaciones en 10 minutos desde 4 porterías, una petición por lectura, contra el colegio demo. Falla (código 1) si hay errores o el p95 pasa de 300 ms.
+
+  ```bash
+  .venv/bin/python -m app.carga --colegio demo            # 10 minutos
+  .venv/bin/python -m app.carga --colegio demo --rapido   # sin esperas
+  ```
+
+  Resultado en local (WSL2, PostgreSQL 16, un solo proceso uvicorn), 3 de noviembre de 2026, colegio demo con 1000 alumnos: 1000 marcaciones en 599 s desde 4 porterías, **p50 21 ms · p95 34 ms · p99 37 ms · máximo 70 ms**, 0 errores. Los 1549 avisos que generaron salieron de la cola en segundo plano (ninguno quedó pendiente). Sin esperas (`--rapido`), unas 95 marcaciones por segundo con p95 de 51 ms.

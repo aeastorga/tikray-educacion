@@ -302,6 +302,7 @@ function TarjetaHijo({ hijo, varios }) {
   else if (hijo.estado === 'tarde') {
     [estado, clase] = [`Llegó tarde a las ${hijo.entrada} (${hijo.minutos_tarde} min)`, 'tarde']
   } else if (hijo.estado === 'falta') [estado, clase] = ['No asistió hoy', 'falta']
+  else if (hijo.estado === 'justificada') [estado, clase] = ['No asistió hoy (falta justificada)', 'neutro']
   else [estado, clase] = ['Aún no registra su ingreso', 'neutro']
   return (
     <article className={`hijo ${clase}`}>

@@ -5,6 +5,7 @@
 .estado.tarde { background: #fef3c7; color: #78350f; }
 .estado.falta { background: #fee2e2; color: #7f1d1d; }
 .estado.licencia { background: #dbeafe; color: #1e3a8a; }
+.estado.justificada { background: #e0f2fe; color: #0c4a6e; }
 .aviso-chico { padding: 6px 10px; border-radius: 8px; background: var(--fondo); border: 1px solid var(--borde); }
 
 .totales { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 16px 0; }
@@ -46,4 +47,5 @@
   .estado.tarde { background: #78350f; color: #fef3c7; }
   .estado.falta { background: #7f1d1d; color: #fee2e2; }
   .estado.licencia { background: #1e3a8a; color: #dbeafe; }
+  .estado.justificada { background: #0c4a6e; color: #e0f2fe; }
 }
