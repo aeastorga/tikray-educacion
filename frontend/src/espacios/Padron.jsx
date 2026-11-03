@@ -6,6 +6,9 @@ const DIAS = [['1', 'Lu'], ['2', 'Ma'], ['3', 'Mi'], ['4', 'Ju'], ['5', 'Vi'], [
 const TIPOS_DOC = ['DNI', 'CE', 'PAS', 'OTRO']
 
 export default function Padron({ editar }) {
+  const [anios, cargarAnios] = useCarga('/api/padron/anios')
+  const sinAnio = anios !== null && !anios.some((a) => a.activo)
+  const necesitaAnio = (el) => (sinAnio ? <Empezar editar={editar} /> : el)
   return (
     <section>
       <nav className="subpestanas">
@@ -17,14 +20,30 @@ export default function Padron({ editar }) {
         {editar && <NavLink to="/panel/padron/importar">Importar Excel</NavLink>}
       </nav>
       <Routes>
-        <Route index element={<Alumnos editar={editar} />} />
-        <Route path="secciones" element={<Secciones editar={editar} />} />
+        <Route index element={necesitaAnio(<Alumnos editar={editar} />)} />
+        <Route path="secciones" element={necesitaAnio(<Secciones editar={editar} />)} />
         <Route path="estructura" element={<Estructura editar={editar} />} />
-        <Route path="calendario" element={<Calendario editar={editar} />} />
-        <Route path="anios" element={<Anios editar={editar} />} />
-        <Route path="importar" element={<Importar />} />
+        <Route path="calendario" element={necesitaAnio(<Calendario editar={editar} />)} />
+        <Route path="anios" element={<Anios editar={editar} alCambiar={cargarAnios} />} />
+        <Route path="importar" element={necesitaAnio(<Importar />)} />
       </Routes>
     </section>
+  )
+}
+
+function Empezar({ editar }) {
+  return (
+    <div className="tarjeta ancho">
+      <h2>Para empezar</h2>
+      {editar ? (
+        <ol className="pasos">
+          <li><NavLink to="/panel/padron/anios">Crea el año escolar</NavLink> con sus fechas y días de clase.</li>
+          <li>Define los <NavLink to="/panel/padron/estructura">niveles, grados y turnos</NavLink>.</li>
+          <li>Crea las secciones del año.</li>
+          <li>Carga los alumnos uno por uno o desde Excel.</li>
+        </ol>
+      ) : <p>Todavía no hay un año escolar activo. Pídele a dirección que lo configure.</p>}
+    </div>
   )
 }
 
@@ -45,8 +64,9 @@ function MensajeError({ texto }) {
 
 // --- Año escolar ---------------------------------------------------------------
 
-function Anios({ editar }) {
-  const [anios, cargar, error, setError] = useCarga('/api/padron/anios')
+function Anios({ editar, alCambiar }) {
+  const [anios, cargarPropio, error, setError] = useCarga('/api/padron/anios')
+  const cargar = () => { cargarPropio(); alCambiar() }
   const vacio = { anio: new Date().getFullYear(), inicio: '', fin: '', dias_semana: '12345' }
   const [form, setForm] = useState(vacio)
 
@@ -498,6 +518,7 @@ const NOMBRES_RESUMEN = {
 
 function Importar() {
   const [archivo, setArchivo] = useState(null)
+  const [campo, setCampo] = useState(0)  // cambia la key del input para vaciarlo
   const [informe, setInforme] = useState(null)
   const [hecho, setHecho] = useState(null)
   const [error, setError] = useState(null)
@@ -512,6 +533,7 @@ function Importar() {
         setHecho(r)
         setInforme(null)
         setArchivo(null)
+        setCampo((n) => n + 1)
         if (r.cartas_pdf) descargarCartas(r.cartas_pdf)
       } else {
         setInforme(r)
@@ -534,7 +556,7 @@ function Importar() {
         <li>Llénala y súbela. Primero verás una vista previa con los errores; no se guarda nada hasta confirmar.</li>
       </ol>
       <div className="fila-form">
-        <input type="file" accept=".xlsx" onChange={(e) => { setArchivo(e.target.files[0] || null); setInforme(null); setHecho(null) }} />
+        <input key={campo} type="file" accept=".xlsx" onChange={(e) => { setArchivo(e.target.files[0] || null); setInforme(null); setHecho(null) }} />
         <button className="boton" disabled={!archivo || ocupado} onClick={() => enviar('vista-previa')}>Revisar</button>
       </div>
       <MensajeError texto={error} />
