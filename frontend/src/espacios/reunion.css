@@ -1,0 +1,56 @@
+/* Modo reunión: pantalla del tutor y ficha del padre. */
+.en-linea { display: inline-flex; align-items: center; gap: 8px; flex-direction: row; }
+.chico { font-size: .8rem; }
+.lista-secciones { list-style: none; padding: 0; margin: 16px 0; }
+.lista-secciones li { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 0; border-bottom: 1px solid var(--borde); }
+
+.reunion-cuerpo { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 760px) { .reunion-cuerpo { grid-template-columns: minmax(0, 1fr); } }
+.reunion-qr { background: var(--superficie); border: 1px solid var(--borde); border-radius: 12px; padding: 16px; text-align: center;
+  position: sticky; top: 16px; }
+.qr-reunion { width: 100%; max-width: 260px; aspect-ratio: 1; background: #fff; border-radius: 8px; padding: 8px; display: block; margin: 0 auto; }
+.qr-reunion.vacio { background: var(--fondo); }
+.acciones.apiladas { flex-direction: column; align-items: stretch; }
+
+.subpestanas button { padding: 6px 12px; border-radius: 999px; color: var(--tenue); background: none; border: 1px solid var(--borde);
+  cursor: pointer; font: inherit; }
+.subpestanas button.activa { background: var(--primario); border-color: var(--primario); color: #fff; }
+.contador { display: inline-block; min-width: 1.4em; padding: 0 5px; margin-left: 4px; border-radius: 999px;
+  background: var(--secundario); color: #1c1f24; font-size: .8rem; font-weight: 600; }
+
+.ficha-reunion { background: var(--superficie); border: 1px solid var(--borde); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+.ficha-reunion.nueva { border-color: var(--secundario); box-shadow: 0 0 0 2px color-mix(in srgb, var(--secundario) 35%, transparent);
+  animation: llega .6s ease-out; }
+@keyframes llega { from { transform: translateY(-6px); opacity: .3; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ficha-reunion.nueva { animation: none; } }
+.ficha-reunion header { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.ficha-bloque { border-top: 1px solid var(--borde); padding-top: 8px; margin-top: 8px; }
+.ficha-titulo { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-weight: 600; font-size: .9rem; margin-bottom: 4px; }
+.ficha-bloque dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 4px 16px; margin: 0; }
+.ficha-bloque dl div { min-width: 0; }
+.ficha-bloque dt { font-size: .75rem; color: var(--tenue); }
+.ficha-bloque dd { margin: 0; overflow-wrap: anywhere; }
+.ficha-bloque mark { background: #fff1d6; color: #5c3800; padding: 0 3px; border-radius: 3px; }
+.ficha-bloque del { color: var(--tenue); }
+@media (prefers-color-scheme: dark) { .ficha-bloque mark { background: #5c3d00; color: #ffe3a8; } }
+
+.fichas-revisadas, .lista-faltan { list-style: none; padding: 0; margin: 0; }
+.fichas-revisadas li { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--borde); }
+.lista-faltan li { padding: 10px 0; border-bottom: 1px solid var(--borde); }
+.faltan-apoderado { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.activacion-reunion .qr-reunion { max-width: 200px; margin: 8px 0; }
+
+/* Ficha (padre y "ficha en papel") */
+.ficha-persona { border: 1px solid var(--borde); border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; min-width: 0; }
+.ficha-persona legend { padding: 0 6px; font-weight: 600; }
+.ficha-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px 12px; }
+.espera-punto { color: var(--secundario); font-size: 1.6rem; text-align: center; animation: late 1.4s ease-in-out infinite; }
+@keyframes late { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .espera-punto { animation: none; } }
+.verificar-dni { margin: 10px 0 4px; padding: 8px 10px; border-radius: 8px; border: 1px solid #f0d49a; background: #fff8e8; }
+.verificar-dni.hecho { border-color: #b4e2c0; background: #eef9f1; }
+@media (prefers-color-scheme: dark) {
+  .verificar-dni { background: #3a2c0c; border-color: #6b5320; }
+  .verificar-dni.hecho { background: #13301d; border-color: #2c6a40; }
+}

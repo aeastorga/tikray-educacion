@@ -152,11 +152,11 @@ function Lista({ colegio, editar, reglas }) {
 }
 
 // El token solo se ve una vez: aquí se arma el enlace y el mensaje para WhatsApp.
-function EnlaceGenerado({ enlace, colegio, cerrar }) {
+export function EnlaceGenerado({ enlace, colegio, cerrar, vence = 'Vence en 7 días' }) {
   const url = `${window.location.origin}/familia/activar#${enlace.token}`
   const mensaje = `Hola ${enlace.nombres}, este es tu enlace personal para activar tu cuenta de ${colegio.nombre} ` +
     `y recibir los avisos de asistencia de tu hijo o hija: ${url}\n\nTe pedirá tu DNI y el de tu hijo o hija. ` +
-    'Vence en 7 días y solo sirve una vez. No lo compartas.'
+    `${vence} y solo sirve una vez. No lo compartas.`
   const numero = enlace.celular?.replace(/\D/g, '')
   const wa = numero && `https://wa.me/${numero.length === 9 ? `51${numero}` : numero}?text=${encodeURIComponent(mensaje)}`
   const [copiado, setCopiado] = useState(false)

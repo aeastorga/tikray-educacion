@@ -9,6 +9,7 @@ MODULOS: dict[str, str] = {
     "avisos": "Avisos a familias",
     "cuaderno": "Cuaderno de control",
     "familias": "Cuentas de padres",
+    "reuniones": "Reunión de padres",
 }
 
 NIVELES = ("ver", "editar")

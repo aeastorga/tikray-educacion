@@ -74,7 +74,7 @@ E2E_DATABASE_URL=postgresql+psycopg://usuario:clave@localhost/tikray_e2e npm run
 - **Personal**: carnet con QR propio (`TK1P:XXXXXXXX`), turno, licencias (la licencia reemplaza la falta, también si se registra después).
 - **Reportes**: resumen del día por sección y detalle por alumno; personal del día; registro mensual en Excel (una hoja por sección) para alumnos y para el personal.
 
-Las faltas automáticas las marca un hilo del servidor cada minuto (`TAREAS_EN_FONDO=true`, por defecto), pero solo para los turnos cuyo corte (entrada + minutos de falta) cayó desde la pasada anterior, no todos los colegios cada vez. Al arrancar cierra lo que ya venció hoy, y al cambiar de día termina el anterior. Si una pasada falla, la siguiente vuelve a cubrir esa ventana. Si el servidor estuvo caído, se puede cerrar un día a mano sin avisar a las familias:
+Las faltas automáticas las marca un hilo del servidor cada minuto (`TAREAS_EN_FONDO=true`, por defecto), pero solo para los turnos cuyo corte (entrada + minutos de falta) cayó desde la pasada anterior, no todos los colegios cada vez. Al arrancar cierra lo que ya venció hoy, y al cambiar de día termina el anterior. Si una pasada falla, la siguiente vuelve a cubrir esa ventana. Además, cada noche a las 22:00 se revisa el día completo en todos los colegios (sin avisar a las familias a esa hora): cubre un corte o una hora de entrada adelantados durante el día, turnos o matrículas creados después del corte y días no lectivos borrados. Al arrancar el servidor también revisa el día anterior, por si estaba caído a esa hora. Si el servidor estuvo caído, se puede cerrar un día a mano sin avisar a las familias:
 
 ```bash
 .venv/bin/python -m app.cli faltas 2026-11-02
@@ -111,6 +111,20 @@ Las notificaciones necesitan claves VAPID; sin ellas los avisos quedan en la col
 ```
 
 En iPhone las notificaciones solo funcionan con la app agregada a la pantalla de inicio (iOS 16.4 o más).
+
+## Modo reunión (ficha del apoderado)
+
+Para la reunión de padres: el padre actualiza sus datos y da su consentimiento desde su celular, y el tutor lo aprueba ahí mismo. Módulo "Reunión de padres" (`/panel/reunion`); un rol "solo sus secciones" solo abre reuniones de sus aulas.
+
+- **QR del aula**: el tutor abre la reunión de una sección (1 a 8 horas) y muestra el QR. El QR es `id.firma` (HMAC con `SECRET_KEY`), no se guarda en la base y cambia con "Generar otro QR". Abrir otra reunión en la misma sección cierra la anterior.
+- **El padre** escanea, escribe el documento de su hijo (solo alumnos de esa sección), llena sus datos, los del otro apoderado y acepta el consentimiento. No se le muestra nada del padrón (solo el nombre de pila del alumno): quien tenga el QR y un DNI no lee los datos de la familia. Si la reenvía, reemplaza su ficha pendiente; hasta 4 fichas por alumno.
+- **Sin registro libre**: el QR vence; 10 documentos equivocados por celular cada 15 minutos; con 30 (o el doble de alumnos) en total, el QR se bloquea y el tutor muestra otro. Nada entra al padrón hasta que el tutor aprueba, con el padre delante.
+- **En vivo**: la pantalla del tutor se actualiza sola; las fichas nuevas se resaltan y cada dato distinto del padrón se ve tachado y marcado ("nuevo en el padrón", "ya registrado, nuevo para este alumno").
+- **Aprobar** crea o actualiza al apoderado (con registro de cambios, origen `reunion`), lo une al alumno, guarda el consentimiento con la fecha en que lo dio y aplica al otro apoderado.
+- **Quien tiene cuenta propia** (el que llena o el otro apoderado) no cambia su celular ni su correo desde una ficha: el tutor ve lo que escribió, pero queda lo registrado y lo pide en persona en secretaría. Así, alguien con su DNI y el del hijo no puede desviar sus avisos.
+- **DNI verificado en persona**: si la ficha suma un apoderado al alumno (nuevo en el padrón o ya registrado pero no de este alumno) o cambia un celular, el tutor no puede aprobar sin marcar "Verifiqué su DNI en persona" (la API responde 422). Queda en la ficha con su nombre y hora, y en el historial de cambios del apoderado (`dni_verificado`). Con "Activar su cuenta ahora", el celular del padre pasa solo a "crea tu PIN" (o "escribe tu PIN" si ya tiene cuenta por otro colegio) y queda activo sin otra aprobación.
+- **Respaldo**: tablet en modo quiosco (no guarda nada y vuelve a empezar; al aprobar, el tutor muestra un QR para que el padre active en su celular o le manda el enlace por WhatsApp); fichas en PDF prellenadas con lo del padrón para corregir y firmar, que el tutor pasa en "Ficha en papel".
+- **Quién faltó**: alumnos sin ficha en esa reunión, con sus apoderados y el botón para enviarles su enlace personal por WhatsApp (`wa.me`).
 
 ## Cierre del MVP (paso 5)
 

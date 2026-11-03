@@ -10,6 +10,7 @@ import Cuaderno from './Cuaderno.jsx'
 import CuentasPadres from './CuentasPadres.jsx'
 import Padron from './Padron.jsx'
 import Resumen from './Resumen.jsx'
+import Reunion from './Reunion.jsx'
 
 const NIVEL = { ver: 1, editar: 2 }
 const puede = (yo, modulo, nivel = 'ver') => (NIVEL[yo.permisos[modulo]] || 0) >= NIVEL[nivel]
@@ -61,6 +62,7 @@ export default function PanelColegio({ colegio, setColegio }) {
         {puede(yo, 'cuaderno') && <NavLink to="/panel/cuaderno">Cuaderno</NavLink>}
         {puede(yo, 'padron') && <NavLink to="/panel/padron">Padrón</NavLink>}
         {puede(yo, 'familias') && <NavLink to="/panel/familias">Cuentas de padres</NavLink>}
+        {puede(yo, 'reuniones') && <NavLink to="/panel/reunion">Reunión de padres</NavLink>}
         {puede(yo, 'personal') && <NavLink to="/panel/personal">Personal</NavLink>}
         {puede(yo, 'roles') && <NavLink to="/panel/roles">Roles</NavLink>}
         {puede(yo, 'configuracion') && <NavLink to="/panel/imagen">Imagen del colegio</NavLink>}
@@ -76,6 +78,7 @@ export default function PanelColegio({ colegio, setColegio }) {
           <Route path="padron/*" element={<Padron editar={puede(yo, 'padron', 'editar')} />} />
           <Route path="familias/*" element={<CuentasPadres colegio={colegio} editar={puede(yo, 'familias', 'editar')}
             reglas={puede(yo, 'configuracion', 'editar')} />} />
+          <Route path="reunion/*" element={<Reunion colegio={colegio} editar={puede(yo, 'reuniones', 'editar')} />} />
           <Route path="personal" element={<Personal yo={yo} />} />
           <Route path="roles" element={<Roles yo={yo} />} />
           <Route path="imagen" element={<Imagen yo={yo} colegio={colegio} setColegio={setColegio} />} />

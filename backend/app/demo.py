@@ -151,10 +151,10 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
     }
     permisos = {
         "Subdirección": {m: "ver" for m in MODULOS} | {"cuaderno": "editar", "asistencia": "editar"},
-        "Secretaría": {"padron": "editar", "familias": "editar", "cuaderno": "editar", "asistencia": "ver",
+        "Secretaría": {"padron": "editar", "familias": "editar", "cuaderno": "editar", "asistencia": "ver", "reuniones": "ver",
                        "personal": "ver"},
         "Portería": {"asistencia": "editar"},
-        "Docente": {"cuaderno": "editar", "asistencia": "ver"},
+        "Docente": {"cuaderno": "editar", "asistencia": "ver", "reuniones": "editar"},
     }
     for nombre, rol in roles.items():
         rol.permisos = [PermisoRol(colegio_id=cid, modulo=m, nivel=n) for m, n in permisos.get(nombre, {}).items()]

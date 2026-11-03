@@ -320,6 +320,27 @@ def ventanas_faltas(anterior: datetime | None, ahora: datetime) -> list[tuple[da
             (ahora.date(), None, ahora.time().replace(tzinfo=None))]
 
 
+# Revisión completa de cada noche: vuelve a pasar por todos los turnos que ya cortaron ese día, en
+# todos los colegios, sin avisar a las familias. Cubre lo que la ventana de cada minuto no alcanza:
+# un corte o una hora de entrada adelantados durante el día (el nuevo corte ya había pasado), un
+# turno o una matrícula creados después del corte, un día no lectivo borrado. Lo ya marcado no se toca.
+REVISION_NOCTURNA = time(22, 0)
+
+
+def revisiones_completas(anterior: datetime | None, ahora: datetime) -> list[tuple[date, time | None]]:
+    """Días a revisar completos en esta vuelta, con su hora tope (None: el día ya terminó).
+    Al arrancar revisa ayer (por si el servidor estuvo caído a la hora de la revisión) y hoy si ya
+    pasó la hora. Luego, una vez por día al cruzar REVISION_NOCTURNA, o al cambiar de día si no la cruzó."""
+    hoy, hora = ahora.date(), ahora.time().replace(tzinfo=None)
+    if anterior is None:
+        return [(hoy - timedelta(days=1), None)] + ([(hoy, hora)] if hora >= REVISION_NOCTURNA else [])
+    antes = anterior.time().replace(tzinfo=None)
+    if anterior.date() == hoy:
+        return [(hoy, hora)] if antes < REVISION_NOCTURNA <= hora else []
+    salida = [(anterior.date(), None)] if antes < REVISION_NOCTURNA else []
+    return salida + ([(hoy, hora)] if hora >= REVISION_NOCTURNA else [])
+
+
 def aplicar_licencia(db: Session, lic: LicenciaPersonal, quitar: bool = False) -> None:
     """Una licencia registrada después de la falta automática la corrige (y al borrarla, vuelve a falta)."""
     antes, despues = ("licencia", "falta") if quitar else ("falta", "licencia")
@@ -342,6 +363,10 @@ def bucle_faltas(parar: threading.Event, cada: int = 60) -> None:
                 for fecha, desde, hasta in ventanas_faltas(anterior, ahora):
                     marcar_faltas(db, fecha, hasta, desde=desde)
                 db.commit()
+                for fecha, hasta in revisiones_completas(anterior, ahora):
+                    if n := marcar_faltas(db, fecha, hasta, avisar=False):
+                        log.info("Revisión completa de faltas del %s: %s nuevas", fecha, n)
+                    db.commit()
             anterior = ahora  # si falló, la próxima vuelta vuelve a intentar desde la misma hora
         except Exception:
             log.exception("Faltas automáticas")
