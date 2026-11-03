@@ -71,3 +71,20 @@ Las faltas automáticas las marca un hilo del servidor cada minuto (`TAREAS_EN_F
 ```bash
 .venv/bin/python -m app.cli faltas 2026-11-02
 ```
+
+## Familias y avisos (paso 3)
+
+- **Cuentas de padres** (`/panel/familias`, módulo "Cuentas de padres"): el colegio genera un enlace personal de un solo uso y lo envía con el botón de WhatsApp (`wa.me` con el mensaje prellenado, desde el WhatsApp del propio colegio). El enlace vence en 7 días, se bloquea tras 5 intentos y se anula si se genera otro, si cambia el celular del apoderado o si se le bloquea. Solo se guarda su hash.
+- **Activación** (`/familia/activar#…`): el padre escribe el DNI de su hijo y el suyo, acepta el consentimiento (Ley 29733; se guarda la versión, la fecha y la IP) y crea un PIN de 6 números. Si ya tiene cuenta por otro colegio, escribe su PIN de siempre: la cuenta es una por DNI y une a sus hijos de todos los colegios. El director elige si la activación es automática o si cada cuenta espera su aprobación.
+- **Ingreso**: DNI + PIN, o huella o rostro del celular (passkey, atada al dominio del colegio). Desde el panel se puede bloquear, desbloquear, cerrar sus sesiones o enviarle un enlace para crear un PIN nuevo.
+- **Tarjeta en vivo** de cada hijo (ingresó, llegó tarde, faltó, salió) y la lista de avisos recibidos.
+- **Avisos push** (PWA): un hilo del servidor vacía `cola_aviso` cada 3 s y deja el estado por padre (le llegó, sin notificaciones, no se pudo entregar), visible en el detalle de cada apoderado. Antes de enviar una falta revisa que el alumno siga con falta. Los avisos de más de 6 horas se descartan.
+- **Cambio de celular**: si una carga de Excel o el panel cambia el celular de un apoderado, queda registrado quién lo cambió; se anula su enlace pendiente y, si ya activó su cuenta, se le avisa.
+
+Las notificaciones necesitan claves VAPID; sin ellas los avisos quedan en la cola:
+
+```bash
+.venv/bin/python -m app.cli claves-push   # copia las dos líneas al .env
+```
+
+En iPhone las notificaciones solo funcionan con la app agregada a la pantalla de inicio (iOS 16.4 o más).

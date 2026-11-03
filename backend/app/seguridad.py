@@ -3,6 +3,8 @@
 Hay dos tipos de token que no se pueden intercambiar:
 - "colegio": personal de un colegio; lleva `col` (colegio_id).
 - "plataforma": personal de Tikray Labs; solo sirve en /plataforma.
+- "familia": apoderado; lleva `col` (el colegio por el que entró) y `apo`.
+- "reto": desafío de passkey, de vida corta; no da acceso a nada.
 
 Cada tipo se firma con una llave distinta derivada de SECRET_KEY y lleva su
 propia audiencia, así que un token de un tipo nunca valida como el otro.
@@ -19,7 +21,7 @@ from pwdlib import PasswordHash
 
 from app.config import get_settings
 
-TipoToken = Literal["colegio", "plataforma"]
+TipoToken = Literal["colegio", "plataforma", "familia", "reto"]
 ALGORITMO = "HS256"
 
 _hasher = PasswordHash.recommended()

@@ -10,17 +10,23 @@ from sqlalchemy.exc import IntegrityError
 from app.db import Base, get_engine
 from app.main import app
 from app.models import Rol, Usuario
-from tests.conftest import (auth, crear_admin, crear_colegio, crear_personal, host, token,
-                            token_plataforma)
+from tests.conftest import (auth, crear_admin, crear_colegio, crear_familia, crear_personal, host, token,
+                            token_familia, token_plataforma)
 
-SIN_COLEGIO = {"colegio", "admin_plataforma"}
-RUTAS_PUBLICAS = {"/api/auth/ingreso", "/api/publico/colegio", "/plataforma/auth/ingreso"}
+# Globales a propósito: la cuenta de familia (y sus passkeys) une hijos de varios colegios.
+SIN_COLEGIO = {"colegio", "admin_plataforma", "cuenta_familia", "passkey_familia"}
+RUTAS_PUBLICAS = {"/api/auth/ingreso", "/api/publico/colegio", "/plataforma/auth/ingreso",
+                  "/api/familia/ingreso", "/api/familia/activacion/revisar", "/api/familia/activacion/completar",
+                  "/api/familia/passkey/opciones-ingreso", "/api/familia/passkey/ingreso"}
+FAMILIA = "/api/familia/"
 
 
-def _rutas(prefijo: str) -> list[tuple[str, str]]:
+def _rutas(prefijo: str, excluir: str | None = None) -> list[tuple[str, str]]:
     salida = []
     for ctx in iter_route_contexts(app.routes):
         if not ctx.methods or not ctx.path.startswith(prefijo) or ctx.path in RUTAS_PUBLICAS:
+            continue
+        if excluir and ctx.path.startswith(excluir):
             continue
         ruta = re.sub(r"\{[^}]+\}", "1", ctx.path)
         salida += [(m, ruta) for m in ctx.methods if m != "HEAD"]
@@ -28,7 +34,8 @@ def _rutas(prefijo: str) -> list[tuple[str, str]]:
     return sorted(salida)
 
 
-RUTAS_API = _rutas("/api/")
+RUTAS_API = _rutas("/api/", excluir=FAMILIA)  # del personal
+RUTAS_FAMILIA = _rutas(FAMILIA)
 RUTAS_PLATAFORMA = _rutas("/plataforma/")
 
 
@@ -177,3 +184,30 @@ def test_mismo_dni_en_dos_colegios_son_cuentas_distintas(client, dos):
     yo_a = client.get("/api/auth/yo", headers=auth("alfa", tok_a)).json()
     yo_b = client.get("/api/auth/yo", headers=auth("beta", tok_b)).json()
     assert yo_a["apellidos"] == "alfa" and yo_b["apellidos"] == "beta"
+
+
+# --- Familias: su propio token, también atado al colegio del Host ------------------
+
+@pytest.mark.parametrize("metodo,ruta", RUTAS_FAMILIA)
+def test_token_familia_de_otro_colegio_da_403(client, db, dos, metodo, ruta):
+    a, b = dos
+    crear_familia(db, a)
+    crear_familia(db, b)  # la misma persona también es apoderada en beta
+    tok = token_familia(client, "alfa")
+    r = client.request(metodo, ruta, headers=auth("beta", tok))
+    assert r.status_code == 403, (metodo, ruta, r.status_code)
+    assert r.json()["detail"] == "El token no corresponde a este colegio"
+
+
+@pytest.mark.parametrize("metodo,ruta", RUTAS_FAMILIA)
+def test_rutas_familia_exigen_token_de_familia(client, db, dos, metodo, ruta):
+    assert client.request(metodo, ruta, headers=host("alfa")).status_code == 401
+    personal = token(client, "alfa")  # el token del personal no sirve como el de un padre
+    assert client.request(metodo, ruta, headers=auth("alfa", personal)).status_code == 401
+
+
+@pytest.mark.parametrize("metodo,ruta", RUTAS_API)
+def test_token_familia_no_entra_a_rutas_del_personal(client, db, dos, metodo, ruta):
+    crear_familia(db, dos[0])
+    tok = token_familia(client, "alfa")
+    assert client.request(metodo, ruta, headers=auth("alfa", tok)).status_code == 401

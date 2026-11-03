@@ -22,7 +22,10 @@ export default defineConfig({
         theme_color: '#1F4E79',
         icons: [{ src: '/icono.svg', sizes: 'any', type: 'image/svg+xml' }],
       },
-      workbox: { navigateFallbackDenylist: [/^\/api/, /^\/plataforma/, /^\/archivos/] },
+      workbox: {
+        navigateFallbackDenylist: [/^\/api/, /^\/plataforma/, /^\/archivos/],
+        importScripts: ['/sw-push.js'],  // avisos push de la familia
+      },
     }),
   ],
   server: {

@@ -23,7 +23,8 @@ RESULTADOS = ("entrada", "salida", "duplicada")
 ESTADOS_ALUMNO = ("presente", "tarde", "falta")
 ESTADOS_PERSONAL = ("presente", "tarde", "falta", "licencia")
 TIPOS_LICENCIA = ("salud", "personal", "vacaciones", "comision", "maternidad", "otro")
-TIPOS_AVISO = ("ingreso", "tarde", "salida", "falta")
+TIPOS_AVISO = ("ingreso", "tarde", "salida", "falta", "cuenta")
+ESTADOS_AVISO = ("pendiente", "enviado", "sin_destinatarios", "descartado", "error")
 
 
 def _en(columna: str, valores: tuple[str, ...]) -> str:
@@ -136,23 +137,31 @@ class LicenciaPersonal(ConColegio, Base):
 
 
 class ColaAviso(ConColegio, Base):
+    """Avisos a familias. De un alumno (ingreso, tarde, salida, falta) o de la cuenta de un
+    apoderado ("cuenta": p. ej. cambió su celular en el colegio)."""
+
     __tablename__ = "cola_aviso"
     __table_args__ = (
         _fk("alumno_id", "alumno", "CASCADE"),
+        _fk("apoderado_id", "apoderado", "CASCADE"),
         UniqueConstraint("colegio_id", "alumno_id", "fecha", "tipo"),
+        UniqueConstraint("colegio_id", "id"),
+        CheckConstraint("(alumno_id IS NULL) <> (apoderado_id IS NULL)", name="un_destino"),
+        CheckConstraint("(tipo = 'cuenta') = (apoderado_id IS NOT NULL)", name="tipo_segun_destino"),
         CheckConstraint(_en("tipo", TIPOS_AVISO), name="tipo_valido"),
-        CheckConstraint("estado IN ('pendiente', 'enviado', 'error')", name="estado_valido"),
+        CheckConstraint(_en("estado", ESTADOS_AVISO), name="estado_valido"),
         # Lo que busca el proceso de envío: pendientes cuyo turno ya llegó.
         Index("ix_cola_aviso_pendientes", "procesar_desde", postgresql_where=text("estado = 'pendiente'")),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     tipo: Mapped[str] = mapped_column(String(10))
-    alumno_id: Mapped[int]
+    alumno_id: Mapped[int | None]
+    apoderado_id: Mapped[int | None]
     fecha: Mapped[date] = mapped_column(Date)
     momento: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     datos: Mapped[dict] = mapped_column(JSONB, default=dict)
-    estado: Mapped[str] = mapped_column(String(10), default="pendiente")
+    estado: Mapped[str] = mapped_column(String(20), default="pendiente")
     intentos: Mapped[int] = mapped_column(default=0)
     procesar_desde: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora_utc)
     procesado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

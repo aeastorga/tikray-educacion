@@ -44,7 +44,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Ingreso colegio={colegio} />} />
       <Route path="/personal" element={<IngresoPersonal colegio={colegio} />} />
-      <Route path="/familia" element={<Familia colegio={colegio} />} />
+      <Route path="/familia/*" element={<Familia colegio={colegio} />} />
       <Route path="/panel/*" element={<PanelColegio colegio={colegio} setColegio={setColegio} />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
