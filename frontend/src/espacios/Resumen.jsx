@@ -74,7 +74,7 @@ function Tablero({ d, puede }) {
         </div>
       )}
       <div className="fila fila-3">
-        {a && <Personal p={a.personal} />}
+        {d.personal && <Personal p={d.personal} />}
         {c && <CuadernoHoy c={c} />}
         <Accesos puede={puede} />
       </div>
@@ -95,7 +95,7 @@ function IngresoDeHoy({ a }) {
   return (
     <section className="caja caja-ingreso" aria-labelledby="t-ingreso">
       <div className="caja-cabeza">
-        <h2 id="t-ingreso">Ingreso de hoy</h2>
+        <h2 id="t-ingreso">Ingreso de hoy{a.solo_sus_secciones && <small className="solo-secciones">Tus secciones</small>}</h2>
         {a.ultima_marcacion && (
           <span className="etiqueta-viva">
             <i aria-hidden="true" />Última marcación {hora12(a.ultima_marcacion.hora)}
@@ -133,26 +133,48 @@ function IngresoDeHoy({ a }) {
 
 function AvisosFamilias({ f, invitar }) {
   const av = f.avisos_hoy
-  const enviados = av.enviado + av.sin_notificaciones + av.error
-  const pct = enviados ? Math.round(100 * av.enviado / enviados) : 0
+  const procesados = av.enviado + av.sin_notificaciones + av.error
+  const pct = procesados ? Math.round(100 * av.enviado / procesados) : 0
   const sinApp = f.apoderados - f.activos
+  const boton = invitar && sinApp > 0 && (
+    <Link to="/panel/familias" className="boton boton-claro"><Send size={18} aria-hidden="true" /> Invitar por WhatsApp</Link>
+  )
+  if (f.con_notificaciones === 0 && av.enviado === 0) {
+    return (
+      <section className="caja caja-oscura" aria-labelledby="t-avisos">
+        <h2 id="t-avisos">Avisos a familias</h2>
+        <p className="avisos-vacio">Ningún apoderado tiene los avisos activos todavía.</p>
+        <p className="avisos-nota">Cuando activen la app en su celular, aquí verá cuántos avisos les llegan cada día.</p>
+        <div className="avisos-sin-app">
+          <p><b>{sinApp}</b> {sinApp === 1 ? 'apoderado sin la app' : 'apoderados sin la app'}
+            {f.pendientes > 0 && <> · {f.pendientes} esperan aprobación</>}</p>
+          {boton}
+        </div>
+      </section>
+    )
+  }
   return (
     <section className="caja caja-oscura" aria-labelledby="t-avisos">
       <h2 id="t-avisos">Avisos a familias</h2>
-      <p className="avisos-cifra"><b>{av.enviado}</b> <span>de {enviados} entregados hoy</span></p>
-      <div className="barra-avance" role="img" aria-label={`${pct} % de avisos entregados`}><span style={{ width: `${pct}%` }} /></div>
-      <ul className="avisos-detalle">
-        {av.sin_notificaciones > 0 && <li>{av.sin_notificaciones} sin notificaciones activas</li>}
-        {av.error > 0 && <li className="avisos-error">{av.error} fallaron</li>}
-        {f.avisos_en_cola > 0 && <li>{f.avisos_en_cola} en cola</li>}
-        <li>{f.con_notificaciones} apoderados reciben notificaciones</li>
-      </ul>
+      <p className="avisos-cifra"><b>{av.enviado}</b> <span>avisos entregados hoy</span></p>
+      <div className="barra-avance" role="img" aria-label={`${pct} % de los avisos de hoy llegaron a un celular`}>
+        <span style={{ width: `${pct}%` }} />
+      </div>
+      <dl className="avisos-cifras">
+        <div><dt>Entregados</dt><dd>{av.enviado}</dd></div>
+        <div><dt>Por enviar</dt><dd>{f.avisos_en_cola}</dd></div>
+        <div><dt>Sin app</dt><dd>{sinApp}</dd></div>
+      </dl>
+      {(av.sin_notificaciones > 0 || av.error > 0) && (
+        <ul className="avisos-detalle">
+          {av.sin_notificaciones > 0 && <li>{av.sin_notificaciones} no llegaron: el apoderado no tiene las notificaciones activas</li>}
+          {av.error > 0 && <li className="avisos-error">{av.error} fallaron</li>}
+        </ul>
+      )}
       <div className="avisos-sin-app">
-        <p><b>{sinApp}</b> {sinApp === 1 ? 'apoderado no activó' : 'apoderados no activaron'} la app
+        <p>{f.con_notificaciones} {f.con_notificaciones === 1 ? 'apoderado recibe' : 'apoderados reciben'} los avisos
           {f.pendientes > 0 && <> · {f.pendientes} esperan aprobación</>}</p>
-        {invitar && sinApp > 0 && (
-          <Link to="/panel/familias" className="boton boton-claro"><Send size={18} aria-hidden="true" /> Invitar por WhatsApp</Link>
-        )}
+        {boton}
       </div>
     </section>
   )

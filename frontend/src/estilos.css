@@ -4,6 +4,9 @@
   --acento-fuerte: #1F4E79;
   --acento-suave: rgba(31, 78, 121, 0.09);
   --acento-medio: rgba(31, 78, 121, 0.18);
+  --acento-luz: #8FB4DA; /* versión clara del acento para texto sobre fondo oscuro (tema oscuro) */
+  --acento-texto: var(--acento-fuerte);   /* texto y enlaces en el color del colegio */
+  --acento-grafico: var(--acento-fuerte); /* anillo y barras: 3:1 o más contra la tarjeta */
   --primario: var(--acento-fuerte);
   --secundario: #F2A900;
 
@@ -27,13 +30,30 @@
   --letra-titulo: "Bricolage Grotesque", "Plus Jakarta Sans", system-ui, sans-serif;
   --letra: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
-  color-scheme: light dark;
+  color-scheme: light;
   font-family: var(--letra);
   -webkit-text-size-adjust: 100%;
 }
 
+:root[data-tema="oscuro"] {
+  color-scheme: dark;
+  --acento-texto: var(--acento-luz); --acento-grafico: var(--acento-luz);
+  --fondo: #0B0F17;
+  --superficie: #131A26;
+  --borde: #243042;
+  --borde-fuerte: #34445C;
+  --texto: #E5E7EB;
+  --tenue: #9CA3AF;
+  --error: #FCA5A5;
+  --tarde-fondo: #422006; --tarde-texto: #FCD34D;
+  --falta-fondo: #450A0A; --falta-texto: #FCA5A5;
+  --just-fondo: #1E1B4B; --just-texto: #C7D2FE;
+  --bien-fondo: #052E16; --bien-texto: #86EFAC;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root[data-tema="auto"] {
+    color-scheme: dark;
+    --acento-texto: var(--acento-luz); --acento-grafico: var(--acento-luz);
     --fondo: #0B0F17;
     --superficie: #131A26;
     --borde: #243042;
@@ -88,18 +108,14 @@ svg { flex: none; }
 .boton.grande { min-height: 52px; padding: 14px 20px; font-size: 1.02rem; }
 .boton.secundario { background: var(--superficie); color: var(--texto); border-color: var(--borde-fuerte); }
 .boton.secundario:hover:not(:disabled) { background: var(--fondo); filter: none; }
-.boton.suave { background: var(--acento-suave); color: var(--acento-fuerte); }
+.boton.suave { background: var(--acento-suave); color: var(--acento-texto); }
 .boton:disabled { opacity: .55; cursor: not-allowed; }
 .enlace {
   display: inline-flex; align-items: center; gap: 6px; min-height: var(--toque); background: none; border: 0;
-  color: var(--acento-fuerte); cursor: pointer; font: inherit; font-weight: 600; padding: 0 6px;
+  color: var(--acento-texto); cursor: pointer; font: inherit; font-weight: 600; padding: 0 6px;
   text-decoration: underline; text-underline-offset: 3px;
 }
-a { color: var(--acento-fuerte); text-underline-offset: 3px; }
-@media (prefers-color-scheme: dark) {
-  .enlace, a { color: color-mix(in srgb, var(--acento) 45%, #fff); }
-  .boton.suave { color: color-mix(in srgb, var(--acento) 45%, #fff); }
-}
+a { color: var(--acento-texto); text-underline-offset: 3px; }
 :focus-visible { outline: 3px solid var(--acento); outline-offset: 2px; }
 .boton-icono {
   display: inline-grid; place-items: center; width: var(--toque); height: var(--toque); border-radius: var(--radio-chico);
@@ -147,6 +163,10 @@ tr:last-child td { border-bottom: 0; }
 .fila-form > input, .fila-form > select { flex: 1 1 160px; }
 .lista { padding-left: 18px; line-height: 1.9; }
 .acciones { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+td.fecha, td time { white-space: nowrap; }
+/* En tablas: las acciones una debajo de otra, alineadas a la izquierda con el título de la columna. */
+td > .acciones { flex-direction: column; align-items: flex-start; gap: 0; flex-wrap: nowrap; }
+td > .acciones .enlace { margin-left: -6px; white-space: nowrap; }
 .aviso {
   background: var(--superficie); border: 1px solid var(--borde); border-left: 4px solid var(--acento);
   border-radius: var(--radio-chico); padding: 14px 16px; margin-bottom: 16px;
@@ -169,6 +189,10 @@ tr.clic:hover td { background: var(--acento-suave); }
 .solo-lectores {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0;
 }
+/* Una tabla oculta igual ocupa su alto (las tablas no respetan height): se ancla arriba y se recorta con su
+   contenedor para que no alargue la página. */
+table.solo-lectores { top: 0; left: 0; }
+.caja:has(> table.solo-lectores), .caja:has(table.solo-lectores) { position: relative; overflow: hidden; }
 .icono-texto { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; }
 /* En celular cada tabla se desliza sola; la página nunca. */
 @media (max-width: 760px) {

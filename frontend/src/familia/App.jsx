@@ -6,6 +6,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom'
 import { api, CLAVE_TOKEN_FAMILIA, guardarToken, leerToken } from '../api.js'
+import { Apariencia } from '../Apariencia.jsx'
 import { Logo } from '../espacios/Acceso.jsx'
 import { hora12, LIMA, saludo } from '../tema.js'
 import { ListaCuaderno } from './Cuaderno.jsx'
@@ -354,6 +355,9 @@ export function Perfil() {
       {yo && <Notificaciones yo={yo} mostrarActivas />}
       {yo && <Ajustes yo={yo} alCambiar={() => api('/api/familia/yo').then(setYo)} />}
       <section className="tarjeta-app">
+        <Apariencia />
+      </section>
+      <section className="tarjeta-app">
         <h2>Avisos recibidos</h2>
         {avisos.length === 0 ? <p className="tenue">Aún no hay avisos.</p> : (
           <ul className="lista-avisos">
@@ -485,5 +489,5 @@ function Ajustes({ yo, alCambiar }) {
 
 export function fechaHora(iso) {
   return new Date(iso).toLocaleString('es-PE', { timeZone: LIMA, day: 'numeric', month: 'short',
-    hour: 'numeric', minute: '2-digit' })
+    hour: 'numeric', minute: '2-digit' }).replace(/\s/g, '\u00A0')
 }

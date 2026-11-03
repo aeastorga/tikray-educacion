@@ -285,26 +285,56 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
     return res
 
 
+def hora_escolar(rnd: random.Random, dia: date, ahora: datetime) -> datetime:
+    """Una hora entre 7:30 y 16:30 de Lima ese día, nunca en el futuro (en UTC)."""
+    ahora = ahora.astimezone(LIMA)
+    inicio = datetime.combine(dia, time(7, 30), LIMA)
+    fin = min(datetime.combine(dia, time(16, 30), LIMA), ahora - timedelta(minutes=5))
+    if fin <= inicio:  # hoy todavía no empiezan las clases: la tarde anterior
+        dia -= timedelta(days=1)
+        inicio, fin = datetime.combine(dia, time(13, 0), LIMA), datetime.combine(dia, time(16, 30), LIMA)
+    return (inicio + timedelta(seconds=rnd.randint(0, int((fin - inicio).total_seconds())))).astimezone(UTC)
+
+
+def hora_familia(rnd: random.Random, desde: datetime, ahora: datetime) -> datetime | None:
+    """Cuándo lo vio el apoderado: después de `desde`, entre 6:00 y 22:00 de Lima, y no en el futuro.
+    None si todavía no le daría tiempo."""
+    v = (desde + timedelta(minutes=rnd.randint(20, 30 * 60))).astimezone(LIMA)
+    if v.hour < 6:
+        v = v.replace(hour=6, minute=rnd.randint(15, 59))
+    elif v.hour >= 22:
+        v = v.replace(hour=21, minute=rnd.randint(0, 50))
+    if v < desde:
+        v = desde + timedelta(minutes=rnd.randint(5, 60))
+    if v > ahora:
+        return None
+    return v.astimezone(UTC)
+
+
 def _cuaderno(db, rnd, cid, director, docentes, secciones, alumnos, dias, hoy) -> None:
     from app import cuaderno
+
+    ahora = datetime.now(UTC)
 
     def entrada(autor: Usuario | None, alumnos_ids: list[int], firmar: float = 0.0, apoderado_autor=None,
                 hace_dias: int = 0, **campos) -> EntradaCuaderno:
         campos.setdefault("alcance", "alumno")
         e = EntradaCuaderno(colegio_id=cid, creado_por_id=autor.id if autor else None,
                             apoderado_autor_id=apoderado_autor, **campos)
-        e.creado_en = datetime.now(UTC) - timedelta(days=hace_dias, minutes=rnd.randint(0, 600))
+        e.creado_en = hora_escolar(rnd, hoy - timedelta(days=hace_dias), ahora)
         db.add(e)
         db.flush()
         cuaderno.guardar_destinos(db, e, alumnos_ids)
         if firmar or apoderado_autor:
             for d in db.scalars(select(DestinoCuaderno).where(DestinoCuaderno.colegio_id == cid,
                                                               DestinoCuaderno.entrada_id == e.id)):
-                if d.apoderado_id == apoderado_autor or rnd.random() < firmar:
-                    d.visto_en = e.creado_en + timedelta(hours=rnd.randint(1, 30))
+                if d.apoderado_id == apoderado_autor:
+                    d.visto_en = e.creado_en
+                elif rnd.random() < firmar:
+                    d.visto_en = hora_familia(rnd, e.creado_en, ahora)
                     d.firmado_en = d.visto_en if cuaderno.requiere_firma(e) else None
                 elif rnd.random() < 0.3:
-                    d.visto_en = e.creado_en + timedelta(hours=rnd.randint(1, 30))
+                    d.visto_en = hora_familia(rnd, e.creado_en, ahora)
         return e
 
     todos = [a.id for a, _ in alumnos]
@@ -341,7 +371,7 @@ def _cuaderno(db, rnd, cid, director, docentes, secciones, alumnos, dias, hoy) -
                     alumno_id=alumno_id, desde=fecha, hasta=fecha, estado=estado, titulo="Estuvo con fiebre",
                     cuerpo="Adjunto la receta del centro de salud.", hace_dias=(hoy - fecha).days)
         if estado == "aprobada":
-            e.resuelto_por_id, e.resuelto_en = director.id, e.creado_en + timedelta(hours=3)
+            e.resuelto_por_id, e.resuelto_en = director.id, min(e.creado_en + timedelta(hours=3), ahora)
             cuaderno.aplicar_justificacion(db, e)
     # Permisos de salida para hoy: uno aprobado y uno por aprobar (la portería los ve al marcar la salida).
     for (a, s), estado, hora in zip(rnd.sample(alumnos, 2), ("aprobada", "pendiente"), (time(10, 30), time(11, 0))):
@@ -381,5 +411,7 @@ def crear_o_reiniciar(db: Session, subdominio: str = "demo", nombre: str = "Cole
         borrar_datos(db, colegio)
         db.flush()
     res = sembrar(db, colegio, alumnos_por_seccion)
+    from app.demo_dia import simular_dia
+    simular_dia(db, colegio)
     db.commit()
     return res

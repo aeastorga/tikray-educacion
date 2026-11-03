@@ -360,6 +360,9 @@ def bucle_faltas(parar: threading.Event, cada: int = 60) -> None:
         ahora = datetime.now(LIMA)
         try:
             with get_sessionmaker()() as db:
+                from app.demo_dia import simular_demos
+                simular_demos(db, ahora)  # solo colegios demo: el día avanza solo
+                db.commit()
                 for fecha, desde, hasta in ventanas_faltas(anterior, ahora):
                     marcar_faltas(db, fecha, hasta, desde=desde)
                 db.commit()

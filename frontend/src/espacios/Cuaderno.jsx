@@ -15,7 +15,7 @@ export const FIRMA = { comunicado: 'Firmó', incidencia: 'Enterado', citacion: '
 
 export function fechaHora(iso) {
   return iso ? new Date(iso).toLocaleString('es-PE', { timeZone: 'America/Lima', day: 'numeric', month: 'short',
-    hour: '2-digit', minute: '2-digit' }) : ''
+    hour: '2-digit', minute: '2-digit' }).replace(/\s/g, '\u00A0') : ''  // una sola línea en las tablas
 }
 
 export function fechaCorta(iso) {
@@ -100,7 +100,7 @@ function Bandeja() {
           <tbody>
             {lista.map((e) => (
               <tr key={e.id} className="clic" onClick={() => navegar(`/panel/cuaderno/${e.id}`)}>
-                <td className="tenue">{fechaHora(e.creado_en)}</td>
+                <td className="tenue fecha">{fechaHora(e.creado_en)}</td>
                 <td>
                   <span className={`tipo-cuaderno ${e.tipo}`}>{TIPOS[e.tipo]}</span>
                   {e.estado && <span className={`estado-cuaderno ${e.estado}`}>{ESTADOS[e.estado]}</span>}

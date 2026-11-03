@@ -42,10 +42,15 @@
 .porteria-sesion .boton { display: inline-block; text-decoration: none; padding: 6px 12px; }
 .marca-tardia { font-size: .8rem; color: var(--tenue); font-style: italic; }
 
+[data-tema="oscuro"] .estado.presente { background: #14532d; color: #dcfce7; }
+[data-tema="oscuro"] .estado.tarde { background: #78350f; color: #fef3c7; }
+[data-tema="oscuro"] .estado.falta { background: #7f1d1d; color: #fee2e2; }
+[data-tema="oscuro"] .estado.licencia { background: #1e3a8a; color: #dbeafe; }
+[data-tema="oscuro"] .estado.justificada { background: #0c4a6e; color: #e0f2fe; }
 @media (prefers-color-scheme: dark) {
-  .estado.presente { background: #14532d; color: #dcfce7; }
-  .estado.tarde { background: #78350f; color: #fef3c7; }
-  .estado.falta { background: #7f1d1d; color: #fee2e2; }
-  .estado.licencia { background: #1e3a8a; color: #dbeafe; }
-  .estado.justificada { background: #0c4a6e; color: #e0f2fe; }
+  [data-tema="auto"] .estado.presente { background: #14532d; color: #dcfce7; }
+  [data-tema="auto"] .estado.tarde { background: #78350f; color: #fef3c7; }
+  [data-tema="auto"] .estado.falta { background: #7f1d1d; color: #fee2e2; }
+  [data-tema="auto"] .estado.licencia { background: #1e3a8a; color: #dbeafe; }
+  [data-tema="auto"] .estado.justificada { background: #0c4a6e; color: #e0f2fe; }
 }

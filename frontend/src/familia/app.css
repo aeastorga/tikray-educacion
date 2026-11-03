@@ -106,7 +106,8 @@
 
 .perfil { display: flex; gap: 14px; align-items: center; }
 .perfil-iniciales { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--acento-fuerte); color: #fff; font-family: var(--letra-titulo); font-weight: 800; font-size: 1.3rem; }
-.form-pin { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.form-pin { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.form-pin label { min-width: 0; }
 .form-pin .boton { grid-column: 1 / -1; }
 .tarjeta-app > .boton + .form-pin { margin-top: 14px; }
 
@@ -129,6 +130,7 @@
 @media (min-width: 640px) {
   .barra-inferior { left: 50%; right: auto; width: 560px; transform: translateX(-50%); border: 1px solid var(--borde); border-bottom: 0; border-radius: 20px 20px 0 0; }
 }
+[data-tema="oscuro"] .barra-inferior a.active, [data-tema="oscuro"] .chip-estado.a-tiempo, [data-tema="oscuro"] .caja-estado.a-tiempo, [data-tema="oscuro"] .por-firmar-icono { color: var(--acento-luz); }
 @media (prefers-color-scheme: dark) {
-  .barra-inferior a.active, .chip-estado.a-tiempo, .caja-estado.a-tiempo, .por-firmar-icono { color: color-mix(in srgb, var(--acento) 45%, #fff); }
+  [data-tema="auto"] .barra-inferior a.active, [data-tema="auto"] .chip-estado.a-tiempo, [data-tema="auto"] .caja-estado.a-tiempo, [data-tema="auto"] .por-firmar-icono { color: var(--acento-luz); }
 }

@@ -1,12 +1,15 @@
 /* Panel del colegio: menú lateral de 264 px (oscuro o claro, lo elige el director). */
 
-.marco { display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 100dvh; }
-.marco > .contenido { width: 100%; }
+/* El menú queda fijo a la izquierda, de arriba abajo, con su propio scroll; el contenido empieza justo
+   al lado (sin hueco) y se limita a un ancho cómodo de lectura. */
+.marco { min-height: 100dvh; padding-left: 264px; }
+.marco > .contenido { width: 100%; max-width: 1400px; margin: 0; padding: 28px 32px; }
 
 .menu {
   --menu-fondo: #111827; --menu-texto: #E5E7EB; --menu-titulo: #9CA3AF; --menu-hover: rgba(255, 255, 255, .06);
   --menu-borde: rgba(255, 255, 255, .08); --menu-tenue: #9CA3AF;
-  position: sticky; top: 0; height: 100dvh; overflow-y: auto; display: flex; flex-direction: column;
+  position: fixed; left: 0; top: 0; bottom: 0; width: 264px; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; scrollbar-width: thin; scrollbar-color: var(--menu-borde) transparent;
   background: var(--menu-fondo); color: var(--menu-texto); padding: 20px 14px 16px; z-index: 30;
 }
 .menu.claro {
@@ -14,8 +17,9 @@
   --menu-borde: #E3E8EF; --menu-tenue: #5B6474;
   border-right: 1px solid var(--borde);
 }
+[data-tema="oscuro"] .menu.claro { --menu-fondo: #131A26; --menu-texto: #E5E7EB; --menu-titulo: #9CA3AF; --menu-hover: rgba(255, 255, 255, .05); --menu-borde: #243042; --menu-tenue: #9CA3AF; }
 @media (prefers-color-scheme: dark) {
-  .menu.claro { --menu-fondo: #131A26; --menu-texto: #E5E7EB; --menu-titulo: #9CA3AF; --menu-hover: rgba(255, 255, 255, .05); --menu-borde: #243042; --menu-tenue: #9CA3AF; }
+  [data-tema="auto"] .menu.claro { --menu-fondo: #131A26; --menu-texto: #E5E7EB; --menu-titulo: #9CA3AF; --menu-hover: rgba(255, 255, 255, .05); --menu-borde: #243042; --menu-tenue: #9CA3AF; }
 }
 
 .menu-colegio { display: flex; align-items: center; gap: 12px; padding: 0 6px 18px; border-bottom: 1px solid var(--menu-borde); }
@@ -65,7 +69,8 @@
 /* Celular y tableta: el menú se oculta y se abre con el botón. */
 .barra-movil, .menu-fondo { display: none; }
 @media (max-width: 900px) {
-  .marco { grid-template-columns: minmax(0, 1fr); }
+  .marco { padding-left: 0; }
+  .marco > .contenido { padding: 16px; }
   .barra-movil {
     display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 20; padding: 8px 16px;
     background: var(--superficie); border-bottom: 1px solid var(--borde);
@@ -73,7 +78,7 @@
   .barra-movil-logo { width: 36px; height: 36px; border-radius: 10px; font-size: .8rem; }
   .barra-movil-nombre { font-family: var(--letra-titulo); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .menu {
-    position: fixed; left: 0; top: 0; bottom: 0; width: min(300px, 86vw); height: auto; transform: translateX(-100%);
+    width: min(300px, 86vw); transform: translateX(-100%);
     transition: transform .2s ease-out; visibility: hidden;
   }
   .menu.abierto { transform: none; visibility: visible; }
