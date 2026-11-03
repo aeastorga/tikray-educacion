@@ -202,7 +202,7 @@ function Detalle({ editar }) {
       <h2>{e.titulo}</h2>
       {programadoPendiente(e) && (
         <div className="aviso aviso-programado">
-          <p className="sin-margen"><b>Programado para el {fechaHora(e.programado_para)}.</b> Hasta entonces las familias
+          <p className="sin-margen"><b>Programado para el {fechaHora(e.programado_para)}</b> Hasta entonces las familias
             no lo ven ni reciben el aviso.</p>
           {editar && <button className="boton secundario" onClick={cancelar}>Cancelar envío</button>}
         </div>
