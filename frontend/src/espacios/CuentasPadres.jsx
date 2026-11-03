@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, Route, Routes, useParams } from 'react-router-dom'
 import { api } from '../api.js'
@@ -196,7 +197,7 @@ function Detalle() {
   return (
     <div className="detalle-apoderado">
       <div>
-        <Link to=".." relative="path" className="enlace">← Cuentas de padres</Link>
+        <Link to=".." relative="path" className="enlace"><ArrowLeft size={18} aria-hidden="true" /> Cuentas de padres</Link>
         <h2>{d.nombre}</h2>
         <p>
           <Etiqueta valor={d.estado} textos={ESTADO} /> <Etiqueta valor={d.notificaciones} textos={NOTIFICACIONES} />

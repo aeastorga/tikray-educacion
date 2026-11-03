@@ -6,11 +6,11 @@ import IngresoPersonal from './espacios/IngresoPersonal.jsx'
 import Familia from './espacios/Familia.jsx'
 import PanelColegio from './espacios/PanelColegio.jsx'
 import Plataforma from './espacios/Plataforma.jsx'
+import { Ayuda, Privacidad } from './espacios/Paginas.jsx'
+import { aplicarTema } from './tema.js'
 
 export function aplicarImagen(imagen) {
-  const raiz = document.documentElement.style
-  raiz.setProperty('--primario', imagen.color_primario)
-  raiz.setProperty('--secundario', imagen.color_secundario)
+  aplicarTema(imagen)
   document.title = imagen.nombre
 }
 
@@ -44,6 +44,8 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Ingreso colegio={colegio} />} />
       <Route path="/personal" element={<IngresoPersonal colegio={colegio} />} />
+      <Route path="/privacidad" element={<Privacidad colegio={colegio} />} />
+      <Route path="/ayuda" element={<Ayuda colegio={colegio} />} />
       <Route path="/familia/*" element={<Familia colegio={colegio} />} />
       <Route path="/panel/*" element={<PanelColegio colegio={colegio} setColegio={setColegio} />} />
       <Route path="*" element={<Navigate to="/" replace />} />

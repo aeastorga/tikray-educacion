@@ -8,12 +8,12 @@ todos los colegios donde está activa; el acceso a cada colegio lo decide ese co
 
 import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, delete, select, update
+from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from webauthn import (generate_authentication_options, generate_registration_options, options_to_json,
@@ -28,9 +28,8 @@ from app.db import get_db
 from app.deps import SesionFamilia, _host, colegio_del_host, familia_sesion
 from app.fechas import hoy_lima
 from app.models import (Alumno, AlumnoApoderado, AnioEscolar, Apoderado, AsistenciaAlumno, Colegio,
-                        ConsentimientoApoderado, CuentaFamilia, EntregaAviso, Grado, InvitacionFamilia, Matricula,
-                        PasskeyFamilia,
-                        RetoUsado, Seccion, SuscripcionPush)
+                        ConsentimientoApoderado, CuentaFamilia, EntregaAviso, Grado, InvitacionFamilia, Marcacion,
+                        Matricula, PasskeyFamilia, RetoUsado, Seccion, SuscripcionPush, Turno)
 from app.proteccion import FALLOS_IP, ip_cliente, permitir_intento, registrar_fallo
 from app.routers.estructura import es_dia_lectivo
 from app.seguridad import emitir_token, hashear_clave, leer_token, verificar_clave, verificar_clave_o_simular
@@ -365,34 +364,75 @@ def _apoderados_activos(db: Session, cuenta_id: int):
 def hijos(s: SesionFamilia = Depends(familia_sesion), db: Session = Depends(get_db)) -> dict:
     """La tarjeta en vivo de cada hijo: cómo va su día. De todos los colegios donde la cuenta está activa."""
     hoy = hoy_lima()
+    inicio_mes = hoy.replace(day=1)
     tarjetas = []
     for ap, colegio in _apoderados_activos(db, s.cuenta.id):
         anio = (select(AnioEscolar.id).where(AnioEscolar.colegio_id == colegio.id, AnioEscolar.activo)
                 .scalar_subquery())
         filas = db.execute(
-            select(Alumno, Grado.nombre, Seccion.nombre, AsistenciaAlumno)
+            select(Alumno, Grado.nombre, Seccion.nombre, AsistenciaAlumno, Turno.hora_salida)
             .select_from(AlumnoApoderado)
             .join(Alumno, and_(Alumno.colegio_id == AlumnoApoderado.colegio_id, Alumno.id == AlumnoApoderado.alumno_id))
             .outerjoin(Matricula, and_(Matricula.colegio_id == Alumno.colegio_id, Matricula.alumno_id == Alumno.id,
                                        Matricula.anio_id == anio))
             .outerjoin(Seccion, and_(Seccion.colegio_id == Matricula.colegio_id, Seccion.id == Matricula.seccion_id))
             .outerjoin(Grado, and_(Grado.colegio_id == Seccion.colegio_id, Grado.id == Seccion.grado_id))
+            .outerjoin(Turno, and_(Turno.colegio_id == Seccion.colegio_id, Turno.id == Seccion.turno_id))
             .outerjoin(AsistenciaAlumno, and_(AsistenciaAlumno.colegio_id == Alumno.colegio_id,
                                               AsistenciaAlumno.alumno_id == Alumno.id, AsistenciaAlumno.fecha == hoy))
             .where(AlumnoApoderado.colegio_id == colegio.id, AlumnoApoderado.apoderado_id == ap.id, Alumno.activo)
-            .order_by(Alumno.nombres))
+            .order_by(Alumno.nombres)).all()
+        ids = [a.id for a, *_ in filas]
+        # Tardanzas del mes y la puerta (equipo) por donde entró hoy, en dos consultas por colegio.
+        tardanzas = dict(db.execute(
+            select(AsistenciaAlumno.alumno_id, func.count())
+            .where(AsistenciaAlumno.colegio_id == colegio.id, AsistenciaAlumno.alumno_id.in_(ids),
+                   AsistenciaAlumno.fecha.between(inicio_mes, hoy), AsistenciaAlumno.estado == "tarde")
+            .group_by(AsistenciaAlumno.alumno_id)).all()) if ids else {}
+        puertas = {(m.alumno_id, m.momento): m.equipo for m in db.scalars(
+            select(Marcacion).where(Marcacion.colegio_id == colegio.id, Marcacion.alumno_id.in_(ids),
+                                    Marcacion.fecha == hoy, Marcacion.resultado != "duplicada"))} if ids else {}
         lectivo = es_dia_lectivo(db, colegio.id, hoy)
-        for a, grado, seccion, dia in filas:
+        for a, grado, seccion, dia, hora_salida in filas:
             tarjetas.append({
                 "alumno_id": a.id, "colegio": colegio.nombre, "nombres": a.nombres, "apellidos": a.apellidos,
                 "seccion": f"{grado} {seccion}" if seccion else None, "lectivo": lectivo,
                 "estado": dia.estado if dia else None, "entrada": asistencia.hora(dia.entrada) if dia else None,
                 "salida": asistencia.hora(dia.salida) if dia else None,
                 "minutos_tarde": dia.minutos_tarde if dia else 0,
+                "puerta": puertas.get((a.id, dia.entrada)) if dia and dia.entrada else None,
+                "hora_salida": hora_salida.strftime("%H:%M") if hora_salida else None,
+                "tardanzas_mes": tardanzas.get(a.id, 0),
             })
     pendientes = db.scalars(select(Colegio.nombre).join(Apoderado, Apoderado.colegio_id == Colegio.id)
                             .where(Apoderado.cuenta_id == s.cuenta.id, Apoderado.estado_acceso == "pendiente")).all()
     return {"fecha": hoy.isoformat(), "hijos": tarjetas, "pendientes_aprobacion": pendientes}
+
+
+@privado.get("/hijos/{alumno_id}/asistencia")
+def asistencia_del_mes(alumno_id: int, mes: str | None = Query(None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+                       s: SesionFamilia = Depends(familia_sesion), db: Session = Depends(get_db)) -> dict:
+    """Los días del mes de un hijo. Solo de un alumno vinculado a esta cuenta en un colegio donde está activa."""
+    activos = {ap.id: c for ap, c in _apoderados_activos(db, s.cuenta.id)}
+    vinculo = db.execute(select(AlumnoApoderado.colegio_id).where(
+        AlumnoApoderado.apoderado_id.in_(activos), AlumnoApoderado.alumno_id == alumno_id)).first() if activos else None
+    if vinculo is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Alumno no encontrado")
+    cid = vinculo[0]
+    hoy = hoy_lima()
+    inicio = date.fromisoformat(f"{mes}-01") if mes else hoy.replace(day=1)
+    fin = min((inicio + timedelta(days=32)).replace(day=1) - timedelta(days=1), hoy)
+    dias = db.scalars(select(AsistenciaAlumno).where(
+        AsistenciaAlumno.colegio_id == cid, AsistenciaAlumno.alumno_id == alumno_id,
+        AsistenciaAlumno.fecha.between(inicio, fin)).order_by(AsistenciaAlumno.fecha.desc())).all()
+    conteo = {k: 0 for k in ("presente", "tarde", "falta", "justificada")}
+    for d in dias:
+        conteo[d.estado] = conteo.get(d.estado, 0) + 1
+    return {
+        "mes": inicio.strftime("%Y-%m"), "resumen": conteo,
+        "dias": [{"fecha": d.fecha.isoformat(), "estado": d.estado, "entrada": asistencia.hora(d.entrada),
+                  "salida": asistencia.hora(d.salida), "minutos_tarde": d.minutos_tarde} for d in dias],
+    }
 
 
 @privado.get("/avisos")

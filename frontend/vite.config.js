@@ -25,6 +25,8 @@ export default defineConfig({
       workbox: {
         navigateFallbackDenylist: [/^\/api/, /^\/plataforma/, /^\/archivos/],
         importScripts: ['/sw-push.js'],  // avisos push de la familia
+        // Las fuentes van en el precache: la portería se ve igual sin internet desde el primer uso.
+        globPatterns: ['**/*.{js,css,html,svg,woff2}'],
       },
     }),
   ],

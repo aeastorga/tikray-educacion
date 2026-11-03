@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 import { api, descargar, guardarArchivo } from '../api.js'
@@ -322,7 +323,8 @@ function Alumnos({ editar }) {
   const [secciones] = useCarga('/api/padron/secciones')
   const [filtro, setFiltro] = useState({ q: '', seccion_id: '' })
   const [datos, setDatos] = useState(null)
-  const [abierto, setAbierto] = useState(null)
+  // Desde el buscador del inicio: /panel/padron?alumno=<id> abre su ficha.
+  const [abierto, setAbierto] = useState(() => Number(new URLSearchParams(window.location.search).get('alumno')) || null)
   const [nuevo, setNuevo] = useState(false)
   const [error, setError] = useState(null)
 
@@ -460,7 +462,7 @@ function FichaAlumno({ id, editar, secciones, cerrar }) {
 
   return (
     <div>
-      <button className="enlace" onClick={cerrar}>← Volver a la lista</button>
+      <button className="enlace" onClick={cerrar}><ArrowLeft size={18} aria-hidden="true" /> Volver a la lista</button>
       <h2>{a.apellidos}, {a.nombres}</h2>
       <p>
         {a.tipo_documento} {a.numero_documento}

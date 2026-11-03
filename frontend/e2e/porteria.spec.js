@@ -100,7 +100,8 @@ test('cerrar sesión borra el padrón del celular pero no las pendientes', async
   await expect(page.getByText('1 por enviar')).toBeVisible()
   expect(await almacen(page)).toEqual({ padron: true, pendientes: 1 })
 
-  await page.getByRole('button', { name: 'Salir' }).click()
+  await page.getByRole('button', { name: 'Abrir menú' }).click()
+  await page.getByRole('button', { name: 'Cerrar sesión' }).click()
   await expect(page.getByRole('link', { name: 'Soy personal del colegio' })).toBeVisible()
   await expect.poll(() => almacen(page)).toEqual({ padron: false, pendientes: 1 })
 

@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { api, descargar } from '../api.js'
@@ -162,7 +163,7 @@ function EnVivo({ colegio, editar }) {
 
   return (
     <div className="reunion">
-      <p><Link to="/panel/reunion" className="enlace">← Reuniones</Link></p>
+      <p><Link to="/panel/reunion" className="enlace"><ArrowLeft size={18} aria-hidden="true" /> Reuniones</Link></p>
       <h2>{r.titulo} · {r.seccion}</h2>
       <p className="tenue">
         <span className={`etiqueta ${r.estado}`}>{r.estado}</span>{' '}

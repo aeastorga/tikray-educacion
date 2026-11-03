@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { ArrowLeft, Check, MessageCircle, Paperclip } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api.js'
 import { Adjuntos, Detalles, fechaHora, TIPOS } from '../espacios/Cuaderno.jsx'
@@ -50,8 +51,8 @@ export function ListaCuaderno({ recargar }) {
                   {' '}· {e.alumnos.join(', ')} · {fechaHora(e.creado_en)}
                   {e.estado && ` · ${e.estado === 'pendiente' ? 'por aprobar' : e.estado}`}
                   {e.pide_firma && !e.firmado_en && ' · falta tu firma'}
-                  {e.respuestas > 0 && ` · 💬 ${e.respuestas}`}
-                  {e.adjuntos > 0 && ` · 📎 ${e.adjuntos}`}
+                  {e.respuestas > 0 && <span className="icono-texto"> · <MessageCircle size={14} aria-label="respuestas" /> {e.respuestas}</span>}
+                  {e.adjuntos > 0 && <span className="icono-texto"> · <Paperclip size={14} aria-label="adjuntos" /> {e.adjuntos}</span>}
                 </span>
               </Link>
             </li>
@@ -94,7 +95,7 @@ export function DetalleCuaderno() {
 
   return (
     <main className="familia-contenido cuaderno-detalle">
-      <Link to="/familia" className="enlace">← Volver</Link>
+      <Link to="/familia/cuaderno" className="enlace acceso-volver"><ArrowLeft size={18} aria-hidden="true" /> Volver</Link>
       {error && <p className="error">{error}</p>}
       {e && <>
         <p className="tenue">
@@ -106,7 +107,7 @@ export function DetalleCuaderno() {
         {e.cuerpo && <p className="cuaderno-cuerpo">{e.cuerpo}</p>}
         <Adjuntos lista={e.adjuntos} ruta="/api/familia/cuaderno/adjuntos" />
         {e.pide_firma && (e.firmado_en
-          ? <p className="firmado">✓ {FIRMADO[e.tipo]} el {fechaHora(e.firmado_en)}</p>
+          ? <p className="firmado icono-texto"><Check size={18} aria-hidden="true" /> {FIRMADO[e.tipo]} el {fechaHora(e.firmado_en)}</p>
           : <button className="boton grande" disabled={enviando} onClick={firmar}>{BOTON_FIRMA[e.tipo]}</button>)}
         {e.tipo === 'citacion' && !e.firmado_en && (
           <p className="tenue pequeno">¿No puedes asistir? Respóndele al colegio aquí abajo.</p>
@@ -175,7 +176,7 @@ export function PedidoCuaderno() {
 
   return (
     <main className="familia-contenido">
-      <Link to="/familia" className="enlace">← Volver</Link>
+      <Link to="/familia/cuaderno" className="enlace acceso-volver"><ArrowLeft size={18} aria-hidden="true" /> Volver</Link>
       <form className="tarjeta ancho" onSubmit={enviar}>
         <h2>{justificacion ? 'Justificar una falta' : 'Pedir permiso de salida'}</h2>
         {hijos && hijos.length > 1 && (

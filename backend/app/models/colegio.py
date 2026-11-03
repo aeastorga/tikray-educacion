@@ -30,6 +30,8 @@ class Colegio(Base):
     logo_clave: Mapped[str | None] = mapped_column(String(300))
     color_primario: Mapped[str] = mapped_column(String(7), default="#1F4E79")
     color_secundario: Mapped[str] = mapped_column(String(7), default="#F2A900")
+    # Menú lateral del panel: oscuro (por defecto) o claro. Lo elige el director.
+    menu_claro: Mapped[bool] = mapped_column(default=False, server_default="false")
     estado: Mapped[str] = mapped_column(String(12), default="activo")
     # Último día con acceso (fecha de Lima). Vacío = sin vencimiento.
     vence_en: Mapped[date | None]

@@ -22,18 +22,20 @@ class Imagen(BaseModel):
     logo_url: str | None
     color_primario: str
     color_secundario: str
+    menu_claro: bool
 
 
 class CambioImagen(BaseModel):
     color_primario: str = Field(pattern=COLOR)
     color_secundario: str = Field(pattern=COLOR)
+    menu_claro: bool | None = None  # sin enviar: queda como está
 
 
 def _imagen(c: Colegio) -> Imagen:
     return Imagen(
         nombre=c.nombre,
         logo_url=get_almacenamiento().url(c.logo_clave) if c.logo_clave else None,
-        color_primario=c.color_primario, color_secundario=c.color_secundario,
+        color_primario=c.color_primario, color_secundario=c.color_secundario, menu_claro=c.menu_claro,
     )
 
 
@@ -62,6 +64,8 @@ def cambiar_imagen(
 ) -> Imagen:
     s.colegio.color_primario = datos.color_primario.upper()
     s.colegio.color_secundario = datos.color_secundario.upper()
+    if datos.menu_claro is not None:
+        s.colegio.menu_claro = datos.menu_claro
     db.commit()
     return _imagen(s.colegio)
 

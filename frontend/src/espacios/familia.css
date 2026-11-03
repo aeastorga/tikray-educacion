@@ -1,49 +1,19 @@
 /* Espacio de la familia (celular primero) y panel "Cuentas de padres". */
 
-.familia > .cabecera { background: var(--primario); color: #fff; padding: 12px 16px; }
-.familia > .cabecera .enlace { color: #fff; }
-.familia .logo-iniciales { background: var(--secundario); }
 .familia-contenido { padding: 16px; max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
 .familia-contenido h2 { margin: 12px 0 0; }
 .pequeno { font-size: .85rem; margin: 0; }
 
-.hijos { display: grid; gap: 12px; }
-.hijo {
-  background: var(--superficie); border: 1px solid var(--borde); border-left: 6px solid var(--borde);
-  border-radius: 12px; padding: 14px 16px;
-}
-.hijo h3 { margin: 0; font-size: 1.05rem; }
-.hijo p { margin: 4px 0 0; }
-.estado-hijo { font-size: 1.15rem; font-weight: 600; margin-top: 10px !important; }
-.hijo.presente { border-left-color: #1a7f37; }
-.hijo.tarde { border-left-color: #b26b00; }
-.hijo.falta { border-left-color: var(--error); }
-.hijo.salida { border-left-color: var(--primario); }
-
-.lista-avisos { list-style: none; padding: 0; margin: 0; background: var(--superficie); border: 1px solid var(--borde); border-radius: 12px; }
-.lista-avisos li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--borde); }
-.lista-avisos li:last-child { border-bottom: 0; }
-.lista-avisos time { white-space: nowrap; font-size: .85rem; }
-
-.ajustes { background: var(--superficie); border: 1px solid var(--borde); border-radius: 12px; padding: 12px 14px; }
-.ajustes summary { cursor: pointer; font-weight: 600; }
-.ajustes[open] { display: flex; flex-direction: column; gap: 12px; }
-
-.consentimiento { background: var(--fondo); border-radius: 8px; padding: 12px; font-size: .9rem; line-height: 1.5; }
+.consentimiento { background: var(--fondo); border-radius: var(--radio-chico); padding: 12px; font-size: .9rem; line-height: 1.5; }
 .consentimiento p { margin: 0 0 10px; }
 .casilla { flex-direction: row; align-items: flex-start; gap: 8px; color: var(--texto); }
 .casilla input { margin-top: 3px; }
 
 /* Panel del colegio */
-.etiqueta { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .8rem; background: var(--fondo); border: 1px solid var(--borde); white-space: nowrap; }
-.etiqueta.activo, .etiqueta.activas, .etiqueta.enviado { background: #dcf3e2; color: #135c27; border-color: #b4e2c0; }
-.etiqueta.pendiente, .etiqueta.sin_permiso, .etiqueta.sin_notificaciones { background: #fff1d6; color: #7a4a00; border-color: #f0d49a; }
-.etiqueta.bloqueado, .etiqueta.error { background: #fde4e1; color: #8a1c12; border-color: #f4b8b1; }
-@media (prefers-color-scheme: dark) {
-  .etiqueta.activo, .etiqueta.activas, .etiqueta.enviado { background: #173b22; color: #9fe0b0; border-color: #24563a; }
-  .etiqueta.pendiente, .etiqueta.sin_permiso, .etiqueta.sin_notificaciones { background: #3d2e10; color: #f3cf86; border-color: #5c4519; }
-  .etiqueta.bloqueado, .etiqueta.error { background: #43191a; color: #ffb4ab; border-color: #6b2a28; }
-}
+.etiqueta { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: .78rem; font-weight: 700; background: var(--fondo); color: var(--tenue); white-space: nowrap; }
+.etiqueta.activo, .etiqueta.activas, .etiqueta.enviado { background: var(--bien-fondo); color: var(--bien-texto); }
+.etiqueta.pendiente, .etiqueta.sin_permiso, .etiqueta.sin_notificaciones { background: var(--tarde-fondo); color: var(--tarde-texto); }
+.etiqueta.bloqueado, .etiqueta.error { background: var(--falta-fondo); color: var(--falta-texto); }
 .enlace-generado { display: flex; flex-direction: column; gap: 8px; }
 .enlace-generado input { font-family: ui-monospace, monospace; font-size: .85rem; }
 .detalle-apoderado { display: grid; gap: 16px; }
@@ -52,8 +22,9 @@
 .cuaderno-familia h2 { margin-bottom: 8px; }
 .acciones-familia { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .lista-cuaderno { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
-.lista-cuaderno li { background: var(--superficie); border: 1px solid var(--borde); border-radius: 10px; }
-.lista-cuaderno li.nueva { border-left: 4px solid var(--secundario); }
-.lista-cuaderno a { display: block; padding: 10px 12px; color: var(--texto); text-decoration: none; }
+.lista-cuaderno { gap: 8px; }
+.lista-cuaderno li { background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio-chico); }
+.lista-cuaderno li.nueva { border-left: 4px solid var(--acento); }
+.lista-cuaderno a { display: block; padding: 12px 14px; color: var(--texto); text-decoration: none; min-height: var(--toque); }
 .firmado { color: #15803d; font-weight: 600; }
 @media (prefers-color-scheme: dark) { .firmado { color: #4ade80; } }
