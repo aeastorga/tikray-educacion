@@ -79,11 +79,15 @@ export default function AppFamilia({ colegio, ingreso }) {
       </div>
       <nav className="barra-inferior" aria-label="Secciones">
         <NavLink to="/familia" end><House aria-hidden="true" /><span>Inicio</span></NavLink>
-        <NavLink to="/familia/asistencia"><CalendarCheck aria-hidden="true" /><span>Asistencia</span></NavLink>
-        <NavLink to="/familia/cuaderno">
-          <NotebookPen aria-hidden="true" /><span>Cuaderno</span>
-          {porFirmar.length > 0 && <b className="insignia" aria-label={`${porFirmar.length} por firmar`}>{porFirmar.length}</b>}
-        </NavLink>
+        {yo?.modulos?.asistencia !== false && (
+          <NavLink to="/familia/asistencia"><CalendarCheck aria-hidden="true" /><span>Asistencia</span></NavLink>
+        )}
+        {yo?.modulos?.cuaderno !== false && (
+          <NavLink to="/familia/cuaderno">
+            <NotebookPen aria-hidden="true" /><span>Cuaderno</span>
+            {porFirmar.length > 0 && <b className="insignia" aria-label={`${porFirmar.length} por firmar`}>{porFirmar.length}</b>}
+          </NavLink>
+        )}
         <NavLink to="/familia/perfil"><UserRound aria-hidden="true" /><span>Perfil</span></NavLink>
       </nav>
     </div>
@@ -135,10 +139,10 @@ export function Inicio() {
         <p className="tenue">No hay alumnos vinculados a su cuenta. Comuníquese con el colegio.</p>
       )}
       <Hijos hijos={hijos} hijo={hijo} elegir={elegir} />
-      {hijo && <TarjetaEnVivo hijo={hijo} varios={new Set(hijos.map((h) => h.colegio)).size > 1} />}
+      {hijo && hijo.asistencia !== false && <TarjetaEnVivo hijo={hijo} varios={new Set(hijos.map((h) => h.colegio)).size > 1} />}
       {yo && <Notificaciones yo={yo} />}
       {porFirmar.length > 0 && <PorFirmar entrada={porFirmar[0]} mas={porFirmar.length - 1} alFirmar={cargar} />}
-      {hijo && <DelDia hijo={hijo} />}
+      {hijo && hijo.asistencia !== false && <DelDia hijo={hijo} />}
       <section className="tarjeta-app">
         <h2>Avisos recientes</h2>
         {avisos.length === 0 ? <p className="tenue">Aún no hay avisos.</p> : (
@@ -334,6 +338,7 @@ export function AsistenciaHijo() {
 
 export function CuadernoFamilia() {
   const { yo, vuelta } = useOutletContext()
+  if (yo?.modulos?.cuaderno === false) return <p className="tenue">El colegio no usa el cuaderno de control en la app.</p>
   if (yo && yo.estado !== 'activo') return <p className="tenue">El cuaderno se abre cuando el colegio aprueba su cuenta.</p>
   return <ListaCuaderno recargar={vuelta} />
 }

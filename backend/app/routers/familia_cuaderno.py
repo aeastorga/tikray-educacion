@@ -15,13 +15,14 @@ from sqlalchemy.orm import Session
 from app import cuaderno
 from app.comun import guardar
 from app.db import get_db
-from app.deps import SesionFamilia, familia_sesion
+from app.deps import SesionFamilia, familia_sesion, modulo_encendido
 from app.fechas import hoy_lima
 from app.models import (AdjuntoCuaderno, Alumno, AlumnoApoderado, DestinoCuaderno, EntradaCuaderno, MensajeCuaderno,
                         Usuario)
 from app.routers.cuaderno import EntradaIn, crear_entrada
 
-privado = APIRouter(prefix="/familia/cuaderno", tags=["familia"])
+privado = APIRouter(prefix="/familia/cuaderno", tags=["familia"],
+                  dependencies=[Depends(modulo_encendido("cuaderno"))])
 
 # Lo que puede pedir el padre: hasta este tiempo atrás (justificación) o adelante.
 DIAS_ATRAS = 60
@@ -37,7 +38,7 @@ def familia_activa(s: SesionFamilia = Depends(familia_sesion)) -> SesionFamilia:
 def _mia(db: Session, s: SesionFamilia, entrada_id: int) -> EntradaCuaderno:
     """Solo las entradas que le llegaron a este apoderado; cualquier otra da 404."""
     e = db.scalar(select(EntradaCuaderno).where(
-        EntradaCuaderno.colegio_id == s.colegio.id, EntradaCuaderno.id == entrada_id,
+        EntradaCuaderno.colegio_id == s.colegio.id, EntradaCuaderno.id == entrada_id, cuaderno.publicada(),
         EntradaCuaderno.id.in_(select(DestinoCuaderno.entrada_id).where(
             DestinoCuaderno.colegio_id == s.colegio.id, DestinoCuaderno.apoderado_id == s.apoderado.id))))
     if e is None:
@@ -61,7 +62,7 @@ def listar(s: SesionFamilia = Depends(familia_activa), db: Session = Depends(get
                func.max(DestinoCuaderno.firmado_en))
         .join(DestinoCuaderno, and_(DestinoCuaderno.colegio_id == EntradaCuaderno.colegio_id,
                                     DestinoCuaderno.entrada_id == EntradaCuaderno.id))
-        .where(EntradaCuaderno.colegio_id == cid, DestinoCuaderno.apoderado_id == apo)
+        .where(EntradaCuaderno.colegio_id == cid, DestinoCuaderno.apoderado_id == apo, cuaderno.publicada())
         .group_by(EntradaCuaderno.id).order_by(EntradaCuaderno.id.desc()).limit(100)).all()
     ids = [e.id for e, *_ in filas]
     respuestas = dict(db.execute(select(MensajeCuaderno.entrada_id, func.count())
@@ -69,12 +70,13 @@ def listar(s: SesionFamilia = Depends(familia_activa), db: Session = Depends(get
                                  .group_by(MensajeCuaderno.entrada_id)).all()) if ids else {}
     adjuntos = cuaderno.adjuntos_de(db, cid, ids)
     hijos = _hijos(db, s)
+    categorias = cuaderno.categorias_de(db, cid)
     nombres = dict(db.execute(select(Alumno.id, Alumno.nombres).where(
         Alumno.colegio_id == cid, Alumno.id.in_({a for _, al, _, _ in filas for a in al}))).all()) if filas else {}
     return {
         "hijos": [{"id": i, "nombres": n} for i, n in sorted(hijos.items(), key=lambda x: x[1])],
         "entradas": [{
-            **cuaderno.entrada_basica(e), "alumnos": sorted({nombres.get(a, "") for a in al}),
+            **cuaderno.entrada_basica(e, categorias), "alumnos": sorted({nombres.get(a, "") for a in al}),
             "visto": visto is not None, "firmado_en": cuaderno.iso(firmado),
             "respuestas": respuestas.get(e.id, 0), "adjuntos": len(adjuntos.get(e.id, [])),
         } for e, al, visto, firmado in filas],
@@ -101,7 +103,7 @@ def detalle(entrada_id: int, s: SesionFamilia = Depends(familia_activa), db: Ses
     nombres = db.scalars(select(Alumno.nombres + " " + Alumno.apellidos)
                          .where(Alumno.colegio_id == cid, Alumno.id.in_({d.alumno_id for d in mis}))).all()
     return {
-        **cuaderno.entrada_basica(e), "alumnos": sorted(nombres),
+        **cuaderno.entrada_basica(e, cuaderno.categorias_de(db, cid)), "alumnos": sorted(nombres),
         "firmado_en": cuaderno.iso(max((d.firmado_en for d in mis if d.firmado_en), default=None)),
         "autor": personal.get(e.creado_por_id) if e.creado_por_id else None,
         "adjuntos": cuaderno.adjuntos_de(db, cid, [e.id]).get(e.id, []),

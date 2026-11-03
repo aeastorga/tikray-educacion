@@ -5,7 +5,7 @@ Permisos del módulo "cuaderno": ver (leer y ver lectores) y editar (escribir, r
 aprobar). Un rol con `solo_sus_secciones` solo ve y escribe lo de las secciones a su cargo.
 """
 
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -13,18 +13,19 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 from sqlalchemy import and_, case, delete, func, or_, select
 from sqlalchemy.orm import Session
 
-from app import cuaderno
+from app import configuracion, cuaderno
 from app.comun import guardar, obtener
 from app.db import get_db
 from app.deps import Sesion, requerir_permiso
-from app.fechas import hoy_lima
-from app.models import (AdjuntoCuaderno, Alumno, AnioEscolar, AlumnoApoderado, Apoderado, DestinoCuaderno, EntradaCuaderno,
+from app.fechas import LIMA, hoy_lima
+from app.models import (AdjuntoCuaderno, Alumno, CategoriaIncidencia, ColaAviso, AnioEscolar, AlumnoApoderado, Apoderado, DestinoCuaderno, EntradaCuaderno,
                         Grado, Matricula, MensajeCuaderno, Nivel, Seccion, SeccionDocente, Usuario)
 from app.models.cuaderno import CON_RESOLUCION, TIPOS
 from app.routers.importacion import _secciones
 from app.validacion import sin_tildes
 
 router = APIRouter(prefix="/cuaderno", tags=["cuaderno"])
+MAX_DIAS_PROGRAMADO = 90
 ver = requerir_permiso("cuaderno")
 editar = requerir_permiso("cuaderno", "editar")
 editar_padron = requerir_permiso("padron", "editar")
@@ -113,9 +114,23 @@ class EntradaIn(BaseModel):
     hasta: date | None = None
     hora_salida: time | None = None
     recoge: str | None = Field(default=None, max_length=120)
+    categoria_id: int | None = None  # incidencia
+    programado_para: datetime | None = None  # comunicado: fecha y hora de envío
 
     @model_validator(mode="after")
     def _segun_tipo(self):
+        if self.programado_para is not None:
+            if self.tipo != "comunicado":
+                raise ValueError("Solo los comunicados se programan")
+            if self.programado_para.tzinfo is None:
+                raise ValueError("Falta la zona horaria de la hora de envío")
+            ahora = datetime.now(UTC)
+            if self.programado_para <= ahora + timedelta(minutes=1):
+                self.programado_para = None  # para ya mismo: sale ahora
+            elif self.programado_para > ahora + timedelta(days=MAX_DIAS_PROGRAMADO):
+                raise ValueError(f"Se programa hasta {MAX_DIAS_PROGRAMADO} días adelante")
+        if self.tipo != "incidencia":
+            self.categoria_id = None
         if self.tipo != "comunicado" and self.alcance != "alumno":
             raise ValueError("Solo los comunicados van a más de un alumno")
         if self.tipo == "citacion" and self.cita_en is None:
@@ -142,6 +157,8 @@ def crear_entrada(db: Session, cid: int, d: EntradaIn, destino: cuaderno.Destino
         desde=d.desde if d.tipo in CON_RESOLUCION else None, hasta=d.hasta if d.tipo == "justificacion" else None,
         hora_salida=d.hora_salida if d.tipo == "permiso_salida" else None,
         recoge=d.recoge if d.tipo == "permiso_salida" else None,
+        categoria_id=d.categoria_id if d.tipo == "incidencia" else None,
+        programado_para=d.programado_para if d.tipo == "comunicado" else None,
         estado=(estado or "pendiente") if d.tipo in CON_RESOLUCION else None,
         creado_por_id=usuario_id, apoderado_autor_id=apoderado_id)
     db.add(e)
@@ -172,6 +189,8 @@ async def escribir(datos: str = Form(...), archivos: list[UploadFile] | None = F
     alumnos_ids = cuaderno.alumnos_del_destino(db, cid, destino)
     if not alumnos_ids:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "No hay alumnos en ese destino")
+    if d.tipo == "incidencia":
+        _validar_categoria(db, cid, d)
     adjuntos = await cuaderno.leer_adjuntos(archivos)
     e = crear_entrada(db, cid, d, destino, usuario_id=s.usuario.id, estado="aprobada")
     if e.estado == "aprobada":
@@ -181,12 +200,63 @@ async def escribir(datos: str = Form(...), archivos: list[UploadFile] | None = F
     apoderados = cuaderno.guardar_destinos(db, e, alumnos_ids)
     avisados = cuaderno.avisar(db, e, apoderados, cuaderno.texto_aviso(db, e))
     claves = cuaderno.guardar_adjuntos(db, e, adjuntos)
+    configuracion.registrar(db, cid, s.usuario, "crear", "cuaderno", e.tipo, e.id, resumen_entrada(db, e))
     try:
         guardar(db)
     except Exception:
         cuaderno.borrar_archivos(claves)
         raise
-    return {"id": e.id, "alumnos": len(alumnos_ids), "apoderados": len(apoderados), "avisados": avisados}
+    return {"id": e.id, "alumnos": len(alumnos_ids), "apoderados": len(apoderados), "avisados": avisados,
+            "programado_para": cuaderno.iso(e.programado_para)}
+
+
+def _validar_categoria(db: Session, cid: int, d: EntradaIn) -> None:
+    """Si el colegio tiene categorías, la incidencia lleva una suya y activa."""
+    activas = set(db.scalars(select(CategoriaIncidencia.id).where(CategoriaIncidencia.colegio_id == cid,
+                                                                 CategoriaIncidencia.activa)))
+    if d.categoria_id is None:
+        if activas:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Elige la categoría de la incidencia")
+    elif d.categoria_id not in activas:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Categoría no válida")
+
+
+NOMBRE_TIPO = {"comunicado": "Comunicado", "incidencia": "Incidencia", "citacion": "Citación",
+               "justificacion": "Justificación", "permiso_salida": "Permiso de salida"}
+
+
+def resumen_entrada(db: Session, e: EntradaCuaderno) -> str:
+    """Para el historial. El comunicado dice su asunto; lo que es de un alumno solo dice de quién (el texto de
+    una justificación o una incidencia puede ser de salud o de conducta: no va al historial)."""
+    if e.tipo == "comunicado":
+        extra = f" (programado para {e.programado_para.astimezone(LIMA):%d/%m %H:%M})" if e.programado_para else ""
+        return f"Comunicado «{e.titulo}»{extra}"
+    alumno = db.scalar(select(Alumno.apellidos + ", " + Alumno.nombres).where(
+        Alumno.colegio_id == e.colegio_id, Alumno.id == e.alumno_id))
+    categoria = db.scalar(select(CategoriaIncidencia.nombre).where(
+        CategoriaIncidencia.colegio_id == e.colegio_id, CategoriaIncidencia.id == e.categoria_id)) \
+        if e.categoria_id else None
+    return f"{NOMBRE_TIPO[e.tipo]}{f' ({categoria})' if categoria else ''} de {alumno or 'un alumno'}"
+
+
+@router.post("/entradas/{entrada_id}/cancelar")
+def cancelar_programado(entrada_id: int, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> dict:
+    """Un comunicado programado que aún no salió se cancela: desaparece con sus avisos en espera."""
+    e = _entrada(db, s, entrada_id)
+    if e.programado_para is None or e.programado_para <= datetime.now(UTC):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Solo se cancela un comunicado programado que aún no sale")
+    cid = s.colegio.id
+    configuracion.registrar(db, cid, s.usuario, "anular", "cuaderno", "comunicado", e.id,
+                            f"Canceló el comunicado programado «{e.titulo}»")
+    db.execute(delete(ColaAviso).where(ColaAviso.colegio_id == cid, ColaAviso.tipo == "cuaderno",
+                                       ColaAviso.estado == "pendiente",
+                                       ColaAviso.datos["entrada_id"].as_integer() == e.id))
+    claves = list(db.scalars(select(AdjuntoCuaderno.clave).where(AdjuntoCuaderno.colegio_id == cid,
+                                                                 AdjuntoCuaderno.entrada_id == e.id)))
+    db.delete(e)
+    guardar(db)
+    cuaderno.borrar_archivos(claves)
+    return {"id": entrada_id, "cancelado": True}
 
 
 # --- Leer ------------------------------------------------------------------------------
@@ -269,11 +339,12 @@ def listar(tipo: str | None = None, estado: str | None = None, seccion_id: int |
     etiquetas = _etiquetas_secciones(db, cid)
     nombres, alumnos_n = _nombres(db, cid, [e.alumno_id for e in entradas if e.alumno_id])
     adjuntos = cuaderno.adjuntos_de(db, cid, ids)
+    categorias = cuaderno.categorias_de(db, cid)
     salida = []
     for e in entradas:
         total, vistos, firmados = conteos.get(e.id, (0, 0, 0))
         n, ult_familia = mensajes.get(e.id, (0, False))
-        salida.append({**cuaderno.entrada_basica(e), "destino": _destino_texto(e, etiquetas, nombres, alumnos_n),
+        salida.append({**cuaderno.entrada_basica(e, categorias), "destino": _destino_texto(e, etiquetas, nombres, alumnos_n),
                        "apoderados": total, "vistos": vistos, "firmados": firmados, "respuestas": n,
                        "espera_al_colegio": e.estado == "pendiente" or ult_familia,
                        "adjuntos": len(adjuntos.get(e.id, []))})
@@ -307,8 +378,8 @@ def detalle(entrada_id: int, s: Sesion = Depends(ver), db: Session = Depends(get
              else (f"{a.nombres} {a.apellidos}" if (a := db.get(Apoderado, e.apoderado_autor_id)) else None)
              if e.apoderado_autor_id else None)
     return {
-        **cuaderno.entrada_basica(e), "destino": _destino_texto(e, etiquetas, nombres, alumnos_n),
-        "autor": autor, "resuelto_por": personal.get(e.resuelto_por_id),
+        **cuaderno.entrada_basica(e, cuaderno.categorias_de(db, cid)),
+        "destino": _destino_texto(e, etiquetas, nombres, alumnos_n), "autor": autor, "resuelto_por": personal.get(e.resuelto_por_id),
         "anulada_por": personal.get(e.anulada_por_id), "anulada_en": cuaderno.iso(e.anulada_en),
         "adjuntos": cuaderno.adjuntos_de(db, cid, [e.id]).get(e.id, []),
         "lectores": [{
@@ -357,6 +428,8 @@ def resolver(entrada_id: int, d: ResolucionIn, s: Sesion = Depends(editar), db: 
     if e.tipo == "justificacion" and e.estado == "aprobada":
         faltas = cuaderno.aplicar_justificacion(db, e)
     cuaderno.avisar(db, e, cuaderno.apoderados_de(db, e), cuaderno.texto_aviso(db, e, "resuelta"))
+    configuracion.registrar(db, s.colegio.id, s.usuario, "editar", "cuaderno", e.tipo, e.id,
+                            f"{'Aprobó' if e.estado == 'aprobada' else 'Rechazó'}: {resumen_entrada(db, e)}")
     guardar(db)
     return {"id": e.id, "estado": e.estado, "faltas_justificadas": faltas}
 
@@ -377,6 +450,8 @@ def anular(entrada_id: int, d: AnulacionIn, s: Sesion = Depends(editar), db: Ses
     db.flush()
     faltas = cuaderno.quitar_justificacion(db, e) if e.tipo == "justificacion" else 0
     cuaderno.avisar(db, e, cuaderno.apoderados_de(db, e), cuaderno.texto_aviso(db, e, "resuelta"))
+    configuracion.registrar(db, s.colegio.id, s.usuario, "anular", "cuaderno", e.tipo, e.id,
+                            f"Anuló: {resumen_entrada(db, e)}")
     guardar(db)
     return {"id": e.id, "estado": e.estado, "faltas_restituidas": faltas}
 
@@ -422,6 +497,8 @@ def asignar_docentes(seccion_id: int, d: DocentesIn, s: Sesion = Depends(editar_
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Hay personas que no son de este colegio")
     db.execute(delete(SeccionDocente).where(SeccionDocente.colegio_id == cid, SeccionDocente.seccion_id == sec.id))
     db.add_all([SeccionDocente(colegio_id=cid, seccion_id=sec.id, usuario_id=u) for u in sorted(ids)])
+    configuracion.registrar(db, cid, s.usuario, "editar", "padron", "seccion", sec.id,
+                            f"Docentes a cargo de la sección {sec.nombre}: {len(ids)}")
     guardar(db)
     return {"id": sec.id, "docentes": sorted(ids)}
 

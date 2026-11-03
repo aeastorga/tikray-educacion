@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, guardarToken, leerToken } from '../api.js'
+import { CamposPerfil } from './Configuracion.jsx'
+import './configuracion.css'
 
 // Panel de Tikray Labs (plataforma.<dominio>). Usa su propio token: el de un
 // colegio no sirve aquí y este no sirve en ningún colegio.
@@ -53,6 +55,9 @@ function Colegios({ salir }) {
   const [creado, setCreado] = useState(null)
   const [demoLista, setDemoLista] = useState(null)
   const [error, setError] = useState(null)
+  const [editando, setEditando] = useState(null)
+  const [activando, setActivando] = useState(null)
+  const [activado, setActivado] = useState(null)
 
   const cargar = useCallback(() => api('/plataforma/colegios').then(setLista).catch(() => {}), [])
   useEffect(() => { cargar() }, [cargar])
@@ -125,8 +130,16 @@ function Colegios({ salir }) {
             <button className="enlace" onClick={() => setDemoLista(null)}>Cerrar</button>
           </div>
         )}
+        {activado && (
+          <div className="aviso">
+            <b>{activado.colegio.nombre}</b> ya está activo.
+            {Object.keys(activado.borrados).length > 0 && <> Se borraron los datos de ejemplo
+              ({activado.borrados.alumno || 0} alumnos, {activado.borrados.apoderado || 0} apoderados).</>}
+            <button className="enlace" onClick={() => setActivado(null)}>Cerrar</button>
+          </div>
+        )}
         <table>
-          <thead><tr><th>Colegio</th><th>Dirección</th><th>Estado</th><th>Vence</th><th></th></tr></thead>
+          <thead><tr><th>Colegio</th><th>Dirección</th><th>Estado</th><th>Vence</th><th>Módulos</th><th></th></tr></thead>
           <tbody>
             {lista.map((c) => (
               <tr key={c.id}>
@@ -143,11 +156,21 @@ function Colegios({ salir }) {
                   <input type="date" value={c.vence_en || ''}
                          onChange={(e) => cambiar(c, { vence_en: e.target.value || null })} />
                 </td>
-                <td>{c.es_demo && <button className="enlace" onClick={() => demo(c)}>Reiniciar demo</button>}</td>
+                <td className="tenue">{c.modulos.filter((m) => m.contratado).map((m) => m.nombre).join(', ') || 'Ninguno'}</td>
+                <td>
+                  <div className="acciones">
+                    <button className="enlace" onClick={() => setEditando(c)}>Perfil y módulos</button>
+                    {c.estado === 'prueba' && !c.es_demo && <button className="enlace" onClick={() => setActivando(c)}>Activar colegio</button>}
+                    {c.es_demo && <button className="enlace" onClick={() => demo(c)}>Reiniciar demo</button>}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+        {editando && <EditarColegio colegio={editando} cerrar={() => setEditando(null)} alGuardar={cargar} />}
+        {activando && <ActivarColegio colegio={activando} cerrar={() => setActivando(null)}
+                                      alActivar={(r) => { setActivando(null); setActivado(r); cargar() }} />}
         {!lista.some((c) => c.es_demo) && (
           <p><button className="boton secundario" onClick={() => demo(null)}>Crear colegio demo con datos ficticios</button></p>
         )}
@@ -173,5 +196,106 @@ function Colegios({ salir }) {
         </form>
       </main>
     </div>
+  )
+}
+
+function Dialogo({ titulo, cerrar, children }) {
+  useEffect(() => {
+    const esc = (e) => { if (e.key === 'Escape') cerrar() }
+    window.addEventListener('keydown', esc)
+    return () => window.removeEventListener('keydown', esc)
+  }, [cerrar])
+  return (
+    <div className="dialogo-fondo" onClick={(e) => { if (e.target === e.currentTarget) cerrar() }}>
+      <div className="tarjeta ancho dialogo" role="dialog" aria-modal="true" aria-label={titulo}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function EditarColegio({ colegio, cerrar, alGuardar }) {
+  const [perfil, setPerfil] = useState(colegio.perfil)
+  const [contratados, setContratados] = useState(colegio.modulos.filter((m) => m.contratado).map((m) => m.clave))
+  const [error, setError] = useState(null)
+
+  async function guardar(e) {
+    e.preventDefault()
+    setError(null)
+    try {
+      await api(`/plataforma/colegios/${colegio.id}`, { metodo: 'PATCH', datos: { perfil, modulos_contratados: contratados } })
+      alGuardar()
+      cerrar()
+    } catch (err) { setError(err.message) }
+  }
+
+  return (
+    <Dialogo titulo={`Perfil y módulos de ${colegio.nombre}`} cerrar={cerrar}>
+      <form onSubmit={guardar} className="configuracion">
+        <h2>{colegio.nombre}</h2>
+        <CamposPerfil perfil={perfil} cambiar={setPerfil} />
+        <fieldset className="gestion">
+          <legend>Módulos contratados</legend>
+          {colegio.modulos.map((m) => (
+            <label key={m.clave} className="check">
+              <input type="checkbox" checked={contratados.includes(m.clave)}
+                     onChange={(e) => setContratados(e.target.checked ? [...contratados, m.clave] : contratados.filter((x) => x !== m.clave))} />
+              {m.nombre}
+            </label>
+          ))}
+        </fieldset>
+        <p className="tenue sin-margen">El director prende o apaga solo lo contratado. Lo que se quita aquí se apaga para todo el colegio.</p>
+        {error && <p className="error">{error}</p>}
+        <div className="acciones">
+          <button className="boton">Guardar</button>
+          <button type="button" className="boton secundario" onClick={cerrar}>Cancelar</button>
+        </div>
+      </form>
+    </Dialogo>
+  )
+}
+
+function ActivarColegio({ colegio, cerrar, alActivar }) {
+  const [borrar, setBorrar] = useState(true)
+  const [confirmar, setConfirmar] = useState('')
+  const [error, setError] = useState(null)
+  const [enviando, setEnviando] = useState(false)
+  const coincide = confirmar.trim().toLowerCase() === colegio.subdominio
+
+  async function activar(e) {
+    e.preventDefault()
+    setError(null)
+    setEnviando(true)
+    try {
+      alActivar(await api(`/plataforma/colegios/${colegio.id}/activar`, { metodo: 'POST', datos: { borrar_ejemplo: borrar, confirmar } }))
+    } catch (err) { setError(err.message) } finally { setEnviando(false) }
+  }
+
+  return (
+    <Dialogo titulo={`Activar ${colegio.nombre}`} cerrar={cerrar}>
+      <form onSubmit={activar} className="configuracion">
+        <h2>Activar {colegio.nombre}</h2>
+        <p className="sin-margen">Pasa de prueba a activo y deja de vencer.</p>
+        <label className="check">
+          <input type="checkbox" checked={borrar} onChange={(e) => setBorrar(e.target.checked)} />
+          Borrar los datos de ejemplo
+        </label>
+        {borrar && (
+          <div className="aviso">
+            <p className="sin-margen"><b>Se borran:</b> alumnos, apoderados, marcaciones, cuaderno y avisos.</p>
+            <p className="sin-margen"><b>Se conservan:</b> estructura, turnos, calendario, roles, personal, imagen y configuración.</p>
+          </div>
+        )}
+        <label><span>Escribe <code>{colegio.subdominio}</code> para confirmar</span>
+          <input value={confirmar} onChange={(e) => setConfirmar(e.target.value)} autoComplete="off" autoFocus
+                 spellCheck={false} autoCapitalize="none" />
+        </label>
+        {error && <p className="error">{error}</p>}
+        <div className="acciones">
+          <button className="boton" disabled={!coincide || enviando}>{enviando ? 'Activando…' : 'Activar colegio'}</button>
+          <button type="button" className="boton secundario" onClick={cerrar}>Cancelar</button>
+        </div>
+      </form>
+    </Dialogo>
   )
 }

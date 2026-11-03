@@ -15,6 +15,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app import configuracion
 from app.config import get_settings
 from app.models import (Alumno, AlumnoApoderado, Apoderado, AsistenciaAlumno, ColaAviso, Colegio, EntregaAviso,
                         SuscripcionPush)
@@ -82,7 +83,9 @@ def mensaje(aviso: ColaAviso, colegio: Colegio, alumno: Alumno | None) -> dict:
 
 def _sigue_vigente(db: Session, aviso: ColaAviso, ahora: datetime) -> str | None:
     """Motivo para no enviarlo, o None."""
-    if ahora - aviso.creado_en > VIGENCIA:
+    # Lo del cuaderno puede esperar a propósito (programado, horario sin molestar): cuenta desde que pudo salir.
+    desde = aviso.procesar_desde if aviso.tipo == "cuaderno" else aviso.creado_en
+    if ahora - desde > VIGENCIA:
         return "vencido"
     if aviso.tipo == "falta":
         # Entre que se encoló y ahora pudo llegar (o registrarse una marcación sin internet).
@@ -110,6 +113,14 @@ def _destinatarios(db: Session, aviso: ColaAviso) -> list[Apoderado]:
 
 
 def _procesar(db: Session, aviso: ColaAviso, enviar: Enviador, ahora: datetime) -> None:
+    colegio = db.get(Colegio, aviso.colegio_id)
+    if not configuracion.aviso_permitido(colegio, aviso.tipo):
+        aviso.estado, aviso.procesado_en = "descartado", ahora
+        aviso.datos = {**aviso.datos, "motivo": "apagado por el colegio"}
+        return
+    if aviso.tipo == "cuaderno" and (fin := configuracion.fin_del_silencio(colegio, ahora)):
+        aviso.procesar_desde = fin  # horario sin molestar: espera en la cola (la asistencia sale siempre)
+        return
     motivo = _sigue_vigente(db, aviso, ahora)
     if motivo:
         aviso.estado, aviso.procesado_en, aviso.datos = "descartado", ahora, {**aviso.datos, "motivo": motivo}
@@ -118,7 +129,6 @@ def _procesar(db: Session, aviso: ColaAviso, enviar: Enviador, ahora: datetime) 
     if not destinatarios:
         aviso.estado, aviso.procesado_en = "sin_destinatarios", ahora
         return
-    colegio = db.get(Colegio, aviso.colegio_id)
     alumno = db.get(Alumno, aviso.alumno_id) if aviso.alumno_id else None
     msj = mensaje(aviso, colegio, alumno)
     ya = {e.apoderado_id: e for e in db.scalars(select(EntregaAviso).where(

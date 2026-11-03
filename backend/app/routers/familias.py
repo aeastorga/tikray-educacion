@@ -10,7 +10,8 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app import familias
-from app.comun import guardar, obtener
+from app.comun import obtener
+from app.configuracion import anotar
 from app.db import get_db
 from app.deps import Sesion, requerir_permiso
 from app.models import (Alumno, AlumnoApoderado, Apoderado, CambioApoderado, ConfigFamilias, ConsentimientoApoderado,
@@ -126,12 +127,14 @@ def invitar(apoderado_id: int, d: DatosInvitacion, s: Sesion = Depends(editar), 
     if a.estado_acceso == "bloqueado":
         raise HTTPException(status.HTTP_409_CONFLICT, "El apoderado está bloqueado. Desbloquéalo primero")
     inv, token = familias.crear_invitacion(db, a, s.usuario.id, d.nuevo_pin)
-    guardar(db)
+    # Nunca el enlace ni el PIN: solo que se generó.
+    anotar(db, s, "crear", "familias", "invitación", a.id,
+           f"Enlace de activación para {a.apellidos}, {a.nombres}" + (" (PIN nuevo)" if d.nuevo_pin else ""))
     return {"token": token, "vence_en": inv.vence_en.isoformat(), "celular": a.celular, "nombres": a.nombres}
 
 
 def _cambiar(db: Session, s: Sesion, apoderado_id: int, desde: tuple[str, ...], hacia: str | None,
-             cerrar: bool) -> dict:
+             cerrar: bool, que: str) -> dict:
     a = obtener(db, Apoderado, s.colegio.id, apoderado_id, "Apoderado")
     if a.estado_acceso not in desde:
         raise HTTPException(status.HTTP_409_CONFLICT, "No se puede en su estado actual")
@@ -141,20 +144,20 @@ def _cambiar(db: Session, s: Sesion, apoderado_id: int, desde: tuple[str, ...], 
             a.activado_en = datetime.now(UTC)
     if cerrar:
         a.version_sesion += 1
-    guardar(db)
+    anotar(db, s, "editar", "familias", "cuenta de padre", a.id, f"{que}: {a.apellidos}, {a.nombres}")
     return {"id": a.id, "estado": a.estado_acceso}
 
 
 @router.post("/apoderados/{apoderado_id}/aprobar")
 def aprobar(apoderado_id: int, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> dict:
-    return _cambiar(db, s, apoderado_id, ("pendiente",), "activo", False)
+    return _cambiar(db, s, apoderado_id, ("pendiente",), "activo", False, "Aprobó la cuenta")
 
 
 @router.post("/apoderados/{apoderado_id}/bloquear")
 def bloquear(apoderado_id: int, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> dict:
     obtener(db, Apoderado, s.colegio.id, apoderado_id, "Apoderado")
     familias.anular_invitaciones(db, s.colegio.id, apoderado_id, "Apoderado bloqueado")
-    return _cambiar(db, s, apoderado_id, ("sin_cuenta", "pendiente", "activo"), "bloqueado", True)
+    return _cambiar(db, s, apoderado_id, ("sin_cuenta", "pendiente", "activo"), "bloqueado", True, "Bloqueó la cuenta")
 
 
 @router.post("/apoderados/{apoderado_id}/desbloquear")
@@ -162,12 +165,12 @@ def desbloquear(apoderado_id: int, s: Sesion = Depends(editar), db: Session = De
     a = obtener(db, Apoderado, s.colegio.id, apoderado_id, "Apoderado")
     # Vuelve a donde estaba: sin cuenta, pendiente de aprobación o activo.
     hacia = "sin_cuenta" if a.cuenta_id is None else ("activo" if a.activado_en else "pendiente")
-    return _cambiar(db, s, apoderado_id, ("bloqueado",), hacia, False)
+    return _cambiar(db, s, apoderado_id, ("bloqueado",), hacia, False, "Desbloqueó la cuenta")
 
 
 @router.post("/apoderados/{apoderado_id}/cerrar-sesiones")
 def cerrar_sesiones(apoderado_id: int, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> dict:
-    return _cambiar(db, s, apoderado_id, ("pendiente", "activo", "bloqueado", "sin_cuenta"), None, True)
+    return _cambiar(db, s, apoderado_id, ("pendiente", "activo", "bloqueado", "sin_cuenta"), None, True, "Cerró las sesiones")
 
 
 class DatosConfig(BaseModel):
@@ -186,5 +189,6 @@ def editar_config(d: DatosConfig, s: Sesion = Depends(editar_reglas), db: Sessio
         c = ConfigFamilias(colegio_id=s.colegio.id)
         db.add(c)
     c.activacion = d.activacion
-    guardar(db)
+    anotar(db, s, "editar", "familias", "reglas", None,
+           "Activación de cuentas: " + ("automática" if c.activacion == "automatica" else "con aprobación"))
     return {"activacion": c.activacion}

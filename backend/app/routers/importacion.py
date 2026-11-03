@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app import codigos, importacion, pdf
 from app.almacenamiento import get_almacenamiento
 from app.comun import guardar, obtener
+from app.configuracion import registrar
 from app.db import get_db
 from app.deps import Sesion, requerir_permiso, tiene_permiso
 from app.models import Alumno, AnioEscolar, Colegio, Grado, Matricula, Nivel, Rol, Seccion
@@ -86,6 +87,8 @@ def confirmar(request: Request, archivo: UploadFile = File(...), anio_id: int | 
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             {"mensaje": "El archivo tiene errores; corrígelos y vuelve a subirlo", **_informe(a)})
     credenciales = importacion.aplicar(db, s.colegio.id, a, s.usuario.id)
+    registrar(db, s.colegio.id, s.usuario, "crear", "padron", "carga Excel", None,
+              f"Carga masiva {a.anio.anio}: {len(a.alumnos)} filas de alumnos y {len(a.personal)} de personal")
     guardar(db, "Otro usuario cambió el padrón mientras tanto; vuelve a intentarlo")
     cartas = None
     if credenciales:

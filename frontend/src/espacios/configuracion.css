@@ -1,0 +1,94 @@
+/* Configuración del colegio e historial de actividad. */
+.configuracion .subpestanas { margin-bottom: 4px; }
+.configuracion form.tarjeta-panel { display: flex; flex-direction: column; gap: 12px; }
+.configuracion .tarjeta-panel > p.tenue { margin: 0 0 8px; }
+.pequeno { font-size: .85rem; }
+
+/* Perfil */
+.rejilla-perfil { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+.rejilla-perfil .ancho, .rejilla-perfil .gestion { grid-column: 1 / -1; }
+.gestion { border: 1px solid var(--borde); border-radius: var(--radio-chico); padding: 4px 14px; display: flex; flex-wrap: wrap; column-gap: 20px; margin: 0; }
+.gestion legend { font-size: .88rem; font-weight: 600; color: var(--tenue); padding: 0 4px; }
+@media (max-width: 560px) { .rejilla-perfil { grid-template-columns: 1fr; } }
+
+/* Interruptores (módulos y avisos) */
+.lista-interruptores { list-style: none; margin: 0; padding: 0; }
+.lista-interruptores li {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0;
+  border-top: 1px solid var(--borde);
+}
+.lista-interruptores li > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lista-interruptores .tenue { font-size: .9rem; }
+.chip.no-contratado { align-self: flex-start; margin: 4px 0 0; font-size: .8rem; color: var(--tarde-texto); background: var(--tarde-fondo); border-color: transparent; }
+
+.interruptor { position: relative; flex-direction: row; align-items: center; gap: 10px; cursor: pointer; min-height: var(--toque); color: var(--texto); flex: none; }
+/* El input cubre toda la etiqueta: se toca en cualquier parte y sigue siendo un checkbox de verdad. */
+.interruptor input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; z-index: 1; }
+.interruptor input + span {
+  width: 46px; height: 28px; border-radius: 999px; background: var(--borde-fuerte); position: relative; transition: background .15s;
+}
+.interruptor input + span::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .15s;
+}
+.interruptor input:checked + span { background: var(--acento-fuerte); }
+.interruptor input:checked + span::after { transform: translateX(18px); }
+.interruptor input:focus-visible + span { outline: 3px solid var(--acento); outline-offset: 2px; }
+.interruptor input:disabled + span { opacity: .5; }
+.interruptor:has(input:disabled) { cursor: not-allowed; }
+.interruptor-texto { font-size: .85rem; font-weight: 600; min-width: 64px; }
+@media (max-width: 480px) { .interruptor-texto { display: none; } }
+
+/* Plantillas */
+.cabecera-seccion { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.cabecera-seccion p { margin: 0; }
+.form-plantilla { display: flex; flex-direction: column; gap: 12px; padding: 16px; margin: 12px 0; border-radius: var(--radio-chico); background: var(--fondo); }
+.lista-plantillas, .lista-categorias { list-style: none; margin: 8px 0 0; padding: 0; }
+.lista-plantillas li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--borde); }
+.lista-plantillas li > div:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.recorte { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
+.lista-plantillas .acciones, .lista-categorias .acciones { flex-wrap: nowrap; gap: 6px; flex: none; }
+
+/* Categorías */
+.grupos-categorias { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 760px) { .grupos-categorias { grid-template-columns: 1fr; } }
+.categorias h2 { display: flex; align-items: center; gap: 8px; }
+.categorias.merito h2 svg { color: var(--bien); }
+.categorias.mejora h2 svg { color: var(--tarde-barra); }
+.lista-categorias li { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 52px; border-top: 1px solid var(--borde); }
+.lista-categorias li.inactiva .nombre-categoria { color: var(--tenue); }
+.nombre-categoria { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.lista-categorias .fila-form { flex: 1; margin: 6px 0; }
+.categorias > .fila-form > input { flex: 1 1 140px; }
+
+/* Historial */
+.historial { max-width: 1000px; }
+.filtros-historial { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: end; margin: 16px 0; }
+.filtros-historial label { flex: 1 1 170px; }
+.lista-historial { list-style: none; margin: 0; padding: 0; background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); }
+.lista-historial li {
+  display: grid; grid-template-columns: 150px 74px minmax(0, 1fr); grid-template-areas: "fecha accion resumen" "fecha accion quien";
+  gap: 2px 14px; padding: 12px 18px; border-top: 1px solid var(--borde); align-items: start;
+}
+.lista-historial li:first-child { border-top: 0; }
+.lista-historial time { grid-area: fecha; color: var(--tenue); font-size: .88rem; font-variant-numeric: tabular-nums; }
+.lista-historial .accion { grid-area: accion; justify-self: start; font-size: .78rem; font-weight: 700; padding: 2px 10px; border-radius: 999px; }
+.accion.crear { background: var(--bien-fondo); color: var(--bien-texto); }
+.accion.editar { background: var(--just-fondo); color: var(--just-texto); }
+.accion.anular { background: var(--falta-fondo); color: var(--falta-texto); }
+.lista-historial .resumen { grid-area: resumen; overflow-wrap: anywhere; }
+.lista-historial .quien { grid-area: quien; font-size: .88rem; }
+@media (max-width: 640px) {
+  .lista-historial li { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "accion fecha" "resumen resumen" "quien quien"; padding: 12px 14px; }
+}
+.paginacion { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 14px; }
+@media (max-width: 520px) {
+  .paginacion { flex-wrap: wrap; }
+  .paginacion > span { order: -1; flex-basis: 100%; text-align: center; }
+  .paginacion > .boton { flex: 1; }
+}
+
+/* Plataforma: diálogo de activación */
+.dialogo-fondo { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); display: grid; place-items: center; padding: 16px; z-index: 50; }
+.dialogo { max-width: 480px; }
+.dialogo .aviso { margin: 0; }

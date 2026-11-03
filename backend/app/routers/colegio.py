@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.almacenamiento import get_almacenamiento
+from app.configuracion import registrar
 from app.db import get_db
 from app.deps import Sesion, colegio_del_host, requerir_permiso
 from app.models import Colegio
@@ -66,6 +67,9 @@ def cambiar_imagen(
     s.colegio.color_secundario = datos.color_secundario.upper()
     if datos.menu_claro is not None:
         s.colegio.menu_claro = datos.menu_claro
+    registrar(db, s.colegio.id, s.usuario, "editar", "configuracion", "imagen", None,
+              f"Colores {s.colegio.color_primario} y {s.colegio.color_secundario}, "
+              f"menú {'claro' if s.colegio.menu_claro else 'de color'}")
     db.commit()
     return _imagen(s.colegio)
 
@@ -92,6 +96,7 @@ def subir_logo(
     clave = f"colegios/{s.colegio.id}/logo-{secrets.token_urlsafe(12)}.{EXTENSIONES[mime]}"
     almacen.guardar(clave, contenido, mime)
     s.colegio.logo_clave = clave
+    registrar(db, s.colegio.id, s.usuario, "editar", "configuracion", "logo", None, "Subió un logo nuevo")
     db.commit()
     if anterior:
         almacen.borrar(anterior)
@@ -106,6 +111,7 @@ def quitar_logo(
     if anterior is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "El colegio no tiene logo")
     s.colegio.logo_clave = None
+    registrar(db, s.colegio.id, s.usuario, "anular", "configuracion", "logo", None, "Quitó el logo")
     db.commit()
     get_almacenamiento().borrar(anterior)
     return _imagen(s.colegio)

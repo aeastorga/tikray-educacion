@@ -92,13 +92,41 @@ def tiene_permiso(usuario: Usuario, modulo: str, nivel: str) -> bool:
     return False
 
 
+def _modulo_apagado() -> HTTPException:
+    return HTTPException(status.HTTP_403_FORBIDDEN, "Este módulo no está activo en el colegio")
+
+
+def puede(sesion: Sesion, modulo: str, nivel: str = "ver") -> bool:
+    """El módulo está activo en el colegio y el rol tiene el permiso (el director, todos los activos)."""
+    return sesion.colegio.modulo_activo(modulo) and tiene_permiso(sesion.usuario, modulo, nivel)
+
+
 def requerir_permiso(modulo: str, nivel: str = "ver"):
     def dependencia(sesion: Sesion = Depends(usuario_actual)) -> Sesion:
+        # Un módulo apagado no se usa aunque el rol tenga el permiso (ni el director).
+        if not sesion.colegio.modulo_activo(modulo):
+            raise _modulo_apagado()
         if not tiene_permiso(sesion.usuario, modulo, nivel):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin permiso para este módulo")
         return sesion
 
     return dependencia
+
+
+def modulo_encendido(modulo: str):
+    """Para rutas de la familia o públicas de un módulo contratable: 403 si el colegio lo apagó."""
+    def dependencia(colegio: Colegio = Depends(colegio_del_host)) -> Colegio:
+        if not colegio.modulo_activo(modulo):
+            raise _modulo_apagado()
+        return colegio
+
+    return dependencia
+
+
+def solo_director(sesion: Sesion = Depends(usuario_actual)) -> Sesion:
+    if not sesion.usuario.rol.es_director:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el director")
+    return sesion
 
 
 def admin_plataforma(

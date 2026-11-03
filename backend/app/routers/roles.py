@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import configuracion
 from app.db import get_db
 from app.deps import Sesion, requerir_permiso
 from app.models import PermisoRol, Rol, Usuario
@@ -50,12 +51,17 @@ def _rol(db: Session, colegio_id: int, rol_id: int) -> Rol:
     return rol
 
 
-def _guardar(db: Session, rol: Rol) -> None:
+def _guardar(db: Session, rol: Rol, s: Sesion, accion: str) -> None:
+    """Guarda el rol y su línea del historial en la misma transacción."""
     try:
-        db.commit()
+        db.flush()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe un rol con ese nombre")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe un rol con ese nombre") from None
+    permisos = ", ".join(f"{MODULOS.get(p.modulo, p.modulo)} ({p.nivel})" for p in rol.permisos) or "sin permisos"
+    configuracion.registrar(db, s.colegio.id, s.usuario, accion, "roles", "rol", rol.id,
+                            f"Rol «{rol.nombre}»: {permisos}{' · solo sus secciones' if rol.solo_sus_secciones else ''}")
+    db.commit()
 
 
 @router.get("/modulos")
@@ -76,7 +82,7 @@ def crear(
     rol = Rol(colegio_id=s.colegio.id, nombre=datos.nombre.strip(), solo_sus_secciones=datos.solo_sus_secciones)
     rol.permisos = [PermisoRol(colegio_id=s.colegio.id, modulo=m, nivel=n) for m, n in datos.permisos.items()]
     db.add(rol)
-    _guardar(db, rol)
+    _guardar(db, rol, s, "crear")
     return _salida(rol)
 
 
@@ -90,7 +96,7 @@ def editar(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El rol del director no se modifica")
     rol.nombre, rol.solo_sus_secciones = datos.nombre.strip(), datos.solo_sus_secciones
     rol.permisos = [PermisoRol(colegio_id=s.colegio.id, modulo=m, nivel=n) for m, n in datos.permisos.items()]
-    _guardar(db, rol)
+    _guardar(db, rol, s, "editar")
     return _salida(rol)
 
 
@@ -103,5 +109,6 @@ def borrar(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El rol del director no se borra")
     if db.scalar(select(Usuario.id).where(Usuario.colegio_id == s.colegio.id, Usuario.rol_id == rol.id).limit(1)):
         raise HTTPException(status.HTTP_409_CONFLICT, "Hay personal con este rol")
+    configuracion.registrar(db, s.colegio.id, s.usuario, "anular", "roles", "rol", rol.id, f"Borró el rol «{rol.nombre}»")
     db.delete(rol)
     db.commit()

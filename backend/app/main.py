@@ -11,7 +11,7 @@ from app import avisos
 from app.config import get_settings
 from app.deps import colegio_del_host, familia_sesion, usuario_actual, usuario_sesion
 from app.proteccion import ip_cliente
-from app.routers import (alumnos, asistencia, auth, colegio, cuaderno, estructura, familia, familia_cuaderno, familias,
+from app.routers import (alumnos, asistencia, auth, colegio, configuracion, cuaderno, estructura, familia, familia_cuaderno, familias,
                          importacion, panel, personal, plataforma, reunion, roles)
 
 
@@ -51,7 +51,7 @@ def crear_app() -> FastAPI:
     api_privada = APIRouter(dependencies=[Depends(usuario_actual)])
     for r in (colegio.privado, roles.router, personal.router, estructura.router, alumnos.router,
               importacion.router, asistencia.router, familias.router, cuaderno.router, panel.router,
-              reunion.router):
+              reunion.router, configuracion.router):
         api_privada.include_router(r)
 
     for r in (api_publica, api_sesion, api_familia, api_privada):

@@ -82,6 +82,8 @@ def yo(s: Sesion = Depends(usuario_sesion)) -> dict:
         permisos = {m: "editar" for m in MODULOS}
     else:
         permisos = {p.modulo: p.nivel for p in u.rol.permisos}
+    # Un módulo apagado no figura: desaparece del menú aunque el rol tenga permiso.
+    permisos = {m: n for m, n in permisos.items() if s.colegio.modulo_activo(m)}
     return {
         "id": u.id,
         "usuario": u.usuario,

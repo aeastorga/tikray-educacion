@@ -28,3 +28,11 @@ textarea {
 .falta-firma { color: var(--error); }
 .lista-elegir { list-style: none; padding: 0; margin: 6px 0 0; max-height: 220px; overflow-y: auto; }
 .lista-elegir li { padding: 4px 0; }
+.estado-cuaderno.programado { color: var(--just-texto); background: var(--just-fondo); padding: 1px 8px; border-radius: 999px; }
+.categoria-cuaderno {
+  display: inline-block; margin-left: 4px; font-size: .8rem; font-weight: 600; padding: 1px 8px; border-radius: 999px;
+  background: var(--fondo); color: var(--tenue); border: 1px solid var(--borde); white-space: nowrap;
+}
+.categoria-cuaderno.merito { background: var(--bien-fondo); color: var(--bien-texto); border-color: transparent; }
+.aviso-programado { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; border-left-color: var(--just-texto); }
+.programar { display: flex; flex-direction: column; gap: 8px; }

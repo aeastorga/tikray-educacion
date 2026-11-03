@@ -122,7 +122,7 @@ def test_comunicado_llega_segun_su_alcance(client, db, e, h, alcance, campo, cua
 
 def test_comunicado_a_todo_el_colegio_avisa_una_vez_por_apoderado_con_app(client, db, e, h):
     r = escribir(client, h, tipo="comunicado", alcance="colegio", pide_firma=True)
-    assert r.json() == {"id": r.json()["id"], "alumnos": 3, "apoderados": 3, "avisados": 2}
+    assert r.json() == {"id": r.json()["id"], "alumnos": 3, "apoderados": 3, "avisados": 2, "programado_para": None}
     cola = cola_cuaderno(db, e.colegio)
     # La madre tiene dos hijos en el colegio: un solo aviso. El padre sin cuenta no recibe push.
     assert sorted(a.apoderado_id for a in cola) == sorted([e.madre.id, e.otro.id])

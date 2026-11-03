@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app import codigos, familias, validacion
 from app.comun import guardar, obtener
+from app.configuracion import anotar
 from app.db import get_db
 from app.deps import Sesion, requerir_permiso
 from app.models import Alumno, AlumnoApoderado, AnioEscolar, Apoderado, Grado, Matricula, Nivel, Seccion
@@ -125,7 +126,8 @@ def crear(datos: DatosAlumno, s: Sesion = Depends(editar), db: Session = Depends
     guardar(db, "Ya existe un alumno con ese documento", solo_flush=True)
     if seccion:
         matricular(db, cid, a.id, seccion)
-    guardar(db, "Ya existe un alumno con ese documento")
+    anotar(db, s, "crear", "padron", "alumno", a, f"Alumno {a.apellidos}, {a.nombres}",
+           "Ya existe un alumno con ese documento")
     return detalle(a.id, s, db)
 
 
@@ -167,7 +169,8 @@ def editar_alumno(alumno_id: int, datos: DatosAlumno, s: Sesion = Depends(editar
     guardar(db, "Ya existe un alumno con ese documento", solo_flush=True)
     if datos.seccion_id:
         matricular(db, cid, a.id, obtener(db, Seccion, cid, datos.seccion_id, "Sección"))
-    guardar(db, "Ya existe un alumno con ese documento")
+    anotar(db, s, "editar", "padron", "alumno", a, f"Alumno {a.apellidos}, {a.nombres}",
+           "Ya existe un alumno con ese documento")
     return detalle(a.id, s, db)
 
 
@@ -176,7 +179,7 @@ def nuevo_codigo(alumno_id: int, s: Sesion = Depends(editar), db: Session = Depe
     """Para un carnet perdido: el código anterior deja de servir."""
     a = obtener(db, Alumno, s.colegio.id, alumno_id, "Alumno")
     a.codigo = codigos.generar(db, s.colegio.id)
-    guardar(db)
+    anotar(db, s, "editar", "padron", "alumno", a, f"Carnet nuevo para {a.apellidos}, {a.nombres}")
     return {"codigo": a.codigo}
 
 
@@ -206,20 +209,23 @@ def vincular(alumno_id: int, datos: Vinculo, s: Sesion = Depends(editar), db: Se
         v = AlumnoApoderado(colegio_id=cid, alumno_id=a.id, apoderado_id=ap.id)
         db.add(v)
     v.parentesco, v.recibe_avisos = datos.parentesco.strip(), datos.recibe_avisos
-    guardar(db)
+    anotar(db, s, "editar", "padron", "apoderado", ap,
+           f"Apoderado {ap.apellidos}, {ap.nombres} ({v.parentesco}) de {a.apellidos}, {a.nombres}")
     return _apoderado(ap, v)
 
 
 @router.delete("/alumnos/{alumno_id}/apoderados/{apoderado_id}", status_code=204)
 def desvincular(alumno_id: int, apoderado_id: int, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> None:
     cid = s.colegio.id
-    obtener(db, Alumno, cid, alumno_id, "Alumno")
+    a = obtener(db, Alumno, cid, alumno_id, "Alumno")
     v = db.scalar(select(AlumnoApoderado).where(AlumnoApoderado.colegio_id == cid,
                                                 AlumnoApoderado.alumno_id == alumno_id,
                                                 AlumnoApoderado.apoderado_id == apoderado_id))
     if v is not None:
         db.delete(v)
-        guardar(db)
+        ap = db.get(Apoderado, apoderado_id)
+        anotar(db, s, "anular", "padron", "apoderado", apoderado_id,
+               f"Desvinculó a {ap.apellidos}, {ap.nombres} de {a.apellidos}, {a.nombres}")
 
 
 @router.put("/apoderados/{apoderado_id}")
@@ -233,5 +239,6 @@ def editar_apoderado(apoderado_id: int, datos: DatosApoderado, s: Sesion = Depen
     familias.cambiar_contacto(db, ap, datos.celular, datos.correo, "panel", s.usuario.id)
     for campo, valor in datos.model_dump(exclude={"celular", "correo"}).items():
         setattr(ap, campo, valor)
-    guardar(db, "Ya existe un apoderado con ese documento")
+    anotar(db, s, "editar", "padron", "apoderado", ap, f"Apoderado {ap.apellidos}, {ap.nombres}",
+           "Ya existe un apoderado con ese documento")
     return _apoderado(ap)
