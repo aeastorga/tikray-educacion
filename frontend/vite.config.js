@@ -25,13 +25,8 @@ export default defineConfig({
       workbox: {
         navigateFallbackDenylist: [/^\/api/, /^\/plataforma/, /^\/archivos/],
         importScripts: ['/sw-push.js'],  // avisos push de la familia
-        // Las fuentes quedan guardadas: la portería sin internet se sigue viendo igual.
-        runtimeCaching: [{
-          urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//,
-          handler: 'CacheFirst',
-          options: { cacheName: 'fuentes', expiration: { maxEntries: 20, maxAgeSeconds: 31536000 },
-            cacheableResponse: { statuses: [0, 200] } },
-        }],
+        // Las fuentes van en el precache: la portería se ve igual sin internet desde el primer uso.
+        globPatterns: ['**/*.{js,css,html,svg,woff2}'],
       },
     }),
   ],

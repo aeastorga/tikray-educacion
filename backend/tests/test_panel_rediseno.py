@@ -6,10 +6,16 @@ import uuid
 from datetime import time, timedelta
 
 from app import asistencia
+from app.routers import panel
 from app.codigos import contenido_qr
-from app.models import AsistenciaAlumno, EntradaCuaderno, LicenciaPersonal
+from app.models import AsistenciaAlumno, EntradaCuaderno, LicenciaPersonal, Turno
 from tests.conftest import auth, crear_familia, crear_personal, host, token, token_familia
 from tests.test_asistencia import HOY, en, preparar
+
+
+def _reloj(monkeypatch, hh, mm):
+    """Fija la hora de Lima que ve el panel (el día sigue siendo hoy)."""
+    monkeypatch.setattr(panel, "ahora_lima", lambda: en(HOY, hh, mm))
 
 
 def _marcar(db, e, alumno, hh, mm, equipo=None, dia=HOY, personal=None):
@@ -55,7 +61,8 @@ def test_llegadas_sin_marcaciones(client, db):
     assert a["ultima_marcacion"] is None
 
 
-def test_personal_presentes_y_listas_cortas(client, db):
+def test_personal_presentes_y_listas_cortas(client, db, monkeypatch):
+    _reloj(monkeypatch, 12, 0)
     e = preparar(db, "uno", dias_semana="1234567")  # clases todos los días: la prueba no depende del día
     otro = preparar(db, "dos")
     turno = e.turno
@@ -209,3 +216,34 @@ def _colegio(db, sub):
 
     from app.models import Colegio
     return db.scalar(select(Colegio).where(Colegio.subdominio == sub))
+
+
+def test_sin_marcar_solo_despues_de_la_hora_de_su_turno(client, db, monkeypatch):
+    e = preparar(db, "uno", dias_semana="1234567")  # turno Mañana 07:45
+    tarde = Turno(colegio_id=e.colegio.id, nombre="Tarde", hora_entrada=time(13, 0), tolerancia_minutos=10,
+                  hora_salida=time(18, 0))
+    db.add(tarde)
+    db.flush()
+    manana_u = crear_personal(db, e.colegio, "20000001")
+    tarde_u = crear_personal(db, e.colegio, "20000002")
+    manana_u.turno_id, tarde_u.turno_id = e.turno.id, tarde.id
+    # Otro colegio con un turno temprano y alguien sin marcar: no cuenta aquí.
+    otro = preparar(db, "dos")
+    ajeno = crear_personal(db, otro.colegio, "20000003")
+    ajeno.turno_id = otro.turno.id
+    db.commit()
+
+    def sin_marcar():
+        p = _panel(client)["asistencia"]["personal"]
+        return p["sin_marcar"], [x["nombre"] for x in p["lista"]["sin_marcar"]]
+
+    _reloj(monkeypatch, 7, 30)  # nadie debía haber llegado todavía
+    assert sin_marcar() == (0, [])
+    _reloj(monkeypatch, 7, 45)  # justo a la hora: todavía no pasó
+    assert sin_marcar() == (0, [])
+    _reloj(monkeypatch, 7, 46)  # ya pasó la hora de la mañana
+    assert sin_marcar() == (1, ["P 20000001"])
+    _reloj(monkeypatch, 13, 5)  # ya pasó también la de la tarde
+    assert sin_marcar() == (2, ["P 20000001", "P 20000002"])
+    # El total con turno no depende de la hora.
+    assert _panel(client)["asistencia"]["personal"]["total"] == 2

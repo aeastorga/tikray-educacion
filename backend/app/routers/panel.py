@@ -5,7 +5,7 @@ todos). El cuaderno respeta "solo sus secciones".
 """
 
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import and_, case, func, select
@@ -25,6 +25,11 @@ router = APIRouter(prefix="/panel", tags=["panel"])
 DIAS_TENDENCIA = 10
 TRAMO_MINUTOS = 10  # llegadas por hora, en tramos de 10 minutos
 LISTA_CORTA = 5
+
+
+def ahora_lima() -> datetime:
+    """Reloj del panel (aparte para poder fijarlo en las pruebas)."""
+    return datetime.now(UTC).astimezone(LIMA)
 
 
 def _tramo(momento: datetime) -> str:
@@ -103,11 +108,14 @@ def _personal(db: Session, cid: int, hoy) -> dict:
                              LicenciaPersonal.hasta >= hoy))
     con_licencia = db.scalar(select(func.count(Usuario.id)).where(
         Usuario.colegio_id == cid, Usuario.activo, Usuario.id.in_(con_licencia_q))) or 0
-    # Sin marcar: tiene turno, no tiene ingreso hoy (aunque ya le haya caído la falta automática) y no está de licencia.
+    # Sin marcar: ya pasó la hora de entrada de su turno (hora de Lima), no tiene ingreso hoy (aunque ya le
+    # haya caído la falta automática) y no está de licencia. Antes de su hora todavía no se le espera.
     marcaron = (select(AsistenciaPersonal.usuario_id)
                 .where(AsistenciaPersonal.colegio_id == cid, AsistenciaPersonal.fecha == hoy,
                        AsistenciaPersonal.entrada.is_not(None)))
-    sin_marcar_q = select(Usuario).where(*con_turno, Usuario.id.not_in(marcaron), Usuario.id.not_in(con_licencia_q))
+    ya_entraron = select(Turno.id).where(Turno.colegio_id == cid, Turno.hora_entrada < ahora_lima().time())
+    sin_marcar_q = select(Usuario).where(*con_turno, Usuario.turno_id.in_(ya_entraron), Usuario.id.not_in(marcaron),
+                                         Usuario.id.not_in(con_licencia_q))
     sin_marcar_total = db.scalar(select(func.count()).select_from(sin_marcar_q.subquery())) or 0
     sin_marcar = db.scalars(sin_marcar_q.order_by(Usuario.apellidos).limit(LISTA_CORTA)).all()
     return {

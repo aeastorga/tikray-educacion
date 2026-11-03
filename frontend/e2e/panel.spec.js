@@ -48,3 +48,16 @@ test('pantalla de ingreso: dos botones y el ingreso del padre con su documento y
   await page.getByRole('link', { name: 'Volver' }).click()
   await expect(page).toHaveURL(/\/$/)
 })
+
+test('las fuentes vienen de la propia app, no de Google', async ({ page }) => {
+  const externas = []
+  page.on('request', (r) => { if (/fonts\.(googleapis|gstatic)\.com/.test(r.url())) externas.push(r.url()) })
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Bienvenido' })).toBeVisible()
+  const cargadas = await page.evaluate(async () => {
+    await document.fonts.ready
+    return [document.fonts.check('800 16px "Bricolage Grotesque"'), document.fonts.check('400 16px "Plus Jakarta Sans"')]
+  })
+  expect(cargadas).toEqual([true, true])
+  expect(externas).toEqual([])
+})
