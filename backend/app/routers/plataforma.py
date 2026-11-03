@@ -87,6 +87,7 @@ class ColegioOut(BaseModel):
     estado: str
     vence_en: date | None
     disponible: bool
+    es_demo: bool
 
 
 class ColegioCreado(BaseModel):
@@ -97,7 +98,7 @@ class ColegioCreado(BaseModel):
 
 def _salida(c: Colegio) -> ColegioOut:
     return ColegioOut(id=c.id, nombre=c.nombre, subdominio=c.subdominio, dominio_propio=c.dominio_propio,
-                      estado=c.estado, vence_en=c.vence_en, disponible=c.disponible(hoy_lima()))
+                      estado=c.estado, vence_en=c.vence_en, disponible=c.disponible(hoy_lima()), es_demo=c.es_demo)
 
 
 def _conflicto() -> HTTPException:
@@ -169,6 +170,45 @@ def editar(colegio_id: int, datos: CambioColegio, db: Session = Depends(get_db))
         db.rollback()
         raise _conflicto()
     return _salida(colegio)
+
+
+# --- Demo con datos ficticios --------------------------------------------------------------
+
+class NuevaDemo(BaseModel):
+    subdominio: str = Field(default="demo", pattern=SUBDOMINIO)
+    nombre: str = Field(default="Colegio Demo Tikray", min_length=1, max_length=200)
+    alumnos_por_seccion: int = Field(default=24, ge=1, le=60)
+
+
+def _demo(db: Session, subdominio: str, nombre: str, alumnos_por_seccion: int) -> dict:
+    from app import demo
+
+    try:
+        r = demo.crear_o_reiniciar(db, subdominio, nombre, alumnos_por_seccion)
+    except demo.NoEsDemo:
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ese subdominio es de un colegio real") from None
+    return {"colegio": _salida(db.get(Colegio, r.colegio_id)), "alumnos": r.alumnos, "apoderados": r.apoderados,
+            "personal": r.personal, "credenciales": r.credenciales}
+
+
+@router.post("/demo", status_code=201)
+def crear_demo(d: NuevaDemo, db: Session = Depends(get_db)) -> dict:
+    """Crea el colegio demo (o lo reinicia si ya existe y es demo). Las credenciales son las de la demo."""
+    if d.subdominio in SUBDOMINIOS_RESERVADOS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Ese subdominio está reservado")
+    return _demo(db, d.subdominio, d.nombre, d.alumnos_por_seccion)
+
+
+@router.post("/colegios/{colegio_id}/reiniciar-demo")
+def reiniciar_demo(colegio_id: int, db: Session = Depends(get_db)) -> dict:
+    """Borra todo lo del colegio demo (lo que cargaron en la presentación) y lo vuelve a sembrar."""
+    c = db.get(Colegio, colegio_id)
+    if c is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Colegio no encontrado")
+    if not c.es_demo:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Solo se reinicia un colegio de demostración")
+    return _demo(db, c.subdominio, c.nombre, 24)
 
 
 @router.get("/resumen")

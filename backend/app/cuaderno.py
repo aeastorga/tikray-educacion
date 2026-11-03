@@ -13,13 +13,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import and_, select
+from sqlalchemy import and_, delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.almacenamiento import get_almacenamiento_privado
 from app.fechas import LIMA, hoy_lima
-from app.models import (AdjuntoCuaderno, Alumno, AlumnoApoderado, AnioEscolar, Apoderado, ColaAviso,
+from app.models import (AdjuntoCuaderno, Alumno, AlumnoApoderado, AnioEscolar, Apoderado, AsistenciaAlumno, ColaAviso,
                         DestinoCuaderno, EntradaCuaderno, Grado, Matricula, Nivel, Seccion, SeccionDocente, Usuario)
 
 MAX_ADJUNTOS = 5
@@ -171,8 +171,7 @@ def texto_aviso(db: Session, e: EntradaCuaderno, que: str = "nueva") -> str:
     if que == "respuesta":
         return f"Respuesta del colegio en «{e.titulo}»."
     if que == "resuelta":
-        estado = "aprobada" if e.estado == "aprobada" else "rechazada"
-        return f"{NOMBRE_TIPO[e.tipo]}{de}: {estado}."
+        return f"{NOMBRE_TIPO[e.tipo]}{de}: {e.estado}."
     if e.tipo == "comunicado":
         return f"Comunicado: {e.titulo}" + (" (firma de lectura)" if e.pide_firma else "")
     if e.tipo == "incidencia":
@@ -295,5 +294,43 @@ def entrada_basica(e: EntradaCuaderno) -> dict:
         "desde": e.desde.isoformat() if e.desde else None, "hasta": e.hasta.isoformat() if e.hasta else None,
         "hora_salida": e.hora_salida.strftime("%H:%M") if e.hora_salida else None, "recoge": e.recoge,
         "estado": e.estado, "nota_resolucion": e.nota_resolucion, "resuelto_en": iso(e.resuelto_en),
+        "motivo_anulacion": e.motivo_anulacion,
         "creado_en": iso(e.creado_en), "de_familia": e.apoderado_autor_id is not None,
     }
+
+
+# --- Justificación aprobada -> asistencia ---------------------------------------------------
+
+def justificacion_vigente(colegio_id: int, alumno_id, fecha):
+    """Subconsulta: la justificación aprobada (la primera) que cubre a ese alumno en esa fecha.
+    Sirve con columnas (en la falta automática) o con valores."""
+    return (select(EntradaCuaderno.id).where(
+        EntradaCuaderno.colegio_id == colegio_id, EntradaCuaderno.tipo == "justificacion",
+        EntradaCuaderno.estado == "aprobada", EntradaCuaderno.alumno_id == alumno_id,
+        EntradaCuaderno.desde <= fecha, EntradaCuaderno.hasta >= fecha)
+        .order_by(EntradaCuaderno.id).limit(1).scalar_subquery())
+
+
+def aplicar_justificacion(db: Session, e: EntradaCuaderno) -> int:
+    """Las faltas de esos días pasan a "justificada". Las que se marquen después (un día que aún no
+    llegó) ya nacen justificadas (ver `asistencia.marcar_faltas`). Devuelve cuántas cambió."""
+    r = db.execute(update(AsistenciaAlumno).where(
+        AsistenciaAlumno.colegio_id == e.colegio_id, AsistenciaAlumno.alumno_id == e.alumno_id,
+        AsistenciaAlumno.fecha.between(e.desde, e.hasta), AsistenciaAlumno.estado == "falta")
+        .values(estado="justificada", justificacion_id=e.id))
+    # El aviso de falta que aún no salió ya no corresponde.
+    db.execute(delete(ColaAviso).where(
+        ColaAviso.colegio_id == e.colegio_id, ColaAviso.alumno_id == e.alumno_id, ColaAviso.tipo == "falta",
+        ColaAviso.fecha.between(e.desde, e.hasta), ColaAviso.estado == "pendiente"))
+    return r.rowcount
+
+
+def quitar_justificacion(db: Session, e: EntradaCuaderno) -> int:
+    """Al anularla, sus días vuelven a "falta", salvo los que cubra otra justificación aprobada."""
+    filas = db.scalars(select(AsistenciaAlumno).where(
+        AsistenciaAlumno.colegio_id == e.colegio_id, AsistenciaAlumno.justificacion_id == e.id,
+        AsistenciaAlumno.estado == "justificada")).all()
+    for f in filas:
+        otra = db.scalar(select(justificacion_vigente(e.colegio_id, f.alumno_id, f.fecha)))
+        f.estado, f.justificacion_id = ("justificada", otra) if otra else ("falta", None)
+    return sum(1 for f in filas if f.estado == "falta")

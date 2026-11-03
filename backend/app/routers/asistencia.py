@@ -132,7 +132,7 @@ def porteria(s: Sesion = Depends(marcar), db: Session = Depends(get_db)) -> dict
 # --- Reportes de alumnos -----------------------------------------------------------
 
 def _estados_vacios() -> dict:
-    return {"total": 0, "presente": 0, "tarde": 0, "falta": 0, "sin_registro": 0}
+    return {"total": 0, "presente": 0, "tarde": 0, "falta": 0, "justificada": 0, "sin_registro": 0}
 
 
 @router.get("/dia")
@@ -187,16 +187,16 @@ def _dias(db: Session, cid: int, anio: int, mes: int) -> list[date]:
     return [d for d in (date(anio, mes, i) for i in range(1, ultimo + 1)) if es_dia_lectivo(db, cid, d)]
 
 
-LETRA = {"presente": "P", "tarde": "T", "falta": "F", "licencia": "L"}
+LETRA = {"presente": "P", "tarde": "T", "falta": "F", "justificada": "J", "licencia": "L"}
 RELLENO = {"T": PatternFill("solid", fgColor="FFF2CC"), "F": PatternFill("solid", fgColor="F8CBAD"),
-           "L": PatternFill("solid", fgColor="DDEBF7")}
+           "J": PatternFill("solid", fgColor="E2EFDA"), "L": PatternFill("solid", fgColor="DDEBF7")}
 
 
 def _hoja(ws, titulo: str, dias: list[date], filas: list[tuple[str, dict[date, str]]], letras: str) -> None:
     """Una fila por persona, una columna por día lectivo y los totales al final."""
     ws.append([titulo])
     ws["A1"].font = Font(bold=True, size=12)
-    nombres_total = {"P": "Asistió", "T": "Tardanzas", "F": "Faltas", "L": "Licencia"}
+    nombres_total = {"P": "Asistió", "T": "Tardanzas", "F": "Faltas", "J": "Justificadas", "L": "Licencia"}
     ws.append(["Apellidos y nombres", *[d.day for d in dias], *[nombres_total[x] for x in letras]])
     for celda in ws[2]:
         celda.font = Font(bold=True)
@@ -249,7 +249,7 @@ def mensual(anio: int, mes: int, seccion_id: int | None = None, s: Sesion = Depe
     for sec, g, n in secciones:
         ws = wb.create_sheet(f"{g} {sec.nombre}"[:31].replace("/", "-"))
         _hoja(ws, f"{s.colegio.nombre} · {n} {g} {sec.nombre} · {mes:02d}/{anio}", dias,
-              [(f"{a.apellidos}, {a.nombres}", estados.get(a.id, {})) for a in alumnos.get(sec.id, [])], "PTF")
+              [(f"{a.apellidos}, {a.nombres}", estados.get(a.id, {})) for a in alumnos.get(sec.id, [])], "PTFJ")
     if not wb.worksheets:
         wb.create_sheet("Sin secciones")
     return _excel(wb, f"asistencia-{anio}-{mes:02d}.xlsx")

@@ -33,6 +33,8 @@ class Colegio(Base):
     estado: Mapped[str] = mapped_column(String(12), default="activo")
     # Último día con acceso (fecha de Lima). Vacío = sin vencimiento.
     vence_en: Mapped[date | None]
+    # Colegio de demostración con datos ficticios: el único que se puede borrar y volver a crear.
+    es_demo: Mapped[bool] = mapped_column(default=False, server_default="false")
     creado_en: Mapped[datetime] = creado_en()
 
     def disponible(self, hoy: date) -> bool:

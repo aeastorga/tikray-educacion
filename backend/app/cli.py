@@ -3,6 +3,10 @@
     python -m app.cli crear-admin <correo> "<nombre>"
     python -m app.cli faltas [AAAA-MM-DD]
     python -m app.cli claves-push
+    python -m app.cli demo [subdominio] [--alumnos-por-seccion N]
+
+`demo` crea el colegio de demostración con datos ficticios, o lo borra y lo vuelve a
+crear si ya existe (solo si está marcado como demo; nunca toca un colegio real).
 
 `faltas` sin fecha hace lo mismo que el proceso del servidor (hoy, turnos cuyo
 corte ya pasó). Con fecha cierra ese día completo, sin avisar a las familias:
@@ -64,11 +68,35 @@ def claves_push() -> None:
     print(f"VAPID_CLAVE_PRIVADA={privada}\nVAPID_CLAVE_PUBLICA={publica}")
 
 
+def demo(argumentos: list[str]) -> None:
+    import argparse
+
+    from app import demo as d
+
+    p = argparse.ArgumentParser(prog="python -m app.cli demo")
+    p.add_argument("subdominio", nargs="?", default="demo")
+    p.add_argument("--alumnos-por-seccion", type=int, default=24)
+    a = p.parse_args(argumentos)
+    with get_sessionmaker()() as db:
+        try:
+            r = d.crear_o_reiniciar(db, a.subdominio, alumnos_por_seccion=a.alumnos_por_seccion)
+        except d.NoEsDemo as e:
+            sys.exit(str(e))
+    c = r.credenciales
+    print(f"Demo lista en {a.subdominio}: {r.alumnos} alumnos, {r.apoderados} apoderados, {r.personal} del personal")
+    print(f"  Director:  {c['director']['usuario']} / {c['director']['clave']}")
+    print(f"  Portería:  {c['porteria']['usuario']} / {c['porteria']['clave']}")
+    print(f"  Docente:   {c['docente']['usuario']} / {c['docente']['clave']}  ({c['docente']['seccion']})")
+    print(f"  Familia:   {c['familia']['documento']} / PIN {c['familia']['pin']}  ({c['familia']['hijo']})")
+
+
 if __name__ == "__main__":
     if len(sys.argv) == 4 and sys.argv[1] == "crear-admin":
         crear_admin(sys.argv[2], sys.argv[3])
     elif sys.argv[1:] == ["claves-push"]:
         claves_push()
+    elif len(sys.argv) >= 2 and sys.argv[1] == "demo":
+        demo(sys.argv[2:])
     elif len(sys.argv) in (2, 3) and sys.argv[1] == "faltas":
         faltas(sys.argv[2] if len(sys.argv) == 3 else None)
     else:

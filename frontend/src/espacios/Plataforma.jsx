@@ -51,6 +51,7 @@ function Colegios({ salir }) {
   const [lista, setLista] = useState([])
   const [nuevo, setNuevo] = useState(VACIO)
   const [creado, setCreado] = useState(null)
+  const [demoLista, setDemoLista] = useState(null)
   const [error, setError] = useState(null)
 
   const cargar = useCallback(() => api('/plataforma/colegios').then(setLista).catch(() => {}), [])
@@ -79,6 +80,18 @@ function Colegios({ salir }) {
     } catch (err) { setError(err.message) }
   }
 
+  async function demo(c) {
+    const texto = c ? `¿Reiniciar ${c.nombre}? Se borra todo lo que se cargó y vuelven los datos ficticios.`
+      : '¿Crear el colegio demo (subdominio "demo") con datos ficticios?'
+    if (!confirm(texto)) return
+    setError(null)
+    try {
+      const r = await api(c ? `/plataforma/colegios/${c.id}/reiniciar-demo` : '/plataforma/demo', { metodo: 'POST', datos: c ? undefined : {} })
+      setDemoLista(r)
+      cargar()
+    } catch (err) { setError(err.message) }
+  }
+
   async function cambiar(c, datos) {
     if (datos.estado === 'suspendido' && !confirm(`¿Suspender ${c.nombre}? Nadie del colegio podrá entrar.`)) return
     setError(null)
@@ -103,8 +116,17 @@ function Colegios({ salir }) {
             <button className="enlace" onClick={() => setCreado(null)}>Cerrar</button>
           </div>
         )}
+        {demoLista && (
+          <div className="aviso">
+            Demo lista: {demoLista.alumnos} alumnos, {demoLista.apoderados} apoderados, {demoLista.personal} del personal.
+            Clave del personal <code>{demoLista.credenciales.director.clave}</code>: director <code>{demoLista.credenciales.director.usuario}</code>,
+            portería <code>{demoLista.credenciales.porteria.usuario}</code>, docente <code>{demoLista.credenciales.docente.usuario}</code>.
+            Familia <code>{demoLista.credenciales.familia.documento}</code> con PIN <code>{demoLista.credenciales.familia.pin}</code>.
+            <button className="enlace" onClick={() => setDemoLista(null)}>Cerrar</button>
+          </div>
+        )}
         <table>
-          <thead><tr><th>Colegio</th><th>Dirección</th><th>Estado</th><th>Vence</th></tr></thead>
+          <thead><tr><th>Colegio</th><th>Dirección</th><th>Estado</th><th>Vence</th><th></th></tr></thead>
           <tbody>
             {lista.map((c) => (
               <tr key={c.id}>
@@ -121,10 +143,14 @@ function Colegios({ salir }) {
                   <input type="date" value={c.vence_en || ''}
                          onChange={(e) => cambiar(c, { vence_en: e.target.value || null })} />
                 </td>
+                <td>{c.es_demo && <button className="enlace" onClick={() => demo(c)}>Reiniciar demo</button>}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        {!lista.some((c) => c.es_demo) && (
+          <p><button className="boton secundario" onClick={() => demo(null)}>Crear colegio demo con datos ficticios</button></p>
+        )}
         <h2>Nuevo colegio</h2>
         <form className="fila-form" onSubmit={crear}>
           <input placeholder="Nombre del colegio" required {...campo('nombre')} />

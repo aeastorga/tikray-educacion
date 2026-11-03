@@ -27,7 +27,8 @@ from app.db import Base, ConColegio, creado_en
 
 TIPOS = ("comunicado", "incidencia", "citacion", "justificacion", "permiso_salida")
 ALCANCES = ("colegio", "nivel", "grado", "seccion", "alumno")
-ESTADOS = ("pendiente", "aprobada", "rechazada")  # solo justificación y permiso de salida
+# Solo justificación y permiso de salida. anulada: estaba aprobada y el colegio la anuló.
+ESTADOS = ("pendiente", "aprobada", "rechazada", "anulada")
 # Los que siempre son de un alumno.
 DE_UN_ALUMNO = ("incidencia", "citacion", "justificacion", "permiso_salida")
 CON_RESOLUCION = ("justificacion", "permiso_salida")
@@ -66,6 +67,7 @@ class EntradaCuaderno(ConColegio, Base):
         _fk("creado_por_id", "usuario", "SET NULL"),
         _fk("apoderado_autor_id", "apoderado", "SET NULL"),
         _fk("resuelto_por_id", "usuario", "SET NULL"),
+        _fk("anulada_por_id", "usuario", "SET NULL"),
         CheckConstraint(_en("tipo", TIPOS), name="tipo_valido"),
         CheckConstraint(_en("alcance", ALCANCES), name="alcance_valido"),
         CheckConstraint(f"tipo = 'comunicado' OR alcance = 'alumno'", name="de_un_alumno"),
@@ -110,6 +112,9 @@ class EntradaCuaderno(ConColegio, Base):
     resuelto_por_id: Mapped[int | None]
     resuelto_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     nota_resolucion: Mapped[str | None] = mapped_column(String(300))
+    anulada_por_id: Mapped[int | None]
+    anulada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    motivo_anulacion: Mapped[str | None] = mapped_column(String(300))
     # Autor: alguien del personal o un apoderado (justificación o permiso pedidos por el padre).
     creado_por_id: Mapped[int | None]
     apoderado_autor_id: Mapped[int | None]

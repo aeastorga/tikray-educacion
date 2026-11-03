@@ -5,7 +5,7 @@ import Porteria from '../porteria/Porteria.jsx'
 import { fechaLima } from '../porteria/reglas.js'
 import './asistencia.css'
 
-const ESTADOS = { presente: 'Presente', tarde: 'Tarde', falta: 'Falta', licencia: 'Licencia' }
+const ESTADOS = { presente: 'Presente', tarde: 'Tarde', falta: 'Falta', justificada: 'Falta justificada', licencia: 'Licencia' }
 const TIPOS_LICENCIA = { salud: 'Salud', personal: 'Personal', vacaciones: 'Vacaciones', comision: 'Comisión de servicio', maternidad: 'Maternidad / paternidad', otro: 'Otro' }
 
 export default function Asistencia({ yo, marcar, licencias, reglas }) {
@@ -82,16 +82,16 @@ function Alumnos() {
       {dia && (
         <>
           <div className="totales">
-            {['presente', 'tarde', 'falta', 'sin_registro'].map((k) => (
+            {['presente', 'tarde', 'falta', 'justificada', 'sin_registro'].map((k) => (
               <div key={k} className={`total ${k}`}><b>{dia.totales[k]}</b><span>{ESTADOS[k] || 'Sin registro'}</span></div>
             ))}
           </div>
           <table>
-            <thead><tr><th>Sección</th><th>Alumnos</th><th>Presentes</th><th>Tarde</th><th>Faltas</th><th>Sin registro</th></tr></thead>
+            <thead><tr><th>Sección</th><th>Alumnos</th><th>Presentes</th><th>Tarde</th><th>Faltas</th><th>Justificadas</th><th>Sin registro</th></tr></thead>
             <tbody>
               {dia.secciones.map((s) => (
                 <tr key={s.id} className="clic" onClick={() => setSeccion(s)}>
-                  <td>{s.nombre}</td><td>{s.total}</td><td>{s.presente}</td><td>{s.tarde}</td><td>{s.falta}</td><td>{s.sin_registro}</td>
+                  <td>{s.nombre}</td><td>{s.total}</td><td>{s.presente}</td><td>{s.tarde}</td><td>{s.falta}</td><td>{s.justificada}</td><td>{s.sin_registro}</td>
                 </tr>
               ))}
             </tbody>

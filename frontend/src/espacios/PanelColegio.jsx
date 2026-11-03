@@ -9,6 +9,7 @@ import CambiarClave from './CambiarClave.jsx'
 import Cuaderno from './Cuaderno.jsx'
 import CuentasPadres from './CuentasPadres.jsx'
 import Padron from './Padron.jsx'
+import Resumen from './Resumen.jsx'
 
 const NIVEL = { ver: 1, editar: 2 }
 const puede = (yo, modulo, nivel = 'ver') => (NIVEL[yo.permisos[modulo]] || 0) >= NIVEL[nivel]
@@ -67,7 +68,7 @@ export default function PanelColegio({ colegio, setColegio }) {
       </nav>
       <main className="contenido">
         <Routes>
-          <Route index element={<p>Bienvenido, {yo.nombres}.</p>} />
+          <Route index element={<Resumen yo={yo} />} />
           <Route path="asistencia/*" element={<Asistencia yo={yo} marcar={puede(yo, 'asistencia', 'editar')}
             licencias={puede(yo, 'personal', 'editar')} reglas={puede(yo, 'configuracion', 'editar')} />} />
           <Route path="cuaderno/*" element={<Cuaderno editar={puede(yo, 'cuaderno', 'editar')}
