@@ -5,7 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 // En local cada colegio entra por <subdominio>.localhost:5173 y el panel de
 // Tikray Labs por plataforma.localhost:5173. El proxy conserva el Host para
 // que el backend sepa de qué colegio es cada petición.
-const backend = { target: 'http://127.0.0.1:8000', changeOrigin: false }
+const backend = { target: process.env.BACKEND_URL || 'http://127.0.0.1:8000', changeOrigin: false }
 
 export default defineConfig({
   plugins: [
