@@ -1,0 +1,47 @@
+# Tikray Educación en Render, para pruebas: un servicio web (backend + PWA compilada) y PostgreSQL.
+# Se crea desde el panel de Render: New → Blueprint → este repositorio.
+#
+# Plan: gratis. Para que el servidor no se suspenda (los avisos y las faltas automáticas corren
+# dentro de él), cambia la línea `plan: free` del servicio por `plan: starter`.
+# La base gratis vence a los 30 días y no tiene respaldos: para algo más que pruebas, súbela de plan.
+
+services:
+  - type: web
+    name: tikray-demo            # la dirección será tikray-demo.onrender.com = subdominio del colegio demo
+    runtime: docker
+    plan: free                   # ← cambia a: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /salud
+    autoDeploy: true
+    # Las migraciones corren al arrancar cada versión (backend/iniciar.sh), antes de recibir tráfico.
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tikray-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true      # la genera Render; no está en el repositorio
+      - key: VAPID_CLAVE_PRIVADA
+        sync: false              # secreta: Render la pide al crear el Blueprint
+      - key: VAPID_CLAVE_PUBLICA
+        sync: false
+      - key: VAPID_CONTACTO
+        value: mailto:soporte@tikraylabs.pe
+      # Cada colegio entra por <subdominio>.onrender.com: la dirección del servicio es el colegio demo.
+      - key: DOMINIO_BASE
+        value: onrender.com
+      # Al contenedor solo se llega por el proxy de Render, que entra por su red privada: de ahí
+      # se acepta X-Forwarded-For. Revísalo en https://<servicio>.onrender.com/salud/ip
+      - key: PROXIES_CONFIANZA
+        value: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10
+      - key: TAREAS_EN_FONDO
+        value: "true"
+
+databases:
+  - name: tikray-db
+    plan: free                   # ← para algo más que pruebas: basic-256mb (la gratis vence a los 30 días)
+    region: oregon
+    databaseName: tikray
+    user: tikray
+    postgresMajorVersion: "16"

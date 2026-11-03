@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # Redes (CIDR, separadas por comas) de los proxies propios, por ejemplo el
     # balanceador de Render. Solo de ellas se acepta X-Forwarded-For.
     proxies_confianza: str = ""
+    # Carpeta con el frontend compilado (vite build). Si está, el mismo servidor lo sirve
+    # (Render: un solo servicio). En local se deja vacía y se usa Vite.
+    carpeta_frontend: str = ""
 
     # Faltas automáticas cada minuto dentro del servidor. En pruebas se apaga.
     tareas_en_fondo: bool = True
@@ -25,6 +28,15 @@ class Settings(BaseSettings):
     vapid_clave_privada: str = ""
     vapid_clave_publica: str = ""
     vapid_contacto: str = "mailto:soporte@tikraylabs.pe"
+
+    @field_validator("database_url")
+    @classmethod
+    def _driver(cls, url: str) -> str:
+        """Render (y otros) dan `postgres://` o `postgresql://`; SQLAlchemy necesita el driver psycopg 3."""
+        for prefijo in ("postgres://", "postgresql://"):
+            if url.startswith(prefijo):
+                return "postgresql+psycopg://" + url[len(prefijo):]
+        return url
 
     token_colegio_minutos: int = 60 * 12
     token_plataforma_minutos: int = 60 * 2
