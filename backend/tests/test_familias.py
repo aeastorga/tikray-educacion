@@ -182,6 +182,131 @@ def test_pin_olvidado_con_enlace_de_nuevo_pin(client, db):
     assert token_familia(client, "alfa", pin="502817")
 
 
+def test_pin_nuevo_en_otro_colegio_deja_pendiente_y_avisa(client, db):
+    a, b = preparar(db, "alfa"), preparar(db, "beta")
+    ap_a = crear_familia(db, a.colegio, alumnos=a.alumnos[:1])
+    ap_b = crear_familia(db, b.colegio, alumnos=b.alumnos[:1])
+    suscribir(client, "alfa", endpoint="https://push.example/celular")
+    tok = invitar(client, "beta", ap_b.id, nuevo_pin=True)
+    assert activar(client, "beta", tok, b.alumnos[0], pin="502817").json()["estado"] == "activo"
+    db.expire_all()
+    assert db.get(Apoderado, ap_a.id).estado_acceso == "pendiente"
+    cambio = db.scalar(select(CambioApoderado).where(CambioApoderado.colegio_id == a.colegio.id))
+    assert (cambio.campo, cambio.antes, cambio.origen) == ("acceso", "activo", "familia")
+    assert "Colegio beta" in cambio.despues
+    # Con el PIN nuevo ve a su hijo de beta, pero no al de alfa.
+    hf = fam("beta", token_familia(client, "beta", pin="502817"))
+    hijos = client.get("/api/familia/hijos", headers=hf).json()
+    assert [h["colegio"] for h in hijos["hijos"]] == ["Colegio beta"]
+    assert hijos["pendientes_aprobacion"] == ["Colegio alfa"]
+    # Los avisos de asistencia de alfa ya no le salen; el del PIN sí, a todos sus celulares.
+    marcar(db, a, en(LUNES, 7, 40))
+    push = Push()
+    avisos.procesar_cola(db, push, ahora=pronto())
+    assert len(push.enviados) == 1
+    endpoint, m = push.enviados[0]
+    assert endpoint == "https://push.example/celular" and m["titulo"] == "Colegio beta"
+    assert "PIN nuevo" in m["cuerpo"] and "En Colegio alfa tu acceso queda pendiente" in m["cuerpo"]
+    # Alfa lo aprueba y vuelve a verlo todo.
+    client.post(f"/api/familias/apoderados/{ap_a.id}/aprobar", headers=auth("alfa", token(client, "alfa")))
+    hijos = client.get("/api/familia/hijos", headers=hf).json()["hijos"]
+    assert sorted(h["colegio"] for h in hijos) == ["Colegio alfa", "Colegio beta"]
+
+
+def test_pendiente_por_pin_nuevo_vuelve_con_enlace_de_su_colegio(client, db):
+    a, b = preparar(db, "alfa"), preparar(db, "beta")
+    ap_a = crear_familia(db, a.colegio, alumnos=a.alumnos[:1])
+    ap_b = crear_familia(db, b.colegio, alumnos=b.alumnos[:1])
+    # Aunque alfa pida aprobación, a quien ya aprobó lo reactiva su propio enlace.
+    client.put("/api/familias/configuracion", headers=auth("alfa", token(client, "alfa")),
+               json={"activacion": "aprobacion"})
+    activar(client, "beta", invitar(client, "beta", ap_b.id, nuevo_pin=True), b.alumnos[0], pin="502817")
+    r = activar(client, "alfa", invitar(client, "alfa", ap_a.id), a.alumnos[0], pin_actual="502817")
+    assert r.status_code == 200 and r.json()["estado"] == "activo"
+
+
+def bloquear_pin(client, sub="alfa", veces=10, dni="41234567"):
+    from app.proteccion import limpiar_limites
+    respuestas = []
+    for _ in range(veces):
+        limpiar_limites()  # el límite en memoria (5 cada 15 min) no es lo que se prueba aquí
+        respuestas.append(client.post("/api/familia/ingreso", headers=host(sub),
+                                      json={"documento": dni, "pin": "000001"}))
+    return respuestas
+
+
+def test_pin_se_bloquea_un_dia_tras_diez_fallidos(client, db, monkeypatch):
+    from app.proteccion import limpiar_limites
+    a, b = preparar(db, "alfa"), preparar(db, "beta")
+    crear_familia(db, a.colegio, alumnos=a.alumnos[:1])
+    crear_familia(db, b.colegio, alumnos=b.alumnos[:1])
+    suscribir(client, "alfa")
+    # Se acumulan en el documento, intente donde intente.
+    assert {r.status_code for r in bloquear_pin(client, "beta", 6)} == {401}
+    respuestas = bloquear_pin(client, "alfa", 4)
+    assert [r.status_code for r in respuestas] == [401, 401, 401, 429]
+    assert "bloqueado hasta" in respuestas[-1].json()["detail"] and "huella" in respuestas[-1].json()["detail"]
+    limpiar_limites()  # guardado en la base, no en memoria
+    r = client.post("/api/familia/ingreso", headers=host("alfa"), json={"documento": "41234567", "pin": PIN})
+    assert r.status_code == 429
+    cuenta = db.scalar(select(CuentaFamilia))
+    db.refresh(cuenta)
+    assert cuenta.pin_bloqueado_hasta > datetime.now(UTC) + timedelta(hours=23)
+    # Tampoco sirve el PIN para activar en otro colegio.
+    otro = preparar(db, "gama")
+    ap_g = apoderado_sin_cuenta(db, otro)
+    r = activar(client, "gama", invitar(client, "gama", ap_g.id), otro.alumnos[0], pin_actual=PIN)
+    assert r.status_code == 429
+    # Se le avisa por push (por el colegio donde se bloqueó).
+    push = Push()
+    avisos.procesar_cola(db, push, ahora=pronto())
+    assert [m["titulo"] for _, m in push.enviados] == ["Colegio alfa"]
+    assert "10 intentos fallidos" in push.enviados[0][1]["cuerpo"]
+    # Con huella sí entra.
+    db.add(PasskeyFamilia(cuenta_id=cuenta.id, credencial_id="Y3JlZC0x", clave_publica=b"llave",
+                          rp_id="alfa.tikray.test"))
+    db.commit()
+
+    class Verificada:
+        new_sign_count = 1
+
+    monkeypatch.setattr(rutas_familia, "verify_authentication_response", lambda **kw: Verificada)
+    origen = {**host("alfa"), "Origin": "https://alfa.tikray.test"}
+    reto = client.post("/api/familia/passkey/opciones-ingreso", headers=origen).json()["reto"]
+    assert client.post("/api/familia/passkey/ingreso", headers=origen,
+                       json={"credencial": {"id": "Y3JlZC0x"}, "reto": reto}).status_code == 200
+    # Pasado el día, el PIN vuelve a servir y el contador empieza de cero.
+    cuenta.pin_bloqueado_hasta = datetime.now(UTC) - timedelta(minutes=1)
+    db.commit()
+    assert token_familia(client, "alfa")
+    db.refresh(cuenta)
+    assert cuenta.pin_fallidos == 0
+
+
+def test_pin_correcto_reinicia_la_cuenta_y_cambiar_pin_tambien_suma(client, db):
+    e = preparar(db, "alfa")
+    crear_familia(db, e.colegio, alumnos=e.alumnos[:1])
+    bloquear_pin(client, veces=4)
+    cuenta = db.scalar(select(CuentaFamilia))
+    db.refresh(cuenta)
+    assert cuenta.pin_fallidos == 4
+    hf = fam("alfa", token_familia(client, "alfa"))
+    db.refresh(cuenta)
+    assert cuenta.pin_fallidos == 0
+    assert client.put("/api/familia/pin", headers=hf,
+                      json={"pin_actual": "000001", "pin_nuevo": "602914"}).status_code == 400
+    db.refresh(cuenta)
+    assert cuenta.pin_fallidos == 1
+
+
+def test_enlace_de_nuevo_pin_quita_el_bloqueo(client, db):
+    e = preparar(db, "alfa")
+    ap = crear_familia(db, e.colegio, alumnos=e.alumnos[:1])
+    bloquear_pin(client)
+    activar(client, "alfa", invitar(client, "alfa", ap.id, nuevo_pin=True), e.alumnos[0], pin="502817")
+    assert token_familia(client, "alfa", pin="502817")
+
+
 def test_cerrar_sesiones_bloquear_y_desbloquear(client, db):
     e = preparar(db, "alfa")
     ap = crear_familia(db, e.colegio, alumnos=e.alumnos[:1])
@@ -480,6 +605,8 @@ def test_passkey_atada_al_dominio_del_colegio(client, db, monkeypatch):
     assert client.post("/api/familia/passkey/registro", headers=hf,
                        json={"credencial": {}, "reto": op["reto"]}).status_code == 201
     assert db.scalar(select(PasskeyFamilia.rp_id)) == "alfa.tikray.test"
+    assert client.post("/api/familia/passkey/registro", headers=hf,
+                       json={"credencial": {}, "reto": op["reto"]}).status_code == 400
     assert client.get("/api/familia/yo", headers=hf).json()["tiene_passkey"] is True
 
     reto = client.post("/api/familia/passkey/opciones-ingreso", headers={**host("alfa"), **origen_a}).json()["reto"]
@@ -487,14 +614,19 @@ def test_passkey_atada_al_dominio_del_colegio(client, db, monkeypatch):
     r = client.post("/api/familia/passkey/ingreso", headers={**host("alfa"), **origen_a},
                     json={"credencial": credencial, "reto": reto})
     assert r.status_code == 200 and r.json()["token"]
+    # Cada reto sirve una sola vez.
+    r = client.post("/api/familia/passkey/ingreso", headers={**host("alfa"), **origen_a},
+                    json={"credencial": credencial, "reto": reto})
+    assert r.status_code == 400 and "ya se usó" in r.json()["detail"]
     # En beta (otro dominio) esa passkey no existe, aunque la persona también tenga acceso ahí.
     origen_b = {**host("beta"), "Origin": "https://beta.tikray.test"}
     reto_b = client.post("/api/familia/passkey/opciones-ingreso", headers=origen_b).json()["reto"]
     assert client.post("/api/familia/passkey/ingreso", headers=origen_b,
                        json={"credencial": credencial, "reto": reto_b}).status_code == 401
-    # El reto de alfa no sirve en beta.
-    assert client.post("/api/familia/passkey/ingreso", headers=origen_b,
-                       json={"credencial": credencial, "reto": reto}).status_code == 400
+    # Un reto de alfa (sin usar) no sirve en beta.
+    reto_a = client.post("/api/familia/passkey/opciones-ingreso", headers={**host("alfa"), **origen_a}).json()["reto"]
+    r = client.post("/api/familia/passkey/ingreso", headers=origen_b, json={"credencial": credencial, "reto": reto_a})
+    assert r.status_code == 400 and "venció" in r.json()["detail"]
 
 
 def test_reto_de_registro_es_de_la_cuenta(client, db, monkeypatch):

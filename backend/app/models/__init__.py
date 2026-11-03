@@ -2,7 +2,7 @@ from app.models.asistencia import (AsistenciaAlumno, AsistenciaPersonal, ColaAvi
                                    LicenciaPersonal, Marcacion)
 from app.models.colegio import Colegio
 from app.models.familias import (CambioApoderado, ConfigFamilias, ConsentimientoApoderado, CuentaFamilia,
-                                 EntregaAviso, InvitacionFamilia, PasskeyFamilia, SuscripcionPush)
+                                 EntregaAviso, InvitacionFamilia, PasskeyFamilia, RetoUsado, SuscripcionPush)
 from app.models.padron import (AlumnoApoderado, Alumno, AnioEscolar, Apoderado, DiaNoLectivo, Grado,
                                Matricula, Nivel, Seccion, Turno)
 from app.models.personal import PermisoRol, Rol, Usuario
@@ -12,6 +12,6 @@ __all__ = [
     "AdminPlataforma", "Alumno", "AlumnoApoderado", "AnioEscolar", "Apoderado", "AsistenciaAlumno",
     "AsistenciaPersonal", "CambioApoderado", "ColaAviso", "Colegio", "ConfigAsistencia", "ConfigFamilias",
     "ConsentimientoApoderado", "CuentaFamilia", "EntregaAviso", "InvitacionFamilia", "PasskeyFamilia",
-    "SuscripcionPush", "DiaNoLectivo", "Grado",
+    "RetoUsado", "SuscripcionPush", "DiaNoLectivo", "Grado",
     "LicenciaPersonal", "Marcacion", "Matricula", "Nivel", "PermisoRol", "Rol", "Seccion", "Turno", "Usuario",
 ]

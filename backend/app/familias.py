@@ -1,5 +1,5 @@
 """Reglas de familias: invitaciones de un solo uso, cambios de contacto del
-apoderado (auditados) y el texto del consentimiento (Ley 29733)."""
+apoderado (auditados), bloqueo del PIN, PIN nuevo y el texto del consentimiento (Ley 29733)."""
 
 import hashlib
 import secrets
@@ -8,13 +8,17 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.fechas import hoy_lima
-from app.models import Apoderado, CambioApoderado, ColaAviso, ConfigFamilias, InvitacionFamilia
+from app.fechas import LIMA, hoy_lima
+from app.models import Apoderado, CambioApoderado, ColaAviso, Colegio, ConfigFamilias, CuentaFamilia, InvitacionFamilia
 
 VIGENCIA_INVITACION = timedelta(days=7)
 INTENTOS_INVITACION = 5
 
 CONSENTIMIENTO_VERSION = "2026-11"
+
+# PIN fallidos seguidos (en cualquier colegio) antes de bloquear el ingreso con PIN.
+LIMITE_PIN = 10
+BLOQUEO_PIN = timedelta(hours=24)
 
 
 def texto_consentimiento(colegio: str) -> str:
@@ -70,6 +74,70 @@ def crear_invitacion(db: Session, ap: Apoderado, creado_por_id: int | None,
     return inv, token
 
 
+def avisar_cuenta(db: Session, ap: Apoderado, mensaje: str) -> None:
+    """Aviso push sobre la cuenta. Las suscripciones son de la cuenta: le llega en todos sus celulares."""
+    db.add(ColaAviso(colegio_id=ap.colegio_id, tipo="cuenta", apoderado_id=ap.id, fecha=hoy_lima(),
+                     datos={"mensaje": mensaje}))
+
+
+def _hora(instante: datetime) -> str:
+    return instante.astimezone(LIMA).strftime("%d/%m a las %H:%M")
+
+
+def pin_bloqueado_hasta(cuenta: CuentaFamilia, ahora: datetime | None = None) -> datetime | None:
+    hasta = cuenta.pin_bloqueado_hasta
+    return hasta if hasta and hasta > (ahora or datetime.now(UTC)) else None
+
+
+def mensaje_pin_bloqueado(hasta: datetime) -> str:
+    return (f"Por seguridad, el ingreso con PIN está bloqueado hasta el {_hora(hasta)}. Puedes entrar con tu "
+            "huella o rostro, o pedir al colegio un enlace para crear un PIN nuevo.")
+
+
+def registrar_pin_fallido(db: Session, cuenta: CuentaFamilia, colegio_id: int) -> datetime | None:
+    """Suma un PIN fallido. Al llegar al límite bloquea el PIN por un día, avisa al padre y
+    devuelve hasta cuándo. No hace commit."""
+    db.refresh(cuenta, with_for_update=True)  # dos intentos a la vez no se pisan
+    cuenta.pin_fallidos += 1
+    if cuenta.pin_fallidos < LIMITE_PIN:
+        return None
+    ahora = datetime.now(UTC)
+    cuenta.pin_fallidos, cuenta.pin_bloqueado_hasta = 0, ahora + BLOQUEO_PIN
+    # El aviso sale por el colegio donde se intentó; si ahí no tiene acceso, por otro donde sí.
+    destinos = db.scalars(select(Apoderado).where(Apoderado.cuenta_id == cuenta.id,
+                                                  Apoderado.estado_acceso.in_(("activo", "pendiente")))).all()
+    ap = next((a for a in destinos if a.colegio_id == colegio_id), destinos[0] if destinos else None)
+    if ap is not None:
+        avisar_cuenta(db, ap, f"Hubo {LIMITE_PIN} intentos fallidos de entrar con tu PIN. Por seguridad, el "
+                              f"ingreso con PIN quedó bloqueado hasta el {_hora(cuenta.pin_bloqueado_hasta)}; con "
+                              "tu huella o rostro sí puedes entrar. Si no fuiste tú, comunícate con el colegio.")
+    return cuenta.pin_bloqueado_hasta
+
+
+def pin_nuevo(db: Session, cuenta: CuentaFamilia, ap: Apoderado, colegio: Colegio) -> None:
+    """El padre crea un PIN nuevo con un enlace de `colegio`. Se cierran sus sesiones en todos los
+    colegios, se quita el bloqueo del PIN y, en los otros colegios donde estaba activo, el acceso
+    queda pendiente hasta que ese colegio lo apruebe o el padre use un enlace de ese colegio:
+    un enlace de un colegio no debe abrir los hijos de otro. Se le avisa en todos sus celulares."""
+    cuenta.pin_fallidos, cuenta.pin_bloqueado_hasta = 0, None
+    db.execute(update(Apoderado).where(Apoderado.cuenta_id == cuenta.id)
+               .values(version_sesion=Apoderado.version_sesion + 1))
+    otros = db.execute(select(Apoderado, Colegio.nombre).join(Colegio, Colegio.id == Apoderado.colegio_id)
+                       .where(Apoderado.cuenta_id == cuenta.id, Apoderado.colegio_id != colegio.id,
+                              Apoderado.estado_acceso == "activo")).all()
+    for otro, _ in otros:
+        otro.estado_acceso = "pendiente"
+        db.add(CambioApoderado(colegio_id=otro.colegio_id, apoderado_id=otro.id, campo="acceso", antes="activo",
+                               despues=f"pendiente: creó un PIN nuevo con un enlace de {colegio.nombre}",
+                               origen="familia"))
+    mensaje = f"Se creó un PIN nuevo para tu cuenta con un enlace de {colegio.nombre}. Se cerraron tus sesiones."
+    if otros:
+        nombres = ", ".join(sorted(n for _, n in otros))
+        mensaje += (f" En {nombres} tu acceso queda pendiente hasta que el colegio lo apruebe o abras un "
+                    "enlace de ese colegio.")
+    avisar_cuenta(db, ap, mensaje + " Si no fuiste tú, comunícate con el colegio.")
+
+
 def _oculto(celular: str | None) -> str:
     return f"*** *** {celular[-3:]}" if celular else "ninguno"
 
@@ -92,11 +160,8 @@ def cambiar_contacto(db: Session, ap: Apoderado, celular: str | None, correo: st
             continue
         anular_invitaciones(db, ap.colegio_id, ap.id, "Cambió el celular del apoderado")
         if ap.cuenta_id is not None and ap.estado_acceso in ("activo", "pendiente"):
-            db.add(ColaAviso(
-                colegio_id=ap.colegio_id, tipo="cuenta", apoderado_id=ap.id, fecha=hoy_lima(),
-                datos={"mensaje": f"El celular registrado en el colegio cambió de {_oculto(antes)} a "
-                                  f"{_oculto(nuevo)}. Si no lo pediste, comunícate con el colegio."},
-            ))
+            avisar_cuenta(db, ap, f"El celular registrado en el colegio cambió de {_oculto(antes)} a "
+                                  f"{_oculto(nuevo)}. Si no lo pediste, comunícate con el colegio.")
 
 
 def apoderado_por_token(db: Session, colegio_id: int, token: str) -> tuple[InvitacionFamilia, Apoderado] | None:

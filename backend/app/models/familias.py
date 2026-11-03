@@ -30,6 +30,10 @@ class CuentaFamilia(Base):
     tipo_documento: Mapped[str] = mapped_column(String(4))
     numero_documento: Mapped[str] = mapped_column(String(15))
     pin_hash: Mapped[str] = mapped_column(String(255))
+    # PIN fallidos seguidos (en cualquier colegio). Al llegar al límite se bloquea el PIN
+    # por un día; la huella sigue sirviendo. En la base para que valga entre servidores y reinicios.
+    pin_fallidos: Mapped[int] = mapped_column(default=0, server_default="0")
+    pin_bloqueado_hasta: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     creado_en: Mapped[datetime] = creado_en()
 
 
@@ -46,6 +50,15 @@ class PasskeyFamilia(Base):
     rp_id: Mapped[str] = mapped_column(String(253))
     creado_en: Mapped[datetime] = creado_en()
     usado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class RetoUsado(ConColegio, Base):
+    """Retos de huella ya presentados: cada uno sirve una sola vez. Se borran al vencer."""
+
+    __tablename__ = "reto_usado"
+
+    reto: Mapped[str] = mapped_column(String(100), primary_key=True)  # el challenge en base64url
+    vence_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class ConfigFamilias(Base):
@@ -133,13 +146,14 @@ class EntregaAviso(ConColegio, Base):
 
 
 class CambioApoderado(ConColegio, Base):
-    """Quién cambió un dato de contacto del apoderado, cuándo y desde dónde."""
+    """Quién cambió un dato del apoderado, cuándo y desde dónde. `familia`: lo provocó el propio
+    padre (p. ej. un PIN nuevo creado con el enlace de otro colegio deja su acceso pendiente aquí)."""
 
     __tablename__ = "cambio_apoderado"
     __table_args__ = (
         _fk("apoderado_id", "apoderado"),
         _fk("cambiado_por_id", "usuario", "SET NULL"),
-        CheckConstraint("origen IN ('excel', 'panel')", name="origen_valido"),
+        CheckConstraint("origen IN ('excel', 'panel', 'familia')", name="origen_valido"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

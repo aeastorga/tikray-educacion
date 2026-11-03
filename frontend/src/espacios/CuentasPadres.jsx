@@ -7,7 +7,7 @@ const ESTADO = { sin_cuenta: 'Sin cuenta', pendiente: 'Por aprobar', activo: 'Ac
 const NOTIFICACIONES = { sin_app: 'No entró a la app', sin_permiso: 'Sin notificaciones', activas: 'Recibe avisos' }
 const ENLACE = { pendiente: 'Enviado', usada: 'Usado', anulada: 'Anulado', bloqueada: 'Bloqueado', vencida: 'Vencido' }
 const ENTREGA = { enviado: 'Le llegó', sin_notificaciones: 'Sin notificaciones', error: 'No se pudo entregar' }
-const ORIGEN = { excel: 'Carga de Excel', panel: 'Panel' }
+const ORIGEN = { excel: 'Carga de Excel', panel: 'Panel', familia: 'El apoderado' }
 
 export default function CuentasPadres({ colegio, editar, reglas }) {
   return (

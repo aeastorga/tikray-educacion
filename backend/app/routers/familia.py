@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, delete, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from webauthn import (generate_authentication_options, generate_registration_options, options_to_json,
                       verify_authentication_response, verify_registration_response)
@@ -28,7 +29,7 @@ from app.deps import SesionFamilia, _host, colegio_del_host, familia_sesion
 from app.fechas import hoy_lima
 from app.models import (Alumno, AlumnoApoderado, AnioEscolar, Apoderado, AsistenciaAlumno, Colegio,
                         ConsentimientoApoderado, CuentaFamilia, EntregaAviso, Grado, Matricula, PasskeyFamilia,
-                        Seccion, SuscripcionPush)
+                        RetoUsado, Seccion, SuscripcionPush)
 from app.proteccion import FALLOS_IP, ip_cliente, permitir_intento, registrar_fallo
 from app.routers.estructura import es_dia_lectivo
 from app.seguridad import emitir_token, hashear_clave, leer_token, verificar_clave, verificar_clave_o_simular
@@ -55,6 +56,21 @@ def _pin_valido(pin: str | None) -> str:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             "Ese PIN es muy fácil de adivinar. Evita números repetidos o seguidos")
     return pin
+
+
+def _comprobar_pin(db: Session, cuenta: CuentaFamilia, pin: str, colegio: Colegio) -> bool:
+    """Verifica el PIN llevando la cuenta de fallidos en la base (vale en todos los colegios y
+    servidores). Bloqueado, o recién bloqueado por este intento: 429. Un fallido queda guardado."""
+    if hasta := familias.pin_bloqueado_hasta(cuenta):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, familias.mensaje_pin_bloqueado(hasta))
+    if verificar_clave(pin, cuenta.pin_hash):
+        cuenta.pin_fallidos = 0
+        return True
+    hasta = familias.registrar_pin_fallido(db, cuenta, colegio.id)
+    db.commit()
+    if hasta:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, familias.mensaje_pin_bloqueado(hasta))
+    return False
 
 
 def _token(colegio: Colegio, cuenta: CuentaFamilia, ap: Apoderado) -> dict:
@@ -135,7 +151,7 @@ def completar_activacion(d: Activacion, request: Request, colegio: Colegio = Dep
     cuenta = _cuenta_de(db, ap)
     if cuenta is not None and not inv.nuevo_pin:
         # Ya tiene cuenta (por otro colegio): demuestra que es suya con su PIN, no lo reemplaza.
-        if not verificar_clave(d.pin_actual or "", cuenta.pin_hash):
+        if not _comprobar_pin(db, cuenta, d.pin_actual or "", colegio):
             FALLOS_IP.registrar(f"familia:{ip_cliente(request)}")
             inv.intentos += 1
             db.commit()
@@ -143,9 +159,7 @@ def completar_activacion(d: Activacion, request: Request, colegio: Colegio = Dep
                                 "El PIN no es correcto. Si lo olvidaste, pide al colegio un enlace para crear uno nuevo")
     elif cuenta is not None:
         cuenta.pin_hash = hashear_clave(_pin_valido(d.pin))
-        # PIN nuevo: se cierran sus sesiones en todos los colegios.
-        db.execute(update(Apoderado).where(Apoderado.cuenta_id == cuenta.id)
-                   .values(version_sesion=Apoderado.version_sesion + 1))
+        familias.pin_nuevo(db, cuenta, ap, colegio)
     else:
         cuenta = CuentaFamilia(tipo_documento=ap.tipo_documento, numero_documento=ap.numero_documento,
                                pin_hash=hashear_clave(_pin_valido(d.pin)))
@@ -154,7 +168,10 @@ def completar_activacion(d: Activacion, request: Request, colegio: Colegio = Dep
     db.refresh(ap)
     ap.cuenta_id = cuenta.id
     if ap.estado_acceso != "activo":
-        ap.estado_acceso = "activo" if familias.activacion(db, colegio.id) == "automatica" else "pendiente"
+        # Quien el colegio ya aprobó antes (p. ej. quedó pendiente por un PIN nuevo creado en otro
+        # colegio) vuelve a activo con el enlace de este colegio.
+        automatica = familias.activacion(db, colegio.id) == "automatica"
+        ap.estado_acceso = "activo" if automatica or ap.activado_en else "pendiente"
     if ap.estado_acceso == "activo" and ap.activado_en is None:
         ap.activado_en = ahora
     inv.usada_en = ahora
@@ -190,12 +207,23 @@ def ingresar(d: IngresoPin, request: Request, colegio: Colegio = Depends(colegio
     if not permitir_intento(cuenta_lim, ip):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Demasiados intentos. Espera 15 minutos")
     cuentas = db.scalars(select(CuentaFamilia).where(CuentaFamilia.numero_documento == doc)).all()
-    cuenta = next((c for c in cuentas if verificar_clave(d.pin, c.pin_hash)), None)
+    # Además del límite en memoria, el PIN se bloquea un día tras 10 fallidos seguidos (en la base).
+    abiertas = [c for c in cuentas if not familias.pin_bloqueado_hasta(c)]
+    if cuentas and not abiertas:
+        hasta = min(c.pin_bloqueado_hasta for c in cuentas)
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, familias.mensaje_pin_bloqueado(hasta))
+    cuenta = next((c for c in abiertas if verificar_clave(d.pin, c.pin_hash)), None)
     if cuenta is None:
         if not cuentas:
             verificar_clave_o_simular(d.pin, None)
         registrar_fallo(cuenta_lim, ip)
+        bloqueos = [h for c in abiertas if (h := familias.registrar_pin_fallido(db, c, colegio.id))]
+        db.commit()
+        if bloqueos:
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, familias.mensaje_pin_bloqueado(bloqueos[0]))
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Documento o PIN incorrectos")
+    cuenta.pin_fallidos = 0
+    db.commit()
     return _token(colegio, cuenta, _acceso_aqui(db, colegio, cuenta))
 
 
@@ -214,10 +242,19 @@ def _reto(uso: str, sub: int, colegio: Colegio, reto: bytes) -> str:
     return emitir_token("reto", sub, 0, 5, uso=uso, col=colegio.id, reto=bytes_to_base64url(reto))
 
 
-def _leer_reto(token: str, uso: str, colegio: Colegio) -> dict:
+def _leer_reto(db: Session, token: str, uso: str, colegio: Colegio) -> dict:
+    """El reto firmado, que además sirve una sola vez: se gasta al presentarlo, salga bien o no."""
     datos = leer_token("reto", token)
     if datos is None or datos.get("uso") != uso or datos.get("col") != colegio.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El pedido venció. Inténtalo de nuevo")
+    ahora = datetime.now(UTC)
+    db.execute(delete(RetoUsado).where(RetoUsado.vence_en < ahora))
+    nuevo = db.scalar(insert(RetoUsado).values(reto=datos["reto"], colegio_id=colegio.id,
+                                               vence_en=datetime.fromtimestamp(datos["exp"], UTC))
+                      .on_conflict_do_nothing().returning(RetoUsado.reto))
+    db.commit()  # gastado aunque la verificación falle después
+    if nuevo is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Este pedido ya se usó. Inténtalo de nuevo")
     return datos
 
 
@@ -246,7 +283,7 @@ def opciones_registro(request: Request, s: SesionFamilia = Depends(familia_sesio
 def registrar_passkey(d: Credencial, request: Request, s: SesionFamilia = Depends(familia_sesion),
                       db: Session = Depends(get_db)) -> dict:
     rp_id, origen = _origen(request)
-    reto = _leer_reto(d.reto, "registro", s.colegio)
+    reto = _leer_reto(db, d.reto, "registro", s.colegio)
     if int(reto["sub"]) != s.cuenta.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El pedido no es de esta cuenta")
     try:
@@ -275,7 +312,7 @@ def ingresar_passkey(d: Credencial, request: Request, colegio: Colegio = Depends
     ip = f"familia:{ip_cliente(request)}"
     if not FALLOS_IP.hay_cupo(ip):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Demasiados intentos. Espera unos minutos")
-    reto = _leer_reto(d.reto, "ingreso", colegio)
+    reto = _leer_reto(db, d.reto, "ingreso", colegio)
     pk = db.scalar(select(PasskeyFamilia).where(PasskeyFamilia.credencial_id == str(d.credencial.get("id", "")),
                                                 PasskeyFamilia.rp_id == rp_id))
     try:
@@ -395,7 +432,7 @@ class CambioPin(BaseModel):
 
 @privado.put("/pin")
 def cambiar_pin(d: CambioPin, s: SesionFamilia = Depends(familia_sesion), db: Session = Depends(get_db)) -> dict:
-    if not verificar_clave(d.pin_actual, s.cuenta.pin_hash):
+    if not _comprobar_pin(db, s.cuenta, d.pin_actual, s.colegio):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El PIN actual no es correcto")
     s.cuenta.pin_hash = hashear_clave(_pin_valido(d.pin_nuevo))
     db.execute(update(Apoderado).where(Apoderado.cuenta_id == s.cuenta.id)
