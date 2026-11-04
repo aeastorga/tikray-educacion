@@ -1,7 +1,12 @@
-import { ArrowLeft, MessageCircle, Paperclip } from 'lucide-react'
+import {
+  ArrowLeft, Award, CalendarClock, DoorOpen, FileCheck, Inbox, Megaphone, TriangleAlert, Users,
+} from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
-import { NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import { NavLink, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, descargar } from '../api.js'
+import {
+  Buscador, Encabezado, fechaHora as fechaHoraTabla, Filtros, Insignia, Paginacion, plural, Selector, Tabla, usePaginado,
+} from './comun/index.js'
 import './cuaderno.css'
 
 export const TIPOS = {
@@ -9,6 +14,24 @@ export const TIPOS = {
   justificacion: 'Justificación', permiso_salida: 'Permiso de salida',
 }
 const ESTADOS = { pendiente: 'Por aprobar', aprobada: 'Aprobada', rechazada: 'Rechazada', anulada: 'Anulada' }
+const TONO_ESTADO = { pendiente: 'tarde', aprobada: 'bien', rechazada: 'falta', anulada: 'neutro' }
+const ICONO_TIPO = {
+  comunicado: Megaphone, incidencia: TriangleAlert, citacion: CalendarClock, justificacion: FileCheck, permiso_salida: DoorOpen,
+}
+
+// Tipo como insignia con su ícono; una incidencia de mérito lleva la medalla.
+export function TipoEntrada({ e }) {
+  const merito = e.categoria?.tipo === 'merito'
+  const tono = merito ? 'bien' : e.tipo === 'incidencia' ? 'tarde' : e.tipo === 'comunicado' || e.tipo === 'citacion' ? 'info' : 'neutro'
+  return <Insignia tono={tono} icono={merito ? Award : ICONO_TIPO[e.tipo]}>{TIPOS[e.tipo]}</Insignia>
+}
+
+function EstadoEntrada({ e }) {
+  if (programadoPendiente(e)) return <Insignia tono="info" titulo={`Sale el ${fechaHora(e.programado_para)}`}>Programado</Insignia>
+  if (e.estado) return <Insignia tono={TONO_ESTADO[e.estado]}>{ESTADOS[e.estado]}</Insignia>
+  if (e.espera_al_colegio) return <Insignia tono="tarde">Por responder</Insignia>
+  return <Insignia tono="bien">Enviado</Insignia>
+}
 const ALCANCES = { colegio: 'Todo el colegio', nivel: 'Un nivel', grado: 'Un grado', seccion: 'Una sección', alumno: 'Un alumno' }
 // Lo que firma el padre según el tipo.
 export const FIRMA = { comunicado: 'Firmó', incidencia: 'Enterado', citacion: 'Confirmó' }
@@ -63,75 +86,70 @@ export default function Cuaderno({ editar, docentes }) {
 
 function Bandeja() {
   const navegar = useNavigate()
-  const [filtro, setFiltro] = useState({ tipo: '', pendientes: false })
-  const [lista, setLista] = useState(null)
-  const [hayMas, setHayMas] = useState(false)
-  const [error, setError] = useState(null)
-
-  const consulta = useCallback((antes) => {
-    const p = new URLSearchParams()
-    if (filtro.tipo) p.set('tipo', filtro.tipo)
-    if (filtro.pendientes) p.set('pendientes', 'true')
-    if (antes) p.set('antes_de', antes)
-    return api(`/api/cuaderno/entradas?${p}`)
-  }, [filtro])
-
-  useEffect(() => {
-    setError(null)
-    consulta().then((l) => { setLista(l); setHayMas(l.length === 50) }).catch((e) => setError(e.message))
-  }, [consulta])
-
-  async function mas() {
-    const l = await consulta(lista[lista.length - 1].id)
-    setLista([...lista, ...l])
-    setHayMas(l.length === 50)
+  const [params, setParams] = useSearchParams()
+  const filtro = { tipo: params.get('tipo') || '', pendientes: params.get('pendientes') === '1' }
+  const poner = (k, v) => {
+    const p = new URLSearchParams(params)
+    if (v) p.set(k, v === true ? '1' : v); else p.delete(k)
+    setParams(p, { replace: true })
   }
+  const { datos, error, cargando, paginacion } = usePaginado('/api/cuaderno/entradas', filtro, { demora: 0 })
+
+  const columnas = [
+    { id: 'fecha', titulo: 'Fecha', nowrap: true, ancho: '150px',
+      celda: (e) => <span className="tenue">{fechaHoraTabla(programadoPendiente(e) ? e.programado_para : e.creado_en)}</span> },
+    { id: 'tipo', titulo: 'Tipo', nowrap: true, celda: (e) => <TipoEntrada e={e} /> },
+    { id: 'asunto', titulo: 'Asunto', ancho: '28%', celda: (e) => {
+      const extra = [
+        e.adjuntos > 0 && plural(e.adjuntos, 'adjunto', 'adjuntos'),
+        e.respuestas > 0 && plural(e.respuestas, 'respuesta', 'respuestas'),
+        e.categoria && e.categoria.nombre,
+        e.de_familia && 'enviado por la familia',
+      ].filter(Boolean)
+      return (
+        <>
+          <span className="asunto-entrada">
+            {e.espera_al_colegio && <span className="punto-espera" title="Espera al colegio" />}
+            <b>{e.titulo}</b>
+          </span>
+          {extra.length > 0 && <span className="segunda-linea">{extra.join(' · ')}</span>}
+        </>
+      )
+    } },
+    { id: 'para', titulo: 'Para', ancho: '22%', celda: (e) => e.destino },
+    { id: 'familias', titulo: 'Familias', ocultarEnCelular: true, celda: (e) => {
+      const hechos = e.pide_firma ? e.firmados : e.vistos
+      const verbo = e.pide_firma ? FIRMA[e.tipo].toLowerCase() : 'vieron'
+      if (!e.apoderados) return <span className="tenue">—</span>
+      return (
+        <span className="progreso" title={`${hechos} de ${plural(e.apoderados, 'familia', 'familias')}`}>
+          <span className="progreso-barra"><i style={{ width: `${Math.round((100 * hechos) / e.apoderados)}%` }} /></span>
+          <span>{hechos.toLocaleString('es-PE')}/{e.apoderados.toLocaleString('es-PE')} {verbo}</span>
+        </span>
+      )
+    } },
+    { id: 'estado', titulo: 'Estado', nowrap: true, celda: (e) => <EstadoEntrada e={e} /> },
+  ]
 
   return (
     <>
-      <div className="fila-form sin-margen">
-        <select value={filtro.tipo} onChange={(e) => setFiltro({ ...filtro, tipo: e.target.value })} aria-label="Tipo">
-          <option value="">Todo</option>
-          {Object.entries(TIPOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+      <Encabezado titulo="Bandeja" descripcion="Comunicados, incidencias, citaciones, justificaciones y permisos de salida." />
+      <Filtros total={datos && plural(datos.total, 'entrada', 'entradas')}>
+        <Selector etiqueta="Tipo" valor={filtro.tipo} cambiar={(v) => poner('tipo', v)}
+                  opciones={[['', 'Todos los tipos'], ...Object.entries(TIPOS)]} />
         <label className="check">
-          <input type="checkbox" checked={filtro.pendientes}
-                 onChange={(e) => setFiltro({ ...filtro, pendientes: e.target.checked })} />
+          <input type="checkbox" checked={filtro.pendientes} onChange={(e) => poner('pendientes', e.target.checked)} />
           Solo lo que espera al colegio
         </label>
-      </div>
+      </Filtros>
       {error && <p className="error">{error}</p>}
-      {lista && lista.length === 0 && <p className="tenue">No hay nada aquí todavía.</p>}
-      {lista && lista.length > 0 && (
-        <table>
-          <thead><tr><th>Fecha</th><th>Tipo</th><th>Asunto</th><th>Para</th><th>Familias</th></tr></thead>
-          <tbody>
-            {lista.map((e) => (
-              <tr key={e.id} className="clic" onClick={() => navegar(`/panel/cuaderno/${e.id}`)}>
-                <td className="tenue fecha">{fechaHora(programadoPendiente(e) ? e.programado_para : e.creado_en)}</td>
-                <td>
-                  <span className={`tipo-cuaderno ${e.tipo}`}>{TIPOS[e.tipo]}</span>
-                  {e.estado && <span className={`estado-cuaderno ${e.estado}`}>{ESTADOS[e.estado]}</span>}
-                  {programadoPendiente(e) && <span className="estado-cuaderno programado" title={`Sale el ${fechaHora(e.programado_para)}`}>Programado</span>}
-                  <Categoria c={e.categoria} />
-                </td>
-                <td>
-                  {e.espera_al_colegio && <span className="punto" title="Espera respuesta del colegio" />}
-                  {e.titulo}
-                  {e.adjuntos > 0 && <span className="tenue icono-texto"> · <Paperclip size={14} aria-label="adjuntos" /> {e.adjuntos}</span>}
-                  {e.respuestas > 0 && <span className="tenue icono-texto"> · <MessageCircle size={14} aria-label="respuestas" /> {e.respuestas}</span>}
-                  {e.de_familia && <span className="tenue"> · enviado por la familia</span>}
-                </td>
-                <td>{e.destino}</td>
-                <td className="tenue">
-                  {e.pide_firma ? `${e.firmados}/${e.apoderados} ${FIRMA[e.tipo].toLowerCase()}` : `${e.vistos}/${e.apoderados} vieron`}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {hayMas && <button className="enlace" onClick={mas}>Ver más</button>}
+      <Tabla etiqueta="Bandeja del cuaderno" cargando={cargando} filas={datos?.entradas} columnas={columnas}
+             alFila={(e) => navegar(`/panel/cuaderno/${e.id}`)}
+             claseFila={(e) => (e.espera_al_colegio ? 'destacada' : '')}
+             vacio={filtro.tipo || filtro.pendientes
+               ? { icono: Inbox, titulo: 'Nada pendiente aquí', texto: 'No hay entradas con estos filtros.' }
+               : { icono: Inbox, titulo: 'El cuaderno está vacío', texto: 'Lo que escriban el colegio y las familias aparecerá aquí.' }} />
+      {paginacion && paginacion.total > 0 && <Paginacion {...paginacion} />}
     </>
   )
 }
@@ -144,7 +162,6 @@ function Detalle({ editar }) {
   const [e, setE] = useState(null)
   const [error, setError] = useState(null)
   const [respuesta, setRespuesta] = useState('')
-  const [soloPendientes, setSoloPendientes] = useState(false)
   const [nota, setNota] = useState('')
 
   const cargar = useCallback(() => api(`/api/cuaderno/entradas/${id}`).then(setE).catch((err) => setError(err.message)), [id])
@@ -186,16 +203,12 @@ function Detalle({ editar }) {
 
   if (error && !e) return <p className="error">{error}</p>
   if (!e) return <p className="tenue">Cargando…</p>
-  const lectores = soloPendientes ? e.lectores.filter((l) => (e.pide_firma ? !l.firmado_en : !l.visto_en)) : e.lectores
-  const familias = new Set(e.lectores.map((l) => l.apoderado))
-  const firmaron = new Set(e.lectores.filter((l) => l.firmado_en).map((l) => l.apoderado))
-  const vieron = new Set(e.lectores.filter((l) => l.visto_en).map((l) => l.apoderado))
 
   return (
     <article className="cuaderno-detalle">
       <button className="enlace" onClick={() => navegar('/panel/cuaderno')}><ArrowLeft size={18} aria-hidden="true" /> Bandeja</button>
       <p className="tenue">
-        <span className={`tipo-cuaderno ${e.tipo}`}>{TIPOS[e.tipo]}</span> {e.destino} · {fechaHora(e.creado_en)}
+        <TipoEntrada e={e} /> {e.destino} · {fechaHora(e.creado_en)}
         {e.autor && ` · ${e.de_familia ? 'Enviado por' : 'Escrito por'} ${e.autor}`}
         {' '}<Categoria c={e.categoria} />
       </p>
@@ -245,28 +258,53 @@ function Detalle({ editar }) {
       )}
       {error && <p className="error">{error}</p>}
 
-      <h3>
-        Familias: {e.pide_firma ? `${firmaron.size} de ${familias.size} ${FIRMA[e.tipo].toLowerCase()}` : `${vieron.size} de ${familias.size} lo vieron`}
-      </h3>
-      <label className="check">
-        <input type="checkbox" checked={soloPendientes} onChange={(ev) => setSoloPendientes(ev.target.checked)} />
-        Solo quienes aún no {e.pide_firma ? 'firman' : 'lo ven'}
-      </label>
-      <table>
-        <thead><tr><th>Alumno</th><th>Apoderado</th><th>Vio</th>{e.pide_firma && <th>{FIRMA[e.tipo]}</th>}</tr></thead>
-        <tbody>
-          {lectores.map((l) => (
-            <tr key={`${l.alumno}-${l.apoderado}`}>
-              <td>{l.alumno}</td>
-              <td>{l.apoderado}{l.parentesco && <span className="tenue"> ({l.parentesco})</span>}
-                {!l.con_app && <span className="tenue"> · sin la app</span>}</td>
-              <td>{l.visto_en ? fechaHora(l.visto_en) : <span className="tenue">No</span>}</td>
-              {e.pide_firma && <td>{l.firmado_en ? fechaHora(l.firmado_en) : <span className="falta-firma">No</span>}</td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Lectores e={e} />
     </article>
+  )
+}
+
+// Familias de una entrada (en la demo, 904): por páginas y con buscador.
+function Lectores({ e }) {
+  const [q, setQ] = useState('')
+  const [pendientes, setPendientes] = useState(false)
+  const { datos, error, cargando, paginacion } = usePaginado(`/api/cuaderno/entradas/${e.id}/lectores`, { q, pendientes })
+  const f = e.familias
+  const firma = FIRMA[e.tipo]
+  const vacio = q || pendientes
+    ? { icono: Users, titulo: pendientes && !q ? (e.pide_firma ? 'Todas firmaron' : 'Todas lo vieron') : 'Nadie coincide',
+        texto: pendientes && !q ? null : 'Prueba con otro nombre.' }
+    : { icono: Users, titulo: 'Sin familias', texto: 'Esta entrada no llegó a ningún apoderado.' }
+  return (
+    <section className="lectores">
+      <Encabezado nivel={3} titulo="Familias"
+                  descripcion={e.pide_firma
+                    ? `${f.firmaron.toLocaleString('es-PE')} de ${plural(f.total, 'familia', 'familias')} ${firma.toLowerCase()} · ${f.vieron.toLocaleString('es-PE')} lo vieron`
+                    : `${f.vieron.toLocaleString('es-PE')} de ${plural(f.total, 'familia', 'familias')} lo vieron`} />
+      <Filtros total={datos && plural(datos.total, 'fila', 'filas')}>
+        <Buscador valor={q} cambiar={setQ} placeholder="Buscar alumno o apoderado" />
+        <label className="check">
+          <input type="checkbox" checked={pendientes} onChange={(ev) => setPendientes(ev.target.checked)} />
+          Solo quienes aún no {e.pide_firma ? 'firman' : 'lo ven'}
+        </label>
+      </Filtros>
+      {error && <p className="error">{error}</p>}
+      <Tabla etiqueta="Familias de la entrada" cargando={cargando} filas={datos?.filas} vacio={vacio}
+             clave={(l) => `${l.alumno}-${l.apoderado}-${l.parentesco}`}
+             columnas={[
+               { id: 'alumno', titulo: 'Alumno', celda: (l) => l.alumno },
+               { id: 'apoderado', titulo: 'Apoderado', celda: (l) => (
+                 <>
+                   {l.apoderado}
+                   <span className="segunda-linea">{[l.parentesco, !l.con_app && 'sin la app'].filter(Boolean).join(' · ')}</span>
+                 </>
+               ) },
+               { id: 'vio', titulo: 'Vio', nowrap: true, celda: (l) => (l.visto_en
+                 ? <span className="tenue">{fechaHoraTabla(l.visto_en)}</span> : <Insignia tono="neutro">No</Insignia>) },
+               e.pide_firma && { id: 'firma', titulo: firma, nowrap: true, celda: (l) => (l.firmado_en
+                 ? <Insignia tono="bien">{fechaHoraTabla(l.firmado_en)}</Insignia> : <Insignia tono="tarde">Pendiente</Insignia>) },
+             ].filter(Boolean)} />
+      {paginacion && paginacion.total > 0 && <Paginacion {...paginacion} />}
+    </section>
   )
 }
 
@@ -473,7 +511,7 @@ function Opcion({ valor, onChange, lista, nombre }) {
     <label>{nombre}
       <select value={valor} onChange={onChange} required>
         <option value="">Elige…</option>
-        {lista.map((x) => <option key={x.id} value={x.id}>{x.nombre}{x.nivel ? ` · ${x.nivel}` : ''}</option>)}
+        {lista.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
       </select>
     </label>
   )
@@ -504,7 +542,7 @@ function ElegirAlumno({ valor, onChange, secciones }) {
         <input placeholder="Buscar alumno por nombre o DNI" value={q} onChange={(e) => setQ(e.target.value)} />
         <select value={seccion} onChange={(e) => setSeccion(e.target.value)} aria-label="Sección">
           <option value="">Todas las secciones</option>
-          {secciones.map((s) => <option key={s.id} value={s.id}>{s.nombre} · {s.nivel}</option>)}
+          {secciones.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
         </select>
       </div>
       <ul className="lista-elegir">
@@ -541,28 +579,24 @@ function Docentes() {
         Quien tenga un rol con “Solo ve las secciones a su cargo” (en Roles) solo verá y escribirá en el cuaderno de estas secciones.
       </p>
       {error && <p className="error">{error}</p>}
-      {datos.secciones.length === 0 && <p className="tenue">No hay secciones en el año activo.</p>}
-      <table>
-        <thead><tr><th>Sección</th><th>A cargo</th></tr></thead>
-        <tbody>
-          {datos.secciones.map((s) => (
-            <tr key={s.id}>
-              <td>{s.nombre}</td>
-              <td>
-                {s.docentes.map((d) => (
-                  <span key={d} className="chip">{nombres[d] || d}
-                    <button className="enlace" aria-label="Quitar" onClick={() => guardar(s, s.docentes.filter((x) => x !== d))}>×</button>
-                  </span>
-                ))}
-                <select value="" aria-label="Agregar" onChange={(e) => e.target.value && guardar(s, [...s.docentes, Number(e.target.value)])}>
-                  <option value="">+ Agregar…</option>
-                  {datos.personal.filter((p) => !s.docentes.includes(p.id)).map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Tabla etiqueta="Docentes por sección" filas={datos.secciones}
+             vacio={{ icono: Users, titulo: 'No hay secciones en el año activo', texto: 'Créalas en Padrón › Secciones.' }}
+             columnas={[
+               { id: 'seccion', titulo: 'Sección', ancho: '30%', celda: (s) => s.nombre },
+               { id: 'docentes', titulo: 'A cargo', celda: (s) => (
+                 <span className="chips">
+                   {s.docentes.map((d) => (
+                     <span key={d} className="chip">{nombres[d] || d}
+                       <button className="enlace" aria-label={`Quitar a ${nombres[d] || d}`} onClick={() => guardar(s, s.docentes.filter((x) => x !== d))}>×</button>
+                     </span>
+                   ))}
+                   <select value="" aria-label={`Agregar docente a ${s.nombre}`} onChange={(e) => e.target.value && guardar(s, [...s.docentes, Number(e.target.value)])}>
+                     <option value="">+ Agregar…</option>
+                     {datos.personal.filter((p) => !s.docentes.includes(p.id)).map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                   </select>
+                 </span>
+               ) },
+             ]} />
     </>
   )
 }

@@ -147,3 +147,15 @@ def test_prueba_de_carga_corta(db, client):
     # 50 entradas y 10 segundas lecturas (duplicado o salida, según la hora); ninguna se pierde.
     assert sum(res.resultados.values()) == 60
     assert res.informe().startswith("Marcaciones: 60 ")
+
+
+def test_cuaderno_de_la_demo_en_hora_escolar(db):
+    """Nada de entradas a las 2 a. m.: lo que escribe el colegio cae entre 7:00 a. m. y 5:00 p. m. de Lima."""
+    from datetime import time
+
+    from app.fechas import LIMA
+    from app.models import EntradaCuaderno
+    r = demo.crear_o_reiniciar(db, "demo", alumnos_por_seccion=2)
+    horas = [e.creado_en.astimezone(LIMA).time() for e in db.scalars(
+        select(EntradaCuaderno).where(EntradaCuaderno.colegio_id == r.colegio_id))]
+    assert horas and all(time(7) <= h <= time(17) for h in horas), sorted(horas)

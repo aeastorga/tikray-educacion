@@ -399,7 +399,7 @@ def test_padron_de_porteria_sin_dni_y_solo_del_colegio(client, db):
     h = auth("alfa", token(client, "alfa"))
     p = client.get("/api/asistencia/porteria", headers=h).json()
     assert {x["codigo"] for x in p["alumnos"]} == {x.codigo for x in a.alumnos}
-    assert p["alumnos"][0]["seccion"] == "1° A" and p["alumnos"][0]["turno_id"] == a.turno.id
+    assert p["alumnos"][0]["seccion"] == "Primaria · 1° A" and p["alumnos"][0]["turno_id"] == a.turno.id
     assert "numero_documento" not in str(p) and "41234567" not in str(p)
     assert len(p["personal"]) == 1 and p["turnos"][0]["hora_entrada"] == "07:45"
     assert p["minutos_duplicado"] == 10

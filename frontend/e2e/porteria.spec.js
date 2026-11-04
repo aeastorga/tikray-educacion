@@ -80,7 +80,7 @@ test('sesión vencida: avisa, conserva las pendientes y las envía al reingresar
   await marcar(page, ana)
   const aviso = page.getByRole('alert')
   await expect(aviso).toContainText('Sesión vencida: vuelve a ingresar')
-  await expect(aviso).toContainText('1 marcaciones pendientes')
+  await expect(aviso).toContainText('La marcación pendiente está guardada')
   await expect(page).toHaveURL(new RegExp(`${PORTERIA}$`))
   expect((await almacen(page)).pendientes).toBe(1)
 

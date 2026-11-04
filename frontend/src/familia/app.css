@@ -123,7 +123,7 @@
 .barra-inferior a svg { width: 22px; height: 22px; }
 .barra-inferior a.active { color: var(--acento-fuerte); }
 .barra-inferior a.active svg { background: var(--acento-suave); border-radius: 999px; padding: 3px 14px; width: 52px; height: 28px; }
-.insignia {
+.barra-inferior .contador-menu {
   position: absolute; top: 4px; left: calc(50% + 8px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
   background: #DC2626; color: #fff; font-size: .7rem; display: grid; place-items: center;
 }

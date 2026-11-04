@@ -14,8 +14,11 @@ from app.comun import obtener
 from app.configuracion import anotar
 from app.db import get_db
 from app.deps import Sesion, requerir_permiso
-from app.models import (Alumno, AlumnoApoderado, Apoderado, CambioApoderado, ConfigFamilias, ConsentimientoApoderado,
-                        EntregaAviso, InvitacionFamilia, SuscripcionPush, Usuario)
+from app.fechas import hoy_lima
+from app.paginacion import Pagina, contar, pagina, recortar
+from app.models import (Alumno, AlumnoApoderado, AnioEscolar, Apoderado, CambioApoderado, ColaAviso, ConfigFamilias,
+                        ConsentimientoApoderado, EntregaAviso, Grado, InvitacionFamilia, Matricula, Nivel, Seccion,
+                        SuscripcionPush, Usuario)
 from app.validacion import sin_tildes
 
 router = APIRouter(prefix="/familias", tags=["familias"])
@@ -38,47 +41,94 @@ def _invitacion(inv: InvitacionFamilia | None) -> dict | None:
             "vence_en": inv.vence_en.isoformat(), "intentos": inv.intentos, "motivo_anulacion": inv.motivo_anulacion}
 
 
+def _con_push():
+    return Apoderado.cuenta_id.in_(select(SuscripcionPush.cuenta_id).where(SuscripcionPush.cuenta_id.is_not(None)))
+
+
+def _fallo_hoy(cid: int):
+    """Tuvo hoy al menos un aviso que no llegó."""
+    return Apoderado.id.in_(
+        select(EntregaAviso.apoderado_id)
+        .join(ColaAviso, and_(ColaAviso.colegio_id == EntregaAviso.colegio_id, ColaAviso.id == EntregaAviso.aviso_id))
+        .where(EntregaAviso.colegio_id == cid, EntregaAviso.estado == "error", ColaAviso.fecha == hoy_lima()))
+
+
+def resumen_familias(db: Session, cid: int) -> dict:
+    """Cifras de todo el colegio (no de la página ni del filtro), en una sola consulta."""
+    activo = Apoderado.estado_acceso == "activo"
+    fila = db.execute(select(
+        func.count(),
+        func.count().filter(activo),
+        func.count().filter(activo, or_(_con_push(), familias.recibio_hoy(cid))),
+        func.count().filter(Apoderado.estado_acceso == "pendiente"),
+        func.count().filter(Apoderado.estado_acceso == "sin_cuenta"),
+        func.count().filter(Apoderado.estado_acceso == "bloqueado"),
+    ).where(Apoderado.colegio_id == cid)).one()
+    return dict(zip(("total", "activas", "avisos", "por_aprobar", "sin_cuenta", "bloqueadas"), fila))
+
+
 @router.get("/apoderados")
-def listar(q: str = "", estado: str | None = None, s: Sesion = Depends(ver), db: Session = Depends(get_db)) -> list[dict]:
+def listar(q: str = "", estado: Literal["sin_cuenta", "pendiente", "activo", "bloqueado"] | None = None,
+           avisos: Literal["activas", "sin_permiso", "sin_app", "error"] | None = None,
+           p: Pagina = Depends(pagina), s: Sesion = Depends(ver), db: Session = Depends(get_db)) -> dict:
     cid = s.colegio.id
     consulta = select(Apoderado).where(Apoderado.colegio_id == cid)
     if estado:
         consulta = consulta.where(Apoderado.estado_acceso == estado)
+    if avisos == "activas":
+        consulta = consulta.where(_con_push())
+    elif avisos == "sin_permiso":
+        consulta = consulta.where(Apoderado.cuenta_id.is_not(None), ~_con_push())
+    elif avisos == "sin_app":
+        consulta = consulta.where(Apoderado.cuenta_id.is_(None))
+    elif avisos == "error":
+        consulta = consulta.where(_fallo_hoy(cid))
     texto = sin_tildes(q.strip().lower())
     if texto:
         consulta = consulta.where(or_(
             func.translate(func.lower(Apoderado.apellidos + " " + Apoderado.nombres), "áéíóúüñ", "aeiouun")
-            .contains(texto), Apoderado.numero_documento.contains(texto.upper())))
-    aps = db.scalars(consulta.order_by(Apoderado.apellidos, Apoderado.nombres).limit(500)).all()
+            .contains(texto), Apoderado.numero_documento.contains(texto.upper()),
+            Apoderado.celular.contains(texto.replace(" ", ""))))
+    total = contar(db, consulta)
+    aps = db.scalars(recortar(consulta.order_by(Apoderado.apellidos, Apoderado.nombres, Apoderado.id), p)).all()
     ids = [a.id for a in aps]
-    hijos: dict[int, list[str]] = {}
-    for apo_id, nombres in db.execute(
-            select(AlumnoApoderado.apoderado_id, Alumno.nombres)
+    hijos: dict[int, list[dict]] = {}
+    anio = db.scalar(select(AnioEscolar.id).where(AnioEscolar.colegio_id == cid, AnioEscolar.activo))
+    for apo_id, nombres, sec, grado, nivel in db.execute(
+            select(AlumnoApoderado.apoderado_id, Alumno.nombres, Seccion.nombre, Grado.nombre, Nivel.nombre)
             .join(Alumno, and_(Alumno.colegio_id == AlumnoApoderado.colegio_id, Alumno.id == AlumnoApoderado.alumno_id))
-            .where(AlumnoApoderado.colegio_id == cid, AlumnoApoderado.apoderado_id.in_(ids), Alumno.activo)):
-        hijos.setdefault(apo_id, []).append(nombres)
+            .outerjoin(Matricula, and_(Matricula.colegio_id == Alumno.colegio_id, Matricula.alumno_id == Alumno.id,
+                                       Matricula.anio_id == anio))
+            .outerjoin(Seccion, and_(Seccion.colegio_id == Matricula.colegio_id, Seccion.id == Matricula.seccion_id))
+            .outerjoin(Grado, and_(Grado.colegio_id == Seccion.colegio_id, Grado.id == Seccion.grado_id))
+            .outerjoin(Nivel, and_(Nivel.colegio_id == Grado.colegio_id, Nivel.id == Grado.nivel_id))
+            .where(AlumnoApoderado.colegio_id == cid, AlumnoApoderado.apoderado_id.in_(ids), Alumno.activo)
+            .order_by(Alumno.nombres)):
+        hijos.setdefault(apo_id, []).append(
+            {"nombres": nombres, "seccion": f"{nivel} · {grado} {sec}" if sec else None})
     dispositivos = dict(db.execute(
         select(SuscripcionPush.cuenta_id, func.count()).where(
             SuscripcionPush.cuenta_id.in_({a.cuenta_id for a in aps if a.cuenta_id}))
-        .group_by(SuscripcionPush.cuenta_id)).all())
+        .group_by(SuscripcionPush.cuenta_id)).all()) if aps else {}
     ultima_inv = {}
     for inv in db.scalars(select(InvitacionFamilia).where(InvitacionFamilia.colegio_id == cid,
                                                           InvitacionFamilia.apoderado_id.in_(ids))
                           .order_by(InvitacionFamilia.creado_en)):
         ultima_inv[inv.apoderado_id] = inv
-    ultima_entrega = {}
-    for e in db.scalars(select(EntregaAviso).where(EntregaAviso.colegio_id == cid, EntregaAviso.apoderado_id.in_(ids))
-                        .order_by(EntregaAviso.creado_en)):
-        ultima_entrega[e.apoderado_id] = e
-    return [{
+    # Solo la última entrega de cada uno (DISTINCT ON), no todo su historial.
+    ultima_entrega = {e.apoderado_id: e for e in db.scalars(
+        select(EntregaAviso).where(EntregaAviso.colegio_id == cid, EntregaAviso.apoderado_id.in_(ids))
+        .order_by(EntregaAviso.apoderado_id, EntregaAviso.creado_en.desc())
+        .distinct(EntregaAviso.apoderado_id))} if ids else {}
+    return {**p.datos(total), "resumen": resumen_familias(db, cid), "filas": [{
         "id": a.id, "nombre": f"{a.apellidos}, {a.nombres}", "nombres": a.nombres,
-        "documento": f"{a.tipo_documento} {a.numero_documento}", "celular": a.celular,
+        "tipo_documento": a.tipo_documento, "numero_documento": a.numero_documento, "celular": a.celular,
         "hijos": hijos.get(a.id, []), "estado": a.estado_acceso,
         "notificaciones": _notificaciones(a, dispositivos.get(a.cuenta_id, 0)),
         "invitacion": _invitacion(ultima_inv.get(a.id)),
         "ultimo_aviso": ({"cuerpo": e.cuerpo, "estado": e.estado, "creado_en": e.creado_en.isoformat()}
                          if (e := ultima_entrega.get(a.id)) else None),
-    } for a in aps]
+    } for a in aps]}
 
 
 @router.get("/apoderados/{apoderado_id}")

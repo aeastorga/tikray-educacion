@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app import configuracion, cuaderno
 from app.comun import guardar, obtener
 from app.db import get_db
+from app.paginacion import Pagina, contar, pagina, recortar
 from app.deps import Sesion, requerir_permiso
 from app.fechas import LIMA, hoy_lima
 from app.models import (AdjuntoCuaderno, Alumno, CategoriaIncidencia, ColaAviso, AnioEscolar, AlumnoApoderado, Apoderado, DestinoCuaderno, EntradaCuaderno,
@@ -44,7 +45,7 @@ def _etiquetas_secciones(db: Session, cid: int) -> dict[int, str]:
                        .join(Grado, and_(Grado.colegio_id == Seccion.colegio_id, Grado.id == Seccion.grado_id))
                        .join(Nivel, and_(Nivel.colegio_id == Grado.colegio_id, Nivel.id == Grado.nivel_id))
                        .where(Seccion.colegio_id == cid))
-    return {i: f"{g} {sn} · {n}" for i, g, sn, n in filas}
+    return {i: f"{n} · {g} {sn}" for i, g, sn, n in filas}
 
 
 # --- Opciones para escribir ------------------------------------------------------------
@@ -59,7 +60,7 @@ def opciones(s: Sesion = Depends(ver), db: Session = Depends(get_db)) -> dict:
     if a is not None:
         for sec, g, n in _secciones(db, cid, a.id):
             if permitidas is None or sec.id in permitidas:
-                secciones.append({"id": sec.id, "nombre": f"{g} {sec.nombre}", "nivel": n, "grado_id": sec.grado_id})
+                secciones.append({"id": sec.id, "nombre": f"{n} · {g} {sec.nombre}", "nivel": n, "grado_id": sec.grado_id})
     if permitidas is not None:
         return {"todo_el_colegio": False, "niveles": [], "grados": [], "secciones": secciones}
     niveles = db.execute(select(Nivel.id, Nivel.nombre).where(Nivel.colegio_id == cid).order_by(Nivel.orden)).all()
@@ -67,7 +68,7 @@ def opciones(s: Sesion = Depends(ver), db: Session = Depends(get_db)) -> dict:
                         .join(Nivel, and_(Nivel.colegio_id == Grado.colegio_id, Nivel.id == Grado.nivel_id))
                         .where(Grado.colegio_id == cid).order_by(Nivel.orden, Grado.orden, Grado.nombre)).all()
     return {"todo_el_colegio": True, "niveles": [{"id": i, "nombre": n} for i, n in niveles],
-            "grados": [{"id": i, "nombre": f"{g} {n}"} for i, g, n in grados], "secciones": secciones}
+            "grados": [{"id": i, "nombre": f"{n} · {g}"} for i, g, n in grados], "secciones": secciones}
 
 
 @router.get("/alumnos")
@@ -276,7 +277,7 @@ def _destino_texto(e: EntradaCuaderno, etiquetas: dict[int, str], nombres: dict,
 def _nombres(db: Session, cid: int, alumno_ids) -> tuple[dict, dict]:
     nombres = {
         "nivel": dict(db.execute(select(Nivel.id, Nivel.nombre).where(Nivel.colegio_id == cid)).all()),
-        "grado": {i: f"{g} {n}" for i, g, n in db.execute(
+        "grado": {i: f"{n} · {g}" for i, g, n in db.execute(
             select(Grado.id, Grado.nombre, Nivel.nombre)
             .join(Nivel, and_(Nivel.colegio_id == Grado.colegio_id, Nivel.id == Grado.nivel_id))
             .where(Grado.colegio_id == cid))},
@@ -289,10 +290,10 @@ def _nombres(db: Session, cid: int, alumno_ids) -> tuple[dict, dict]:
 
 @router.get("/entradas")
 def listar(tipo: str | None = None, estado: str | None = None, seccion_id: int | None = None,
-           alumno_id: int | None = None, pendientes: bool = False, antes_de: int | None = None,
-           s: Sesion = Depends(ver), db: Session = Depends(get_db)) -> list[dict]:
-    """Lo último primero, de a 50 (`antes_de` = id de la última que ya se vio). `pendientes`: lo
-    que espera al colegio (por aprobar, o con la última respuesta de la familia)."""
+           alumno_id: int | None = None, pendientes: bool = False, p: Pagina = Depends(pagina),
+           s: Sesion = Depends(ver), db: Session = Depends(get_db)) -> dict:
+    """Lo último primero, por páginas. `pendientes`: lo que espera al colegio (por aprobar, o con la
+    última respuesta de la familia)."""
     cid = s.colegio.id
     permitidas = cuaderno.secciones_permitidas(db, s.usuario)
     q = select(EntradaCuaderno).where(EntradaCuaderno.colegio_id == cid)
@@ -307,14 +308,13 @@ def listar(tipo: str | None = None, estado: str | None = None, seccion_id: int |
             DestinoCuaderno.colegio_id == cid, DestinoCuaderno.alumno_id == alumno_id)))
     if permitidas is not None:
         q = q.where(EntradaCuaderno.seccion_id.in_(permitidas))
-    if antes_de is not None:
-        q = q.where(EntradaCuaderno.id < antes_de)
     ultimo = (select(MensajeCuaderno.de_familia).where(MensajeCuaderno.colegio_id == cid,
                                                        MensajeCuaderno.entrada_id == EntradaCuaderno.id)
               .order_by(MensajeCuaderno.id.desc()).limit(1).scalar_subquery())
     if pendientes:
         q = q.where(or_(EntradaCuaderno.estado == "pendiente", ultimo.is_(True)))
-    entradas = db.scalars(q.order_by(EntradaCuaderno.id.desc()).limit(50)).all()
+    cuantas = contar(db, q)
+    entradas = db.scalars(recortar(q.order_by(EntradaCuaderno.id.desc()), p)).all()
     ids = [e.id for e in entradas]
     conteos = {}
     if ids:
@@ -348,7 +348,7 @@ def listar(tipo: str | None = None, estado: str | None = None, seccion_id: int |
                        "apoderados": total, "vistos": vistos, "firmados": firmados, "respuestas": n,
                        "espera_al_colegio": e.estado == "pendiente" or ult_familia,
                        "adjuntos": len(adjuntos.get(e.id, []))})
-    return salida
+    return {**p.datos(cuantas), "entradas": salida}
 
 
 @router.get("/entradas/{entrada_id}")
@@ -358,17 +358,15 @@ def detalle(entrada_id: int, s: Sesion = Depends(ver), db: Session = Depends(get
     e = _entrada(db, s, entrada_id)
     personal = dict(db.execute(select(Usuario.id, Usuario.nombres + " " + Usuario.apellidos)
                                .where(Usuario.colegio_id == cid)).all())
-    filas = db.execute(
-        select(DestinoCuaderno, Alumno.apellidos, Alumno.nombres, Apoderado, AlumnoApoderado.parentesco)
-        .join(Alumno, and_(Alumno.colegio_id == DestinoCuaderno.colegio_id, Alumno.id == DestinoCuaderno.alumno_id))
-        .join(Apoderado, and_(Apoderado.colegio_id == DestinoCuaderno.colegio_id,
-                              Apoderado.id == DestinoCuaderno.apoderado_id))
-        .outerjoin(AlumnoApoderado, and_(AlumnoApoderado.colegio_id == DestinoCuaderno.colegio_id,
-                                         AlumnoApoderado.alumno_id == DestinoCuaderno.alumno_id,
-                                         AlumnoApoderado.apoderado_id == DestinoCuaderno.apoderado_id))
-        .where(DestinoCuaderno.colegio_id == cid, DestinoCuaderno.entrada_id == e.id)
-        .order_by(Alumno.apellidos, Alumno.nombres, Apoderado.apellidos)).all()
-    apoderados = {ap.id: ap for _, _, _, ap, _ in filas}
+    apo = DestinoCuaderno.apoderado_id
+    total, vieron, firmaron = db.execute(
+        select(func.count(apo.distinct()), func.count(case((DestinoCuaderno.visto_en.is_not(None), apo)).distinct()),
+               func.count(case((DestinoCuaderno.firmado_en.is_not(None), apo)).distinct()))
+        .where(DestinoCuaderno.colegio_id == cid, DestinoCuaderno.entrada_id == e.id)).one()
+    ids_familia = {m.apoderado_id for m in db.scalars(select(MensajeCuaderno).where(
+        MensajeCuaderno.colegio_id == cid, MensajeCuaderno.entrada_id == e.id, MensajeCuaderno.de_familia))}
+    apoderados = {a.id: a for a in db.scalars(select(Apoderado).where(
+        Apoderado.colegio_id == cid, Apoderado.id.in_(ids_familia)))} if ids_familia else {}
     mensajes = db.scalars(select(MensajeCuaderno).where(MensajeCuaderno.colegio_id == cid,
                                                         MensajeCuaderno.entrada_id == e.id)
                           .order_by(MensajeCuaderno.id))
@@ -382,16 +380,44 @@ def detalle(entrada_id: int, s: Sesion = Depends(ver), db: Session = Depends(get
         "destino": _destino_texto(e, etiquetas, nombres, alumnos_n), "autor": autor, "resuelto_por": personal.get(e.resuelto_por_id),
         "anulada_por": personal.get(e.anulada_por_id), "anulada_en": cuaderno.iso(e.anulada_en),
         "adjuntos": cuaderno.adjuntos_de(db, cid, [e.id]).get(e.id, []),
-        "lectores": [{
-            "alumno": f"{aa}, {an}", "apoderado": f"{ap.apellidos}, {ap.nombres}", "parentesco": par,
-            "con_app": ap.estado_acceso == "activo", "visto_en": cuaderno.iso(d.visto_en),
-            "firmado_en": cuaderno.iso(d.firmado_en)} for d, aa, an, ap, par in filas],
+        "familias": {"total": total, "vieron": vieron, "firmaron": firmaron},
         "mensajes": [{
             "id": m.id, "cuerpo": m.cuerpo, "creado_en": cuaderno.iso(m.creado_en), "de_familia": m.de_familia,
             "autor": (f"{apo.nombres} {apo.apellidos}" if (apo := apoderados.get(m.apoderado_id))
                       else "Apoderado") if m.de_familia else personal.get(m.usuario_id, "Colegio")}
             for m in mensajes],
     }
+
+
+@router.get("/entradas/{entrada_id}/lectores")
+def lectores(entrada_id: int, q: str = "", pendientes: bool = False, p: Pagina = Depends(pagina),
+             s: Sesion = Depends(ver), db: Session = Depends(get_db)) -> dict:
+    """Quién vio o firmó (y quién no), por páginas: un comunicado a todo el colegio llega a cientos."""
+    cid = s.colegio.id
+    e = _entrada(db, s, entrada_id)
+    consulta = (
+        select(DestinoCuaderno, Alumno.apellidos, Alumno.nombres, Apoderado, AlumnoApoderado.parentesco)
+        .join(Alumno, and_(Alumno.colegio_id == DestinoCuaderno.colegio_id, Alumno.id == DestinoCuaderno.alumno_id))
+        .join(Apoderado, and_(Apoderado.colegio_id == DestinoCuaderno.colegio_id,
+                              Apoderado.id == DestinoCuaderno.apoderado_id))
+        .outerjoin(AlumnoApoderado, and_(AlumnoApoderado.colegio_id == DestinoCuaderno.colegio_id,
+                                         AlumnoApoderado.alumno_id == DestinoCuaderno.alumno_id,
+                                         AlumnoApoderado.apoderado_id == DestinoCuaderno.apoderado_id))
+        .where(DestinoCuaderno.colegio_id == cid, DestinoCuaderno.entrada_id == e.id))
+    if pendientes:
+        falta = DestinoCuaderno.firmado_en if cuaderno.requiere_firma(e) else DestinoCuaderno.visto_en
+        consulta = consulta.where(falta.is_(None))
+    if q.strip():
+        patron = f"%{q.strip()}%"
+        consulta = consulta.where(or_(Alumno.apellidos.ilike(patron), Alumno.nombres.ilike(patron),
+                                      Apoderado.apellidos.ilike(patron), Apoderado.nombres.ilike(patron)))
+    total = contar(db, consulta)
+    filas = db.execute(recortar(consulta.order_by(Alumno.apellidos, Alumno.nombres, Apoderado.apellidos,
+                                                  DestinoCuaderno.apoderado_id, DestinoCuaderno.alumno_id), p)).all()
+    return {**p.datos(total), "filas": [{
+        "alumno": f"{aa}, {an}", "apoderado": f"{ap.apellidos}, {ap.nombres}", "parentesco": par,
+        "con_app": ap.estado_acceso == "activo", "visto_en": cuaderno.iso(d.visto_en),
+        "firmado_en": cuaderno.iso(d.firmado_en)} for d, aa, an, ap, par in filas]}
 
 
 class RespuestaIn(BaseModel):
@@ -476,7 +502,7 @@ def docentes(s: Sesion = Depends(editar_padron), db: Session = Depends(get_db)) 
     personal = db.execute(select(Usuario.id, Usuario.apellidos, Usuario.nombres)
                           .where(Usuario.colegio_id == cid, Usuario.activo).order_by(Usuario.apellidos)).all()
     return {
-        "secciones": [{"id": sec.id, "nombre": f"{g} {sec.nombre} · {n}", "docentes": asignados.get(sec.id, [])}
+        "secciones": [{"id": sec.id, "nombre": f"{n} · {g} {sec.nombre}", "docentes": asignados.get(sec.id, [])}
                       for sec, g, n in (_secciones(db, cid, a.id) if a else [])],
         "personal": [{"id": i, "nombre": f"{ap}, {no}"} for i, ap, no in personal],
     }

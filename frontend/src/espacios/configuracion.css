@@ -65,28 +65,6 @@
 .historial { max-width: 1000px; }
 .filtros-historial { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: end; margin: 16px 0; }
 .filtros-historial label { flex: 1 1 170px; }
-.lista-historial { list-style: none; margin: 0; padding: 0; background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); }
-.lista-historial li {
-  display: grid; grid-template-columns: 150px 74px minmax(0, 1fr); grid-template-areas: "fecha accion resumen" "fecha accion quien";
-  gap: 2px 14px; padding: 12px 18px; border-top: 1px solid var(--borde); align-items: start;
-}
-.lista-historial li:first-child { border-top: 0; }
-.lista-historial time { grid-area: fecha; color: var(--tenue); font-size: .88rem; font-variant-numeric: tabular-nums; }
-.lista-historial .accion { grid-area: accion; justify-self: start; font-size: .78rem; font-weight: 700; padding: 2px 10px; border-radius: 999px; }
-.accion.crear { background: var(--bien-fondo); color: var(--bien-texto); }
-.accion.editar { background: var(--just-fondo); color: var(--just-texto); }
-.accion.anular { background: var(--falta-fondo); color: var(--falta-texto); }
-.lista-historial .resumen { grid-area: resumen; overflow-wrap: anywhere; }
-.lista-historial .quien { grid-area: quien; font-size: .88rem; }
-@media (max-width: 640px) {
-  .lista-historial li { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "accion fecha" "resumen resumen" "quien quien"; padding: 12px 14px; }
-}
-.paginacion { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 14px; }
-@media (max-width: 520px) {
-  .paginacion { flex-wrap: wrap; }
-  .paginacion > span { order: -1; flex-basis: 100%; text-align: center; }
-  .paginacion > .boton { flex: 1; }
-}
 
 /* Plataforma: diálogo de activación */
 .dialogo-fondo { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); display: grid; place-items: center; padding: 16px; z-index: 50; }

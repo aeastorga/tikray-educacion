@@ -26,7 +26,7 @@ from app.cuaderno import secciones_permitidas
 from app.db import get_db
 from app.deps import Sesion, colegio_del_host, modulo_encendido, requerir_permiso
 from app.models import (Alumno, AlumnoApoderado, Apoderado, Colegio, FichaReunion, Grado, InvitacionFamilia,
-                        Matricula, ReunionPadres, Seccion, Usuario)
+                        Matricula, Nivel, ReunionPadres, Seccion, SeccionDocente, Usuario)
 from app.proteccion import FALLOS_IP, ip_cliente
 from app.routers.importacion import imagen_pdf
 from app.routers.estructura import anio_activo
@@ -86,10 +86,12 @@ class Ficha(BaseModel):
 # --- Ayudas --------------------------------------------------------------------------------
 
 def _etiqueta(db: Session, cid: int, seccion_id: int) -> str:
-    fila = db.execute(select(Grado.nombre, Seccion.nombre)
+    """Siempre con el nivel: Inicial, Primaria y Secundaria repiten nombres ("Primaria · 1° A")."""
+    fila = db.execute(select(Nivel.nombre, Grado.nombre, Seccion.nombre)
                       .join(Grado, and_(Grado.colegio_id == Seccion.colegio_id, Grado.id == Seccion.grado_id))
+                      .join(Nivel, and_(Nivel.colegio_id == Grado.colegio_id, Nivel.id == Grado.nivel_id))
                       .where(Seccion.colegio_id == cid, Seccion.id == seccion_id)).first()
-    return f"{fila[0]} {fila[1]}" if fila else ""
+    return f"{fila[0]} · {fila[1]} {fila[2]}" if fila else ""
 
 
 def _permitida(db: Session, s: Sesion, seccion_id: int) -> None:
@@ -170,20 +172,47 @@ def _salida(db: Session, r: ReunionPadres, con_fichas: bool = True) -> dict:
 
 @router.get("/secciones")
 def secciones(s: Sesion = Depends(ver), db: Session = Depends(get_db)) -> list[dict]:
-    """Secciones del año activo en las que esta persona puede hacer reunión, con la reunión abierta si hay."""
+    """Secciones del año activo en las que esta persona puede hacer reunión, ordenadas por nivel, grado y
+    sección, con su docente a cargo, cuántos alumnos tiene, fichas por revisar y la reunión abierta si hay."""
     cid = s.colegio.id
     anio = anio_activo(db, cid)
     permitidas = secciones_permitidas(db, s.usuario)
-    q = (select(Seccion.id, Grado.nombre, Seccion.nombre)
+    q = (select(Seccion.id, Nivel.nombre, Grado.nombre, Seccion.nombre)
          .join(Grado, and_(Grado.colegio_id == Seccion.colegio_id, Grado.id == Seccion.grado_id))
-         .where(Seccion.colegio_id == cid, Seccion.anio_id == anio.id).order_by(Grado.orden, Grado.nombre, Seccion.nombre))
+         .join(Nivel, and_(Nivel.colegio_id == Grado.colegio_id, Nivel.id == Grado.nivel_id))
+         .where(Seccion.colegio_id == cid, Seccion.anio_id == anio.id)
+         .order_by(Nivel.orden, Nivel.nombre, Grado.orden, Grado.nombre, Seccion.nombre))
     if permitidas is not None:
         q = q.where(Seccion.id.in_(permitidas))
+    filas = db.execute(q).all()
+    ids = [i for i, *_ in filas]
     abiertas = {r.seccion_id: r for r in db.scalars(select(ReunionPadres).where(
         ReunionPadres.colegio_id == cid, ReunionPadres.cerrada_en.is_(None),
         ReunionPadres.vence_en > datetime.now(UTC)))}
-    return [{"id": i, "nombre": f"{g} {n}", "reunion_abierta": abiertas[i].id if i in abiertas else None}
-            for i, g, n in db.execute(q)]
+    # El docente a cargo: la misma relación que usa "solo sus secciones" (el primero por apellido si hay varios).
+    docentes: dict[int, str] = {}
+    for sid, nombre in db.execute(
+            select(SeccionDocente.seccion_id, Usuario.nombres + " " + Usuario.apellidos)
+            .join(Usuario, and_(Usuario.colegio_id == SeccionDocente.colegio_id, Usuario.id == SeccionDocente.usuario_id))
+            .where(SeccionDocente.colegio_id == cid, SeccionDocente.seccion_id.in_(ids), Usuario.activo)
+            .order_by(Usuario.apellidos, Usuario.nombres)):
+        docentes.setdefault(sid, nombre)
+    alumnos = dict(db.execute(
+        select(Matricula.seccion_id, func.count())
+        .join(Alumno, and_(Alumno.colegio_id == Matricula.colegio_id, Alumno.id == Matricula.alumno_id))
+        .where(Matricula.colegio_id == cid, Matricula.anio_id == anio.id, Matricula.seccion_id.in_(ids), Alumno.activo)
+        .group_by(Matricula.seccion_id)).all()) if ids else {}
+    pendientes = dict(db.execute(
+        select(ReunionPadres.seccion_id, func.count())
+        .join(FichaReunion, and_(FichaReunion.colegio_id == ReunionPadres.colegio_id,
+                                 FichaReunion.reunion_id == ReunionPadres.id))
+        .where(ReunionPadres.colegio_id == cid, ReunionPadres.seccion_id.in_(ids), FichaReunion.estado == "pendiente")
+        .group_by(ReunionPadres.seccion_id)).all()) if ids else {}
+    return [{"id": i, "nombre": f"{g} {n}", "nivel": nv, "docente": docentes.get(i), "alumnos": alumnos.get(i, 0),
+             "fichas_pendientes": pendientes.get(i, 0),
+             "reunion_abierta": abiertas[i].id if i in abiertas else None,
+             "vence_en": _iso(abiertas[i].vence_en) if i in abiertas else None}
+            for i, nv, g, n in filas]
 
 
 @router.get("")

@@ -33,6 +33,7 @@ DIRECTOR = {"usuario": "40000001", "clave": "ClaveE2e2026"}
 FAMILIA = {"documento": "41234567", "pin": "481937"}  # madre de Lucía, con la cuenta ya activada
 ALUMNOS = [("QUISPE MAMANI", "Lucía", "LUCAAAAA"), ("HUAMAN TORRES", "Diego", "DGAAAAAA"),
            ("ROJAS PAREDES", "Ana", "ANAAAAAA")]
+EXTRA_APODERADOS = 30
 
 
 def main() -> None:
@@ -82,6 +83,9 @@ def main() -> None:
         db.add(madre)
         db.flush()
         db.add(AlumnoApoderado(colegio_id=c.id, alumno_id=alumnos[0].id, apoderado_id=madre.id, parentesco="Madre"))
+        # Apoderados sin cuenta ni hijos: llenan más de una página en Cuentas de padres.
+        db.add_all([Apoderado(colegio_id=c.id, numero_documento=f"4800{i:04d}", nombres="Carmen", apellidos=f"Zeta {i:02d}")
+                    for i in range(EXTRA_APODERADOS)])
         db.commit()
     print(json.dumps({"subdominio": SUBDOMINIO, "director": DIRECTOR, "familia": FAMILIA,
                       "alumnos": [{"nombre": f"{ap}, {no}", "codigo": co} for ap, no, co in ALUMNOS]}))

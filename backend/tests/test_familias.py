@@ -340,7 +340,9 @@ def test_panel_de_cuentas_aislado_entre_colegios(client, db):
     apoderado_sin_cuenta(db, a)
     ap_b = apoderado_sin_cuenta(db, b, dni="43333333")
     h = auth("alfa", token(client, "alfa"))
-    assert [x["documento"] for x in client.get("/api/familias/apoderados", headers=h).json()] == ["DNI 41234567"]
+    lista = client.get("/api/familias/apoderados", headers=h).json()
+    assert [(x["tipo_documento"], x["numero_documento"]) for x in lista["filas"]] == [("DNI", "41234567")]
+    assert lista["total"] == 1 and lista["resumen"]["total"] == 1
     for accion in ("invitacion", "aprobar", "bloquear", "desbloquear", "cerrar-sesiones"):
         assert client.post(f"/api/familias/apoderados/{ap_b.id}/{accion}", headers=h, json={}).status_code == 404
     assert client.get(f"/api/familias/apoderados/{ap_b.id}", headers=h).status_code == 404
@@ -370,8 +372,14 @@ def test_estado_de_notificaciones_por_padre(client, db):
     client.post("/api/familia/push/suscripcion", headers=hf,
                 json={"endpoint": "https://push.example/abc", "keys": {"p256dh": "x" * 20, "auth": "y" * 10}})
     h = auth("alfa", token(client, "alfa"))
-    estados = {x["documento"]: x["notificaciones"] for x in client.get("/api/familias/apoderados", headers=h).json()}
-    assert estados == {"DNI 41111111": "sin_app", "DNI 42222222": "sin_permiso", "DNI 43333333": "activas"}
+    estados = {x["numero_documento"]: x["notificaciones"]
+               for x in client.get("/api/familias/apoderados", headers=h).json()["filas"]}
+    assert estados == {"41111111": "sin_app", "42222222": "sin_permiso", "43333333": "activas"}
+    # Filtro por avisos y resumen de todo el colegio.
+    for filtro, docs in (("activas", ["43333333"]), ("sin_permiso", ["42222222"]), ("sin_app", ["41111111"])):
+        r = client.get(f"/api/familias/apoderados?avisos={filtro}", headers=h).json()
+        assert [x["numero_documento"] for x in r["filas"]] == docs
+        assert r["resumen"]["total"] == 3  # el resumen no depende del filtro
 
 
 # --- Cola de avisos ------------------------------------------------------------------

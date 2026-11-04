@@ -241,7 +241,7 @@ def test_comunicado_programado_no_lo_ve_la_familia_hasta_su_hora_y_se_puede_canc
     eid = r.json()["id"]
     assert datetime.fromisoformat(r.json()["programado_para"]) == cuando
     # El colegio lo ve en la bandeja con su hora; la familia no.
-    lista = client.get("/api/cuaderno/entradas", headers=h).json()
+    lista = client.get("/api/cuaderno/entradas", headers=h).json()["entradas"]
     assert [datetime.fromisoformat(x["programado_para"]) for x in lista if x["id"] == eid] == [cuando]
     assert eid not in [x["id"] for x in client.get("/api/familia/cuaderno", headers=hf).json()["entradas"]]
     assert client.get(f"/api/familia/cuaderno/{eid}", headers=hf).status_code == 404
@@ -434,9 +434,11 @@ def test_historial_filtros_y_paginas(client, db, e, h):
     db.commit()
 
     r = client.get("/api/configuracion/historial", headers=h).json()
-    assert r["total"] == 57 and r["paginas"] == 2 and len(r["items"]) == 50
+    assert r["total"] == 57 and r["paginas"] == 3 and len(r["items"]) == 25
     assert r["items"][0]["resumen"] == "Comunicado «Hola»"  # lo último primero
-    assert len(client.get("/api/configuracion/historial?pagina=2", headers=h).json()["items"]) == 7
+    assert len(client.get("/api/configuracion/historial?pagina=3", headers=h).json()["items"]) == 7
+    assert len(client.get("/api/configuracion/historial?por_pagina=50&pagina=2", headers=h).json()["items"]) == 7
+    assert client.get("/api/configuracion/historial?por_pagina=101", headers=h).status_code == 422
     assert {p["id"] for p in r["personas"]} == {director.id, otro.id}
     assert {m["clave"] for m in r["modulos"]} == {"padron", "cuaderno", "configuracion"}
     assert client.get(f"/api/configuracion/historial?usuario_id={otro.id}", headers=h).json()["total"] == 1

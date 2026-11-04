@@ -6,8 +6,8 @@
 .inicio-fecha { margin: 0 0 4px; color: var(--tenue); font-weight: 600; font-size: .9rem; }
 .inicio-herramientas { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
-.buscador { position: relative; width: 300px; max-width: 100%; }
-.buscador input { width: 100%; padding-left: 40px; background: var(--superficie); }
+.buscador-inicio { position: relative; width: 300px; max-width: 100%; }
+.buscador-inicio input { width: 100%; padding-left: 40px; background: var(--superficie); }
 .buscador-icono { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--tenue); pointer-events: none; }
 .buscador-resultados, .campana-lista {
   position: absolute; z-index: 15; top: calc(100% + 6px); background: var(--superficie); border: 1px solid var(--borde);
@@ -24,13 +24,40 @@
 .campana { position: relative; }
 .campana-punto {
   position: absolute; top: -5px; right: -5px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
-  background: #DC2626; color: #fff; font-size: .72rem; font-weight: 700; display: grid; place-items: center; border: 2px solid var(--fondo);
+  background: var(--falta-barra); color: var(--superficie); font-size: .72rem; font-weight: 700; display: grid; place-items: center;
+  border: 2px solid var(--fondo); font-variant-numeric: tabular-nums;
 }
-.campana-lista { right: 0; width: 300px; max-width: calc(100vw - 32px); }
-.campana-lista p { margin: 8px 10px; }
+.campana-lista {
+  right: 0; width: 380px; max-width: calc(100vw - 32px); padding: 8px; border-radius: var(--radio);
+  box-shadow: 0 16px 40px rgba(17, 24, 39, .16);
+}
+.campana-cabeza { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 10px; }
+.campana-cabeza h2 { margin: 0; font-size: 1rem; }
+.campana-total {
+  min-width: 24px; padding: 2px 8px; border-radius: 999px; background: var(--acento-suave); color: var(--acento-texto);
+  font-size: .8rem; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums;
+}
 .campana-lista ul { list-style: none; margin: 0; padding: 0; }
-.campana-lista a { display: flex; align-items: center; min-height: var(--toque); padding: 6px 10px; border-radius: 10px; color: var(--texto); text-decoration: none; }
-.campana-lista a:hover { background: var(--acento-suave); }
+.campana-lista a {
+  display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 10px; border-radius: var(--radio-chico);
+  color: var(--texto); text-decoration: none;
+}
+.campana-lista a:hover, .campana-lista a:focus-visible { background: var(--acento-suave); }
+.campana-icono { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+.campana-icono.tarde { background: var(--tarde-fondo); color: var(--tarde-texto); }
+.campana-icono.info { background: var(--just-fondo); color: var(--just-texto); }
+.campana-icono.falta { background: var(--falta-fondo); color: var(--falta-texto); }
+.campana-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.campana-texto b { font-size: .95rem; }
+.campana-texto small { color: var(--tenue); font-size: .85rem; }
+.campana-vacia { display: flex; align-items: center; gap: 10px; margin: 4px 10px 12px; font-weight: 600; }
+.campana-vacia svg { color: var(--bien); }
+/* En celular la lista ocupa todo el ancho, debajo de la cabecera. */
+@media (max-width: 760px) {
+  .inicio-cabecera { position: relative; }
+  .campana { position: static; }
+  .campana-lista { left: 0; right: 0; width: auto; max-width: none; }
+}
 
 .fila { display: grid; gap: 20px; align-items: stretch; }
 .fila-1, .fila-2 { grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); }

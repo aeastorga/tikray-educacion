@@ -164,9 +164,6 @@ tr:last-child td { border-bottom: 0; }
 .lista { padding-left: 18px; line-height: 1.9; }
 .acciones { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 td.fecha, td time { white-space: nowrap; }
-/* En tablas: las acciones una debajo de otra, alineadas a la izquierda con el título de la columna. */
-td > .acciones { flex-direction: column; align-items: flex-start; gap: 0; flex-wrap: nowrap; }
-td > .acciones .enlace { margin-left: -6px; white-space: nowrap; }
 .aviso {
   background: var(--superficie); border: 1px solid var(--borde); border-left: 4px solid var(--acento);
   border-radius: var(--radio-chico); padding: 14px 16px; margin-bottom: 16px;
@@ -194,8 +191,6 @@ tr.clic:hover td { background: var(--acento-suave); }
 table.solo-lectores { top: 0; left: 0; }
 .caja:has(> table.solo-lectores), .caja:has(table.solo-lectores) { position: relative; overflow: hidden; }
 .icono-texto { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; }
-/* En celular cada tabla se desliza sola; la página nunca. */
 @media (max-width: 760px) {
   .contenido { padding: 16px; }
-  .contenido table { display: block; overflow-x: auto; max-width: 100%; }
 }

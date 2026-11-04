@@ -10,10 +10,6 @@
 .casilla input { margin-top: 3px; }
 
 /* Panel del colegio */
-.etiqueta { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: .78rem; font-weight: 700; background: var(--fondo); color: var(--tenue); white-space: nowrap; }
-.etiqueta.activo, .etiqueta.activas, .etiqueta.enviado { background: var(--bien-fondo); color: var(--bien-texto); }
-.etiqueta.pendiente, .etiqueta.sin_permiso, .etiqueta.sin_notificaciones { background: var(--tarde-fondo); color: var(--tarde-texto); }
-.etiqueta.bloqueado, .etiqueta.error { background: var(--falta-fondo); color: var(--falta-texto); }
 .enlace-generado { display: flex; flex-direction: column; gap: 8px; }
 .enlace-generado input { font-family: ui-monospace, monospace; font-size: .85rem; }
 .detalle-apoderado { display: grid; gap: 16px; }
@@ -37,3 +33,6 @@
   margin: 8px 0; padding: 10px 14px; border-radius: var(--radio-chico); background: var(--bien-fondo); color: var(--bien-texto);
   font-weight: 700;
 }
+.aviso-interruptor { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.aviso-interruptor > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.detalle-apoderado section > h3 { margin-bottom: 10px; }

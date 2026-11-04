@@ -128,8 +128,10 @@ test('incidencia con categoría de mérito: la familia la ve en verde', async ({
 test('historial: solo el director, con filtros', async ({ page }) => {
   await director(page, '/panel/historial')
   expect(await enMenu(page, 'Historial')).toBe(1)
-  await expect(page.locator('.lista-historial li').first()).toBeVisible()
+  const tabla = page.getByRole('table', { name: 'Historial de actividad' })
+  await expect(tabla.locator('tbody tr').first()).toBeVisible()
   await page.getByLabel('Módulo').selectOption({ label: 'Configuración' })
-  await expect(page.locator('.lista-historial')).toContainText('Perfil del colegio')
-  await expect(page.locator('.lista-historial')).not.toContainText('Ganó la carrera')
+  await expect(tabla).toContainText('Perfil del colegio')
+  await expect(tabla).not.toContainText('Ganó la carrera')
+  await expect(tabla.getByText('Editó').first()).toBeVisible()
 })

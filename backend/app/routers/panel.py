@@ -11,13 +11,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
-from app import cuaderno
+from app import cuaderno, familias
 from app.db import get_db
 from app.deps import Sesion, puede, usuario_actual
 from app.fechas import LIMA, hoy_lima
 from app.models import (Alumno, AnioEscolar, Apoderado, AsistenciaAlumno, AsistenciaPersonal, ColaAviso,
                         DestinoCuaderno, EntradaCuaderno, EntregaAviso, Grado, LicenciaPersonal, Marcacion, Matricula,
-                        MensajeCuaderno, Seccion, SuscripcionPush, Turno, Usuario)
+                        MensajeCuaderno, Nivel, Seccion, SuscripcionPush, Turno, Usuario)
 from app.routers.estructura import es_dia_lectivo
 
 router = APIRouter(prefix="/panel", tags=["panel"])
@@ -150,14 +150,15 @@ def _asistencia(db: Session, cid: int, permitidas: set[int] | None) -> dict:
 
     # Secciones con más faltas hoy (sin justificar).
     peores = db.execute(
-        select(Seccion.id, Grado.nombre, Seccion.nombre, func.count())
+        select(Seccion.id, Nivel.nombre + " · " + Grado.nombre + " " + Seccion.nombre, func.count())
         .join(Grado, and_(Grado.colegio_id == Seccion.colegio_id, Grado.id == Seccion.grado_id))
+        .join(Nivel, and_(Nivel.colegio_id == Grado.colegio_id, Nivel.id == Grado.nivel_id))
         .join(matriculados, matriculados.c.seccion_id == Seccion.id)
         .join(AsistenciaAlumno, and_(AsistenciaAlumno.colegio_id == Seccion.colegio_id,
                                      AsistenciaAlumno.alumno_id == matriculados.c.alumno_id,
                                      AsistenciaAlumno.fecha == hoy, AsistenciaAlumno.estado == "falta"))
         .where(Seccion.colegio_id == cid)
-        .group_by(Seccion.id, Grado.nombre, Seccion.nombre).order_by(func.count().desc()).limit(5)).all()
+        .group_by(Seccion.id, Nivel.nombre, Grado.nombre, Seccion.nombre).order_by(func.count().desc()).limit(5)).all()
 
     # Últimos días de clase: % que vino (presente o tarde) sobre los registrados.
     desde = hoy - timedelta(days=DIAS_TENDENCIA * 2 + 7)
@@ -184,7 +185,7 @@ def _asistencia(db: Session, cid: int, permitidas: set[int] | None) -> dict:
         "porcentaje": (round(100 * (hoy_d["presente"] + hoy_d["tarde"]) / total)
                        if total and hoy_d["sin_registro"] < total else None),
         "solo_sus_secciones": permitidas is not None,
-        "secciones_con_faltas": [{"id": i, "nombre": f"{g} {s}", "faltas": n} for i, g, s, n in peores],
+        "secciones_con_faltas": [{"id": i, "nombre": nombre, "faltas": n} for i, nombre, n in peores],
         "tendencia": list(reversed(tendencia)),
         "llegadas": _llegadas(db, cid, hoy, matriculados),
         "ultima_marcacion": _ultima_marcacion(db, cid, hoy, matriculados),
@@ -240,16 +241,10 @@ def _familias(db: Session, cid: int) -> dict:
     hoy = hoy_lima()
     estados = dict(db.execute(select(Apoderado.estado_acceso, func.count()).where(Apoderado.colegio_id == cid)
                               .group_by(Apoderado.estado_acceso)).all())
-    # Reciben avisos: tienen un celular suscrito o hoy ya les llegó alguno (lo segundo cubre la demo, que
-    # simula entregas sin crear suscripciones).
+    # Reciben avisos: la misma cuenta que "Cuentas de padres" (celular suscrito o algún aviso hoy).
     con_push = db.scalar(select(func.count()).select_from(Apoderado).where(
         Apoderado.colegio_id == cid, Apoderado.estado_acceso == "activo",
-        or_(Apoderado.cuenta_id.in_(select(SuscripcionPush.cuenta_id)),
-            Apoderado.id.in_(select(EntregaAviso.apoderado_id)
-                             .join(ColaAviso, and_(ColaAviso.colegio_id == EntregaAviso.colegio_id,
-                                                   ColaAviso.id == EntregaAviso.aviso_id))
-                             .where(EntregaAviso.colegio_id == cid, EntregaAviso.estado == "enviado",
-                                    ColaAviso.fecha == hoy))))) or 0
+        or_(Apoderado.cuenta_id.in_(select(SuscripcionPush.cuenta_id)), familias.recibio_hoy(cid)))) or 0
     entregas = dict(db.execute(
         select(EntregaAviso.estado, func.count())
         .join(ColaAviso, and_(ColaAviso.colegio_id == EntregaAviso.colegio_id, ColaAviso.id == EntregaAviso.aviso_id))

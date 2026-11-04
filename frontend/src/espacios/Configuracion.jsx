@@ -1,11 +1,12 @@
 // Configuración del colegio (director o quien tenga el permiso): imagen, perfil, módulos, avisos a los
 // padres, plantillas de comunicados y categorías de incidencias. Más el historial de actividad (solo director).
-import { Award, Pencil, Plus, Trash2, TrendingUp } from 'lucide-react'
+import { Award, History, Pencil, Plus, Trash2, TrendingUp } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 import { api } from '../api.js'
 import { aplicarImagen } from '../App.jsx'
 import { LIMA } from '../tema.js'
+import { Encabezado, fechaHora as fechaHoraComun, Insignia, Paginacion, Tabla, usePaginado } from './comun/index.js'
 import './configuracion.css'
 
 const TIPOS_AVISO = [
@@ -223,7 +224,7 @@ function Modulos({ editar, alCambiar }) {
   )
 }
 
-function Interruptor({ etiqueta, activo, cambiar, deshabilitado }) {
+export function Interruptor({ etiqueta, activo, cambiar, deshabilitado }) {
   return (
     <label className="interruptor">
       <input type="checkbox" role="switch" checked={activo} disabled={deshabilitado}
@@ -449,31 +450,19 @@ function Categorias({ editar }) {
 
 const ACCION = { crear: 'Creó', editar: 'Editó', anular: 'Anuló' }
 
-function fechaHora(iso) {
-  return new Date(iso).toLocaleString('es-PE', { timeZone: LIMA, day: 'numeric', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit' })
-}
+const TONO_ACCION = { crear: 'bien', editar: 'info', anular: 'falta' }
 
 export function Historial() {
   const [filtros, setFiltros] = useState({ usuario_id: '', modulo: '', desde: '', hasta: '' })
-  const [pagina, setPagina] = useState(1)
-  const [datos, setDatos] = useState(null)
-  const [error, setError] = useState(null)
+  const { datos, error, cargando, paginacion } = usePaginado('/api/configuracion/historial', filtros, { demora: 0 })
 
-  useEffect(() => {
-    const q = new URLSearchParams(Object.entries({ ...filtros, pagina }).filter(([, v]) => v !== ''))
-    setError(null)
-    api(`/api/configuracion/historial?${q}`).then(setDatos).catch((e) => setError(e.message))
-  }, [filtros, pagina])
-
-  function filtrar(k, v) { setPagina(1); setFiltros({ ...filtros, [k]: v }) }
+  function filtrar(k, v) { setFiltros({ ...filtros, [k]: v }) }
   const hayFiltros = Object.values(filtros).some(Boolean)
 
   return (
     <section className="historial">
-      <h2>Historial de actividad</h2>
-      <p className="tenue">Quién hizo qué en el sistema. Sin datos sensibles: nunca guarda claves, PIN, motivos de
-        licencia ni el texto de las justificaciones.</p>
+      <Encabezado titulo="Historial de actividad"
+                  descripcion="Quién hizo qué en el sistema. Nunca guarda claves, PIN, motivos de licencia ni el texto de las justificaciones." />
       <div className="filtros-historial">
         <label>Persona
           <select value={filtros.usuario_id} onChange={(e) => filtrar('usuario_id', e.target.value)}>
@@ -489,30 +478,19 @@ export function Historial() {
         </label>
         <label>Desde<input type="date" value={filtros.desde} onChange={(e) => filtrar('desde', e.target.value)} /></label>
         <label>Hasta<input type="date" value={filtros.hasta} onChange={(e) => filtrar('hasta', e.target.value)} /></label>
-        {hayFiltros && <button className="enlace" onClick={() => { setPagina(1); setFiltros({ usuario_id: '', modulo: '', desde: '', hasta: '' }) }}>Quitar filtros</button>}
+        {hayFiltros && <button className="enlace" onClick={() => setFiltros({ usuario_id: '', modulo: '', desde: '', hasta: '' })}>Quitar filtros</button>}
       </div>
       {error && <p className="error">{error}</p>}
-      {!datos ? <p className="tenue">Cargando…</p> : datos.items.length === 0 ? (
-        <p className="tenue">{hayFiltros ? 'Nada con esos filtros.' : 'Aún no hay actividad registrada.'}</p>
-      ) : (
-        <>
-          <ol className="lista-historial">
-            {datos.items.map((r) => (
-              <li key={r.id}>
-                <time dateTime={r.creado_en}>{fechaHora(r.creado_en)}</time>
-                <span className={`accion ${r.accion}`}>{ACCION[r.accion]}</span>
-                <span className="resumen">{r.resumen}</span>
-                <span className="tenue quien">{r.quien} · {r.modulo_nombre}</span>
-              </li>
-            ))}
-          </ol>
-          <div className="paginacion">
-            <button className="boton secundario" disabled={pagina <= 1} onClick={() => setPagina(pagina - 1)}>Anterior</button>
-            <span className="tenue">Página {datos.pagina} de {datos.paginas} · {datos.total} registros</span>
-            <button className="boton secundario" disabled={pagina >= datos.paginas} onClick={() => setPagina(pagina + 1)}>Siguiente</button>
-          </div>
-        </>
-      )}
+      <Tabla etiqueta="Historial de actividad" cargando={cargando} filas={datos?.items}
+             vacio={{ icono: History, titulo: hayFiltros ? 'Nada con esos filtros' : 'Aún no hay actividad registrada',
+                      texto: hayFiltros ? 'Prueba con otra persona, módulo o fechas.' : null }}
+             columnas={[
+               { id: 'resumen', titulo: 'Qué pasó', ancho: '42%', celda: (r) => r.resumen },
+               { id: 'accion', titulo: 'Acción', celda: (r) => <Insignia tono={TONO_ACCION[r.accion] || 'neutro'}>{ACCION[r.accion] || r.accion}</Insignia> },
+               { id: 'quien', titulo: 'Quién', celda: (r) => <>{r.quien}<span className="segunda-linea">{r.modulo_nombre}</span></> },
+               { id: 'fecha', titulo: 'Fecha', nowrap: true, celda: (r) => <time dateTime={r.creado_en} className="tenue">{fechaHoraComun(r.creado_en)}</time> },
+             ]} />
+      {paginacion && <Paginacion {...paginacion} />}
     </section>
   )
 }

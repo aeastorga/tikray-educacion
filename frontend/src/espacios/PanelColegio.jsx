@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { api, descargar, ErrorApi, guardarToken, leerToken } from '../api.js'
 import { borrarPadron } from '../porteria/almacen.js'
+import { KeyRound, ShieldCheck, Users } from 'lucide-react'
 import Asistencia from './Asistencia.jsx'
+import {
+  documento, Encabezado, Insignia, MenuAcciones, Paginacion, Persona, Tabla, usePaginaLocal,
+} from './comun/index.js'
 import CambiarClave from './CambiarClave.jsx'
 import Configuracion, { Historial } from './Configuracion.jsx'
 import Menu from './Menu.jsx'
@@ -118,6 +122,8 @@ function Personal({ yo }) {
     } catch (err) { setError(err.message) }
   }
 
+  const pagina = usePaginaLocal(lista)
+
   async function reiniciar(p) {
     if (!confirm(`¿Reiniciar la clave de ${p.nombres} ${p.apellidos}?`)) return
     const r = await api(`/api/personal/${p.id}/reiniciar-clave`, { metodo: 'POST' })
@@ -126,7 +132,8 @@ function Personal({ yo }) {
 
   return (
     <section>
-      <h2>Personal</h2>
+      <Encabezado titulo="Personal" descripcion="Con el turno asignado, la portería calcula su tardanza y su falta automática."
+                  acciones={editar && <button className="boton secundario" onClick={carnets}>Carnets del personal (PDF)</button>} />
       {clave && (
         <div className="aviso">
           Clave temporal de <b>{clave.quien}</b> (usuario {clave.usuario}): <code>{clave.clave}</code>
@@ -134,32 +141,26 @@ function Personal({ yo }) {
           <button className="enlace" onClick={() => setClave(null)}>Cerrar</button>
         </div>
       )}
-      <table>
-        <thead><tr><th>Documento</th><th>Nombre</th><th>Rol</th><th>Turno</th><th>Estado</th>{editar && <th />}</tr></thead>
-        <tbody>
-          {lista.map((p) => (
-            <tr key={p.id}>
-              <td>{p.tipo_documento} {p.numero_documento}</td><td>{p.apellidos}, {p.nombres}</td><td>{p.rol}</td>
-              <td>
-                {editar && turnos.length > 0
-                  ? <select value={p.turno_id ?? ''} onChange={(e) => cambiarTurno(p, e.target.value)} aria-label="Turno">
-                      <option value="">Sin turno</option>
-                      {turnos.map((t) => <option key={t.id} value={t.id}>{t.nombre} ({t.hora_entrada})</option>)}
-                    </select>
-                  : turnos.find((t) => t.id === p.turno_id)?.nombre || (p.turno_id ? 'Con turno' : 'Sin turno')}
-              </td>
-              <td>{!p.activo ? 'Inactivo' : p.debe_cambiar_clave ? 'Clave temporal' : 'Activo'}</td>
-              {editar && <td><button className="enlace" onClick={() => reiniciar(p)}>Reiniciar clave</button></td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {editar && (
-        <div className="fila-form">
-          <button className="boton secundario" onClick={carnets}>Carnets del personal (PDF)</button>
-          <span className="tenue">Con el turno asignado, la portería calcula su tardanza y su falta automática.</span>
-        </div>
-      )}
+      <Tabla etiqueta="Personal" filas={pagina.filas}
+             vacio={{ icono: Users, titulo: 'Todavía no hay personal', texto: editar ? 'Agrégalo con el formulario de abajo o desde Excel.' : null }}
+             columnas={[
+               { id: 'persona', titulo: 'Nombre', ancho: '30%',
+                 celda: (p) => <Persona nombre={`${p.apellidos}, ${p.nombres}`} detalle={documento(p.tipo_documento, p.numero_documento)} /> },
+               { id: 'rol', titulo: 'Rol', celda: (p) => p.rol },
+               { id: 'turno', titulo: 'Turno', celda: (p) => (editar && turnos.length > 0
+                 ? <select value={p.turno_id ?? ''} onChange={(e) => cambiarTurno(p, e.target.value)} aria-label={`Turno de ${p.nombres} ${p.apellidos}`}>
+                     <option value="">Sin turno</option>
+                     {turnos.map((t) => <option key={t.id} value={t.id}>{t.nombre} ({t.hora_entrada})</option>)}
+                   </select>
+                 : turnos.find((t) => t.id === p.turno_id)?.nombre || (p.turno_id ? 'Con turno' : 'Sin turno')) },
+               { id: 'estado', titulo: 'Estado', celda: (p) => (!p.activo ? <Insignia tono="neutro">Inactivo</Insignia>
+                 : p.debe_cambiar_clave ? <Insignia tono="tarde">Clave temporal</Insignia> : <Insignia tono="bien">Activo</Insignia>) },
+               editar && { id: 'acciones', acciones: true, celda: (p) => (
+                 <MenuAcciones etiqueta={`${p.nombres} ${p.apellidos}`}
+                               principal={{ texto: 'Reiniciar clave', icono: KeyRound, alHacer: () => reiniciar(p) }} />
+               ) },
+             ].filter(Boolean)} />
+      {pagina.paginacion && <Paginacion {...pagina.paginacion} />}
       {editar && roles.length > 0 && (
         <form className="fila-form" onSubmit={crear}>
           <select value={nuevo.tipo_documento} onChange={(e) => setNuevo({ ...nuevo, tipo_documento: e.target.value })}>
@@ -217,42 +218,40 @@ function Roles({ yo }) {
 
   return (
     <section>
-      <h2>Roles y permisos</h2>
-      <ul className="lista">
-        {roles.map((r) => (
-          <li key={r.id}>
-            <b>{r.nombre}</b>{' '}
-            <span className="tenue">{r.es_director ? 'Todos los permisos' : Object.keys(r.permisos).map((m) => modulos[m] || m).join(', ') || 'Sin permisos'}
-              {r.solo_sus_secciones && ' · solo sus secciones'}</span>
-            {editar && !r.es_director && <>
-              {' '}<button className="enlace" onClick={() => setEditando({ ...r })}>Editar</button>
-              <button className="enlace" onClick={() => borrar(r)}>Borrar</button>
-            </>}
-          </li>
-        ))}
-      </ul>
-      {editar && !editando && <button className="boton" onClick={() => setEditando({ nombre: '', permisos: {}, solo_sus_secciones: false })}>Nuevo rol</button>}
+      <Encabezado titulo="Roles y permisos" descripcion="Cada rol decide qué módulos ve o edita quien lo tiene."
+                  acciones={editar && !editando && (
+                    <button className="boton" onClick={() => setEditando({ nombre: '', permisos: {}, solo_sus_secciones: false })}>Nuevo rol</button>
+                  )} />
+      <Tabla etiqueta="Roles" filas={roles}
+             vacio={{ icono: ShieldCheck, titulo: 'Sin roles' }}
+             columnas={[
+               { id: 'rol', titulo: 'Rol', ancho: '24%', celda: (r) => <b>{r.nombre}</b> },
+               { id: 'permisos', titulo: 'Permisos', celda: (r) => (
+                 <>
+                   {r.es_director ? 'Todos los permisos' : Object.keys(r.permisos).map((m) => modulos[m] || m).join(', ') || <span className="tenue">Sin permisos</span>}
+                   {r.solo_sus_secciones && <span className="segunda-linea">Solo sus secciones</span>}
+                 </>
+               ) },
+               editar && { id: 'acciones', acciones: true, celda: (r) => (!r.es_director && (
+                 <MenuAcciones etiqueta={r.nombre} principal={{ texto: 'Editar', alHacer: () => setEditando({ ...r }) }}
+                               opciones={[{ texto: 'Borrar', peligro: true, alHacer: () => borrar(r) }]} />
+               )) },
+             ].filter(Boolean)} />
       {editando && (
         <form onSubmit={guardar} className="tarjeta ancho">
           <label>Nombre del rol
             <input value={editando.nombre} required onChange={(e) => setEditando({ ...editando, nombre: e.target.value })} />
           </label>
-          <table>
-            <thead><tr><th>Módulo</th><th>Sin acceso</th><th>Ver</th><th>Editar</th></tr></thead>
-            <tbody>
-              {Object.entries(modulos).map(([clave, nombre]) => (
-                <tr key={clave}>
-                  <td>{nombre}</td>
-                  {['', 'ver', 'editar'].map((n) => (
-                    <td key={n}>
-                      <input type="radio" name={clave} checked={(editando.permisos[clave] || '') === n}
-                             onChange={() => setEditando({ ...editando, permisos: { ...editando.permisos, [clave]: n } })} />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Tabla etiqueta="Permisos del rol" filas={Object.entries(modulos)} clave={([clave]) => clave}
+                 columnas={[
+                   { id: 'modulo', titulo: 'Módulo', celda: ([, nombre]) => nombre },
+                   ...[['', 'Sin acceso'], ['ver', 'Ver'], ['editar', 'Editar']].map(([n, titulo]) => ({
+                     id: n || 'nada', titulo, alinear: 'centro', celda: ([clave, nombre]) => (
+                       <input type="radio" name={clave} aria-label={`${nombre}: ${titulo}`} checked={(editando.permisos[clave] || '') === n}
+                              onChange={() => setEditando({ ...editando, permisos: { ...editando.permisos, [clave]: n } })} />
+                     ),
+                   })),
+                 ]} />
           <label className="check">
             <input type="checkbox" checked={Boolean(editando.solo_sus_secciones)}
                    onChange={(e) => setEditando({ ...editando, solo_sus_secciones: e.target.checked })} />

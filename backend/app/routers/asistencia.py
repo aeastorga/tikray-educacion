@@ -111,7 +111,7 @@ def porteria(s: Sesion = Depends(marcar), db: Session = Depends(get_db)) -> dict
     nombres, sección y turnos. Sin DNI ni datos de los apoderados."""
     cid = s.colegio.id
     anio = db.scalar(select(AnioEscolar.id).where(AnioEscolar.colegio_id == cid, AnioEscolar.activo))
-    etiquetas = {sec.id: (f"{g} {sec.nombre}", sec.turno_id) for sec, g, _ in _secciones(db, cid, anio)} if anio else {}
+    etiquetas = {sec.id: (f"{n} · {g} {sec.nombre}", sec.turno_id) for sec, g, n in _secciones(db, cid, anio)} if anio else {}
     alumnos = db.execute(
         select(Alumno.id, Alumno.codigo, Alumno.apellidos, Alumno.nombres, Matricula.seccion_id)
         .outerjoin(Matricula, and_(Matricula.colegio_id == Alumno.colegio_id, Matricula.alumno_id == Alumno.id,

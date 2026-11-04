@@ -1,9 +1,20 @@
 /* Modo reunión: pantalla del tutor y ficha del padre. */
 .en-linea { display: inline-flex; align-items: center; gap: 8px; flex-direction: row; }
 .chico { font-size: .8rem; }
-.lista-secciones { list-style: none; padding: 0; margin: 16px 0; }
-.lista-secciones li { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 10px 0; border-bottom: 1px solid var(--borde); }
+/* Secciones agrupadas por nivel: tres columnas en pantalla ancha, una en celular. */
+.nivel-reunion { margin-top: 24px; }
+.nivel-reunion > h3 { margin: 0 0 12px; }
+.tarjetas-reunion { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+@media (min-width: 1200px) { .tarjetas-reunion { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .tarjetas-reunion { grid-template-columns: minmax(0, 1fr); } }
+.tarjetas-reunion > li {
+  display: flex; flex-direction: column; gap: 8px; padding: 18px; background: var(--superficie);
+  border: 1px solid var(--borde); border-radius: var(--radio);
+}
+.tarjetas-reunion > li.en-curso { border-color: var(--acento); box-shadow: 0 0 0 1px var(--acento); }
+.tarjeta-reunion-cabeza { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.seccion-grande { font-family: var(--letra-titulo); font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
+.tarjetas-reunion .acciones { margin-top: auto; padding-top: 8px; flex-wrap: wrap; }
 
 .reunion-cuerpo { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 24px; align-items: start; }
 @media (max-width: 760px) { .reunion-cuerpo { grid-template-columns: minmax(0, 1fr); } }
