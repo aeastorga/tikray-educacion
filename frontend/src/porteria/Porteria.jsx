@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ScanLine } from 'lucide-react'
 import { api, ErrorApi, leerToken } from '../api.js'
+import { Insignia, Persona, Tabla } from '../espacios/comun/index.js'
 import { datos, nuevoId, pendientes } from './almacen.js'
 import Camara from './Camara.jsx'
 import { buscar, decidir, fechaLima, horaLima, indexar, leerCodigo, minutosTarde, sinTildes } from './reglas.js'
@@ -173,7 +175,8 @@ export default function Porteria({ yo }) {
         <div className="porteria-sesion" role="alert">
           <b>Sesión vencida: vuelve a ingresar.</b>{' '}
           {porEnviar > 0
-            ? `Las ${porEnviar} marcaciones pendientes están guardadas en este celular y se enviarán al ingresar.`
+            ? (porEnviar === 1 ? 'La marcación pendiente está guardada en este celular y se enviará al ingresar.'
+              : `Las ${porEnviar} marcaciones pendientes están guardadas en este celular y se enviarán al ingresar.`)
             : 'Puedes seguir marcando: se guardan en este celular y se enviarán al ingresar.'}{' '}
           <Link className="boton" to="/personal?volver=/panel/asistencia/porteria">Ingresar de nuevo</Link>
         </div>
@@ -213,17 +216,16 @@ export default function Porteria({ yo }) {
       )}
 
       <h3>Últimas lecturas</h3>
-      <table>
-        <tbody>
-          {recientes.map((r) => (
-            <tr key={r.id ?? r.hora}>
-              <td>{r.hora}</td>
-              <td>{r.persona?.nombre || 'Desconocido'}</td>
-              <td>{r.rechazo ? <span className="error">{r.rechazo}</span> : estadoTexto(r)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Tabla etiqueta="Últimas lecturas" filas={recientes} clave={(r) => r.id ?? r.hora}
+             vacio={{ icono: ScanLine, titulo: 'Todavía no hay lecturas', texto: 'Las marcaciones de este celular aparecen aquí.' }}
+             columnas={[
+               { id: 'persona', titulo: 'Persona', celda: (r) => (
+                 <Persona nombre={r.persona?.nombre || 'Desconocido'}
+                          detalle={r.persona ? (r.persona.tipo === 'alumno' ? r.persona.seccion : 'Personal') : null} />
+               ) },
+               { id: 'hora', titulo: 'Hora', numero: true, alinear: 'derecha', celda: (r) => r.hora },
+               { id: 'estado', titulo: 'Estado', nowrap: true, celda: (r) => <EstadoLectura r={r} /> },
+             ]} />
 
       <details className="porteria-ajustes">
         <summary>Ajustes de este celular</summary>
@@ -239,6 +241,15 @@ export default function Porteria({ yo }) {
 function estadoTexto(r) {
   if (!r.persona) return 'Se envía para revisar'
   return `${TEXTO[r.resultado]}${r.tarde ? ` · tarde ${duracion(r.tarde)}` : ''}`
+}
+
+function EstadoLectura({ r }) {
+  if (r.rechazo) return <Insignia tono="falta">{r.rechazo}</Insignia>
+  if (!r.persona) return <Insignia tono="neutro">Se envía para revisar</Insignia>
+  if (r.resultado === 'entrada') {
+    return r.tarde ? <Insignia tono="tarde">Tarde · {duracion(r.tarde)}</Insignia> : <Insignia tono="bien">A tiempo</Insignia>
+  }
+  return <Insignia tono={r.resultado === 'salida' ? 'info' : 'neutro'}>{TEXTO[r.resultado]}</Insignia>
 }
 
 function duracion(minutos) {

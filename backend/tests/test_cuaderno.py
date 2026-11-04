@@ -149,17 +149,23 @@ def test_firma_de_lectura_y_quien_leyo(client, db, e, h, hf):
     assert lista["entradas"][0]["visto"] is False and lista["entradas"][0]["alumnos"] == ["Niño0", "Niño1"]
 
     assert client.get(f"/api/familia/cuaderno/{eid}", headers=hf).status_code == 200  # la abre: vista
-    resumen = client.get("/api/cuaderno/entradas", headers=h).json()[0]
+    resumen = client.get("/api/cuaderno/entradas", headers=h).json()["entradas"][0]
     assert (resumen["apoderados"], resumen["vistos"], resumen["firmados"]) == (2, 1, 0)
 
     r = client.post(f"/api/familia/cuaderno/{eid}/firmar", headers=hf)
     assert r.status_code == 200
     det = client.get(f"/api/cuaderno/entradas/{eid}", headers=h).json()
-    firmas = {(x["alumno"], x["apoderado"]): x["firmado_en"] is not None for x in det["lectores"]}
+    lectores = client.get(f"/api/cuaderno/entradas/{eid}/lectores", headers=h).json()["filas"]
+    assert det["familias"] == {"total": 2, "vieron": 1, "firmaron": 1}
+    firmas = {(x["alumno"], x["apoderado"]): x["firmado_en"] is not None for x in lectores}
     assert firmas == {("Ape0, Niño0", "Mamani, Rosa"): True, ("Ape1, Niño1", "Mamani, Rosa"): True,
                       ("Ape0, Niño0", "Quispe, Juan"): False}
-    assert [x["con_app"] for x in det["lectores"] if x["apoderado"] == "Quispe, Juan"] == [False]
-    resumen = client.get("/api/cuaderno/entradas", headers=h).json()[0]
+    assert [x["con_app"] for x in lectores if x["apoderado"] == "Quispe, Juan"] == [False]
+    # Solo quienes faltan, y con buscador.
+    pend = client.get(f"/api/cuaderno/entradas/{eid}/lectores?pendientes=true", headers=h).json()
+    assert pend["total"] == 1 and pend["filas"][0]["apoderado"] == "Quispe, Juan"
+    assert client.get(f"/api/cuaderno/entradas/{eid}/lectores?q=mamani", headers=h).json()["total"] == 2
+    resumen = client.get("/api/cuaderno/entradas", headers=h).json()["entradas"][0]
     assert (resumen["vistos"], resumen["firmados"]) == (1, 1)
 
 
@@ -242,22 +248,22 @@ def test_citacion_con_confirmacion_del_padre(client, db, e, h, hf):
     assert "Confirma tu asistencia" in cola_cuaderno(db, e.colegio)[0].datos["mensaje"]
     assert client.post(f"/api/familia/cuaderno/{ent.id}/firmar", headers=hf).status_code == 200
     det = client.get(f"/api/cuaderno/entradas/{ent.id}", headers=h).json()
-    assert det["pide_firma"] and any(x["firmado_en"] for x in det["lectores"])
+    assert det["pide_firma"] and det["familias"]["firmaron"] == 1
 
 
 def test_respuestas_en_el_hilo(client, db, e, h, hf):
     eid = escribir(client, h, tipo="incidencia", alumno_id=e.a1.id, titulo="Se golpeó en el recreo").json()["id"]
-    assert client.get("/api/cuaderno/entradas?pendientes=true", headers=h).json() == []
+    assert client.get("/api/cuaderno/entradas?pendientes=true", headers=h).json()["entradas"] == []
     r = client.post(f"/api/familia/cuaderno/{eid}/respuestas", json={"cuerpo": "Gracias, lo recojo"}, headers=hf)
     assert r.status_code == 201
-    pend = client.get("/api/cuaderno/entradas?pendientes=true", headers=h).json()
+    pend = client.get("/api/cuaderno/entradas?pendientes=true", headers=h).json()["entradas"]
     assert [(x["id"], x["respuestas"], x["espera_al_colegio"]) for x in pend] == [(eid, 1, True)]
 
     antes = len(cola_cuaderno(db, e.colegio))
     r = client.post(f"/api/cuaderno/entradas/{eid}/respuestas", json={"cuerpo": "Está bien"}, headers=h)
     assert r.status_code == 201
     assert len(cola_cuaderno(db, e.colegio)) == antes + 1  # solo la madre tiene app
-    assert client.get("/api/cuaderno/entradas?pendientes=true", headers=h).json() == []
+    assert client.get("/api/cuaderno/entradas?pendientes=true", headers=h).json()["entradas"] == []
     hilo = client.get(f"/api/familia/cuaderno/{eid}", headers=hf).json()["mensajes"]
     assert [(m["autor"], m["de_familia"]) for m in hilo] == [("Tú", True), ("Dir alfa", False)]
 
@@ -278,7 +284,7 @@ def test_justificacion_del_padre_y_aprobacion(client, db, e, h, hf):
 
     det = client.get(f"/api/cuaderno/entradas/{eid}", headers=h).json()
     assert det["de_familia"] and det["autor"] == "Rosa Mamani" and len(det["adjuntos"]) == 1
-    assert client.get("/api/cuaderno/entradas?pendientes=true", headers=h).json()[0]["id"] == eid
+    assert client.get("/api/cuaderno/entradas?pendientes=true", headers=h).json()["entradas"][0]["id"] == eid
 
     r = client.post(f"/api/cuaderno/entradas/{eid}/resolver", json={"estado": "aprobada"}, headers=h)
     assert r.status_code == 200
@@ -362,7 +368,7 @@ def test_docente_solo_ve_y_escribe_en_sus_secciones(client, db, e, h):
     todos = escribir(client, h, tipo="comunicado", alcance="colegio").json()["id"]
     hd = docente(client, db, e, [e.sec_a])
 
-    assert [x["id"] for x in client.get("/api/cuaderno/entradas", headers=hd).json()] == [de_a]
+    assert [x["id"] for x in client.get("/api/cuaderno/entradas", headers=hd).json()["entradas"]] == [de_a]
     assert client.get(f"/api/cuaderno/entradas/{de_b}", headers=hd).status_code == 404
     assert client.get(f"/api/cuaderno/entradas/{todos}", headers=hd).status_code == 404
     assert client.post(f"/api/cuaderno/entradas/{de_b}/respuestas", json={"cuerpo": "x"},
@@ -381,7 +387,7 @@ def test_docente_solo_ve_y_escribe_en_sus_secciones(client, db, e, h):
     rol = db.scalar(select(Rol).where(Rol.nombre == "Rol 50000000"))
     rol.solo_sus_secciones = False
     db.commit()
-    assert len(client.get("/api/cuaderno/entradas", headers=hd).json()) == 5
+    assert len(client.get("/api/cuaderno/entradas", headers=hd).json()["entradas"]) == 5
 
 
 def test_docente_sin_secciones_no_ve_nada(client, db, e, h):
@@ -390,7 +396,7 @@ def test_docente_sin_secciones_no_ve_nada(client, db, e, h):
     u.rol.solo_sus_secciones = True
     db.commit()
     hd = auth("alfa", token(client, "alfa", "50000001"))
-    assert client.get("/api/cuaderno/entradas", headers=hd).json() == []
+    assert client.get("/api/cuaderno/entradas", headers=hd).json()["entradas"] == []
 
 
 def test_marca_del_rol_desde_el_panel(client, e, h):
@@ -445,7 +451,7 @@ def test_otro_colegio_no_ve_ni_toca_el_cuaderno(client, db, e, h, hf):
                    tipo="justificacion", alumno_id=e.a1.id, desde=str(HOY)).json()["id"]
     adj = db.scalar(select(AdjuntoCuaderno.id))
     hb = auth("beta", token(client, "beta"))
-    assert client.get("/api/cuaderno/entradas", headers=hb).json() == []
+    assert client.get("/api/cuaderno/entradas", headers=hb).json()["entradas"] == []
     for metodo, ruta, cuerpo in (
             ("GET", f"/api/cuaderno/entradas/{eid}", None),
             ("POST", f"/api/cuaderno/entradas/{eid}/respuestas", {"cuerpo": "x"}),

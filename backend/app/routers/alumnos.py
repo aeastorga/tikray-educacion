@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -9,6 +10,7 @@ from app import codigos, familias, validacion
 from app.comun import guardar, obtener
 from app.configuracion import anotar
 from app.db import get_db
+from app.paginacion import Pagina, contar, pagina, recortar
 from app.deps import Sesion, requerir_permiso
 from app.models import Alumno, AlumnoApoderado, AnioEscolar, Apoderado, Grado, Matricula, Nivel, Seccion
 from app.routers.estructura import anio_o_activo
@@ -95,8 +97,8 @@ def _apoderado(ap: Apoderado, v: AlumnoApoderado | None = None) -> dict:
 @router.get("/alumnos")
 def listar(
     anio_id: int | None = None, seccion_id: int | None = None, q: str | None = None,
-    desde: int = Query(0, ge=0), limite: int = Query(50, ge=1, le=500),
-    s: Sesion = Depends(ver), db: Session = Depends(get_db),
+    estado: Literal["activo", "retirado", "sin_matricula"] | None = None,
+    p: Pagina = Depends(pagina), s: Sesion = Depends(ver), db: Session = Depends(get_db),
 ) -> dict:
     cid = s.colegio.id
     anio = anio_o_activo(db, cid, anio_id)
@@ -106,14 +108,25 @@ def listar(
                 .where(Alumno.colegio_id == cid))
     if seccion_id is not None:
         consulta = consulta.where(Matricula.seccion_id == seccion_id)
+    if estado == "activo":
+        consulta = consulta.where(Alumno.activo)
+    elif estado == "retirado":
+        consulta = consulta.where(~Alumno.activo)
+    elif estado == "sin_matricula":
+        consulta = consulta.where(Alumno.activo, Matricula.seccion_id.is_(None))
     if q and q.strip():
         patron = f"%{q.strip()}%"
         consulta = consulta.where(or_(Alumno.apellidos.ilike(patron), Alumno.nombres.ilike(patron),
                                       Alumno.numero_documento.ilike(patron)))
-    total = db.scalar(select(func.count()).select_from(consulta.subquery()))
-    filas = db.execute(consulta.order_by(Alumno.apellidos, Alumno.nombres).offset(desde).limit(limite)).all()
+    total = contar(db, consulta)
+    filas = db.execute(recortar(consulta.order_by(Alumno.apellidos, Alumno.nombres, Alumno.id), p)).all()
     etiquetas = _etiquetas_seccion(db, cid, {sid for _, sid in filas if sid})
-    return {"total": total, "alumnos": [_alumno(a, sid, etiquetas.get(sid)) for a, sid in filas]}
+    apoderados = dict(db.execute(
+        select(AlumnoApoderado.alumno_id, func.count()).where(
+            AlumnoApoderado.colegio_id == cid, AlumnoApoderado.alumno_id.in_([a.id for a, _ in filas]))
+        .group_by(AlumnoApoderado.alumno_id)).all()) if filas else {}
+    return {**p.datos(total), "alumnos": [_alumno(a, sid, etiquetas.get(sid)) | {"apoderados": apoderados.get(a.id, 0)}
+                                          for a, sid in filas]}
 
 
 @router.post("/alumnos", status_code=201)

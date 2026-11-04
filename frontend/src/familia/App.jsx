@@ -85,7 +85,7 @@ export default function AppFamilia({ colegio, ingreso }) {
         {yo?.modulos?.cuaderno !== false && (
           <NavLink to="/familia/cuaderno">
             <NotebookPen aria-hidden="true" /><span>Cuaderno</span>
-            {porFirmar.length > 0 && <b className="insignia" aria-label={`${porFirmar.length} por firmar`}>{porFirmar.length}</b>}
+            {porFirmar.length > 0 && <b className="contador-menu" aria-label={`${porFirmar.length} por firmar`}>{porFirmar.length}</b>}
           </NavLink>
         )}
         <NavLink to="/familia/perfil"><UserRound aria-hidden="true" /><span>Perfil</span></NavLink>

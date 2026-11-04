@@ -7,6 +7,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import and_, func, or_, select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from app import familias
@@ -14,8 +15,11 @@ from app.comun import obtener
 from app.configuracion import anotar
 from app.db import get_db
 from app.deps import Sesion, requerir_permiso
-from app.models import (Alumno, AlumnoApoderado, Apoderado, CambioApoderado, ConfigFamilias, ConsentimientoApoderado,
-                        EntregaAviso, InvitacionFamilia, SuscripcionPush, Usuario)
+from app.fechas import hoy_lima
+from app.paginacion import Pagina, contar, pagina, recortar
+from app.models import (Alumno, AlumnoApoderado, AnioEscolar, Apoderado, CambioApoderado, ColaAviso, ConfigFamilias,
+                        ConsentimientoApoderado, EntregaAviso, Grado, InvitacionFamilia, Matricula, Nivel, Seccion,
+                        SuscripcionPush, Usuario)
 from app.validacion import sin_tildes
 
 router = APIRouter(prefix="/familias", tags=["familias"])
@@ -24,11 +28,12 @@ editar = requerir_permiso("familias", "editar")
 editar_reglas = requerir_permiso("configuracion", "editar")
 
 
-def _notificaciones(ap: Apoderado, dispositivos: int) -> str:
-    """activas: le llegan push. sin_permiso: entró a la app pero no aceptó notificaciones. sin_app: nunca entró."""
+def _notificaciones(ap: Apoderado, dispositivos: int, recibio_hoy: bool = False) -> str:
+    """activas: tiene un celular suscrito o hoy le llegó un aviso (la misma regla que la cifra "Reciben avisos" y
+    el filtro avisos=activas). sin_permiso: entró a la app pero no le llegan. sin_app: nunca entró."""
     if ap.cuenta_id is None:
         return "sin_app"
-    return "activas" if dispositivos else "sin_permiso"
+    return "activas" if dispositivos or recibio_hoy else "sin_permiso"
 
 
 def _invitacion(inv: InvitacionFamilia | None) -> dict | None:
@@ -38,47 +43,101 @@ def _invitacion(inv: InvitacionFamilia | None) -> dict | None:
             "vence_en": inv.vence_en.isoformat(), "intentos": inv.intentos, "motivo_anulacion": inv.motivo_anulacion}
 
 
+def _con_push():
+    return Apoderado.cuenta_id.in_(select(SuscripcionPush.cuenta_id).where(SuscripcionPush.cuenta_id.is_not(None)))
+
+
+def _recibe_avisos(cid: int):
+    """Regla única de "recibe avisos": cuenta con un celular suscrito, o que hoy le llegó alguno."""
+    return and_(Apoderado.cuenta_id.is_not(None), or_(_con_push(), familias.recibio_hoy(cid)))
+
+
+def _fallo_hoy(cid: int):
+    """Tuvo hoy al menos un aviso que no llegó."""
+    return Apoderado.id.in_(
+        select(EntregaAviso.apoderado_id)
+        .join(ColaAviso, and_(ColaAviso.colegio_id == EntregaAviso.colegio_id, ColaAviso.id == EntregaAviso.aviso_id))
+        .where(EntregaAviso.colegio_id == cid, EntregaAviso.estado == "error", ColaAviso.fecha == hoy_lima()))
+
+
+def resumen_familias(db: Session, cid: int) -> dict:
+    """Cifras de todo el colegio (no de la página ni del filtro), en una sola consulta."""
+    activo = Apoderado.estado_acceso == "activo"
+    fila = db.execute(select(
+        func.count(),
+        func.count().filter(activo),
+        func.count().filter(activo, _recibe_avisos(cid)),
+        func.count().filter(Apoderado.estado_acceso == "pendiente"),
+        func.count().filter(Apoderado.estado_acceso == "sin_cuenta"),
+        func.count().filter(Apoderado.estado_acceso == "bloqueado"),
+    ).where(Apoderado.colegio_id == cid)).one()
+    return dict(zip(("total", "activas", "avisos", "por_aprobar", "sin_cuenta", "bloqueadas"), fila))
+
+
 @router.get("/apoderados")
-def listar(q: str = "", estado: str | None = None, s: Sesion = Depends(ver), db: Session = Depends(get_db)) -> list[dict]:
+def listar(q: str = "", estado: Literal["sin_cuenta", "pendiente", "activo", "bloqueado"] | None = None,
+           avisos: Literal["activas", "sin_permiso", "sin_app", "error"] | None = None,
+           p: Pagina = Depends(pagina), s: Sesion = Depends(ver), db: Session = Depends(get_db)) -> dict:
     cid = s.colegio.id
     consulta = select(Apoderado).where(Apoderado.colegio_id == cid)
     if estado:
         consulta = consulta.where(Apoderado.estado_acceso == estado)
+    if avisos == "activas":
+        consulta = consulta.where(_recibe_avisos(cid))
+    elif avisos == "sin_permiso":
+        consulta = consulta.where(Apoderado.cuenta_id.is_not(None), ~or_(_con_push(), familias.recibio_hoy(cid)))
+    elif avisos == "sin_app":
+        consulta = consulta.where(Apoderado.cuenta_id.is_(None))
+    elif avisos == "error":
+        consulta = consulta.where(_fallo_hoy(cid))
     texto = sin_tildes(q.strip().lower())
     if texto:
         consulta = consulta.where(or_(
             func.translate(func.lower(Apoderado.apellidos + " " + Apoderado.nombres), "áéíóúüñ", "aeiouun")
-            .contains(texto), Apoderado.numero_documento.contains(texto.upper())))
-    aps = db.scalars(consulta.order_by(Apoderado.apellidos, Apoderado.nombres).limit(500)).all()
+            .contains(texto), Apoderado.numero_documento.contains(texto.upper()),
+            Apoderado.celular.contains(texto.replace(" ", ""))))
+    total = contar(db, consulta)
+    aps = db.scalars(recortar(consulta.order_by(Apoderado.apellidos, Apoderado.nombres, Apoderado.id), p)).all()
     ids = [a.id for a in aps]
-    hijos: dict[int, list[str]] = {}
-    for apo_id, nombres in db.execute(
-            select(AlumnoApoderado.apoderado_id, Alumno.nombres)
+    hijos: dict[int, list[dict]] = {}
+    anio = db.scalar(select(AnioEscolar.id).where(AnioEscolar.colegio_id == cid, AnioEscolar.activo))
+    for apo_id, nombres, sec, grado, nivel in db.execute(
+            select(AlumnoApoderado.apoderado_id, Alumno.nombres, Seccion.nombre, Grado.nombre, Nivel.nombre)
             .join(Alumno, and_(Alumno.colegio_id == AlumnoApoderado.colegio_id, Alumno.id == AlumnoApoderado.alumno_id))
-            .where(AlumnoApoderado.colegio_id == cid, AlumnoApoderado.apoderado_id.in_(ids), Alumno.activo)):
-        hijos.setdefault(apo_id, []).append(nombres)
+            .outerjoin(Matricula, and_(Matricula.colegio_id == Alumno.colegio_id, Matricula.alumno_id == Alumno.id,
+                                       Matricula.anio_id == anio))
+            .outerjoin(Seccion, and_(Seccion.colegio_id == Matricula.colegio_id, Seccion.id == Matricula.seccion_id))
+            .outerjoin(Grado, and_(Grado.colegio_id == Seccion.colegio_id, Grado.id == Seccion.grado_id))
+            .outerjoin(Nivel, and_(Nivel.colegio_id == Grado.colegio_id, Nivel.id == Grado.nivel_id))
+            .where(AlumnoApoderado.colegio_id == cid, AlumnoApoderado.apoderado_id.in_(ids), Alumno.activo)
+            .order_by(Alumno.nombres)):
+        hijos.setdefault(apo_id, []).append(
+            {"nombres": nombres, "seccion": f"{nivel} · {grado} {sec}" if sec else None})
     dispositivos = dict(db.execute(
         select(SuscripcionPush.cuenta_id, func.count()).where(
             SuscripcionPush.cuenta_id.in_({a.cuenta_id for a in aps if a.cuenta_id}))
-        .group_by(SuscripcionPush.cuenta_id)).all())
+        .group_by(SuscripcionPush.cuenta_id)).all()) if aps else {}
     ultima_inv = {}
     for inv in db.scalars(select(InvitacionFamilia).where(InvitacionFamilia.colegio_id == cid,
                                                           InvitacionFamilia.apoderado_id.in_(ids))
                           .order_by(InvitacionFamilia.creado_en)):
         ultima_inv[inv.apoderado_id] = inv
-    ultima_entrega = {}
-    for e in db.scalars(select(EntregaAviso).where(EntregaAviso.colegio_id == cid, EntregaAviso.apoderado_id.in_(ids))
-                        .order_by(EntregaAviso.creado_en)):
-        ultima_entrega[e.apoderado_id] = e
-    return [{
+    # Solo la última entrega de cada uno (DISTINCT ON), no todo su historial.
+    ultima_entrega = {e.apoderado_id: e for e in db.scalars(
+        select(EntregaAviso).where(EntregaAviso.colegio_id == cid, EntregaAviso.apoderado_id.in_(ids))
+        .order_by(EntregaAviso.apoderado_id, EntregaAviso.creado_en.desc())
+        .ext(postgresql.distinct_on(EntregaAviso.apoderado_id)))} if ids else {}
+    recibieron = set(db.scalars(select(Apoderado.id).where(
+        Apoderado.colegio_id == cid, Apoderado.id.in_(ids), familias.recibio_hoy(cid)))) if ids else set()
+    return {**p.datos(total), "resumen": resumen_familias(db, cid), "filas": [{
         "id": a.id, "nombre": f"{a.apellidos}, {a.nombres}", "nombres": a.nombres,
-        "documento": f"{a.tipo_documento} {a.numero_documento}", "celular": a.celular,
+        "tipo_documento": a.tipo_documento, "numero_documento": a.numero_documento, "celular": a.celular,
         "hijos": hijos.get(a.id, []), "estado": a.estado_acceso,
-        "notificaciones": _notificaciones(a, dispositivos.get(a.cuenta_id, 0)),
+        "notificaciones": _notificaciones(a, dispositivos.get(a.cuenta_id, 0), a.id in recibieron),
         "invitacion": _invitacion(ultima_inv.get(a.id)),
         "ultimo_aviso": ({"cuerpo": e.cuerpo, "estado": e.estado, "creado_en": e.creado_en.isoformat()}
                          if (e := ultima_entrega.get(a.id)) else None),
-    } for a in aps]
+    } for a in aps]}
 
 
 @router.get("/apoderados/{apoderado_id}")
@@ -101,10 +160,12 @@ def detalle(apoderado_id: int, s: Sesion = Depends(ver), db: Session = Depends(g
                          .order_by(CambioApoderado.creado_en.desc()).limit(50))
     dispositivos = db.scalar(select(func.count()).select_from(SuscripcionPush)
                              .where(SuscripcionPush.cuenta_id == a.cuenta_id)) if a.cuenta_id else 0
+    recibio = db.scalar(select(func.count()).where(Apoderado.colegio_id == cid, Apoderado.id == a.id,
+                                                   familias.recibio_hoy(cid))) > 0
     return {
         "id": a.id, "nombre": f"{a.apellidos}, {a.nombres}", "celular": a.celular, "estado": a.estado_acceso,
         "activado_en": a.activado_en.isoformat() if a.activado_en else None,
-        "notificaciones": _notificaciones(a, dispositivos), "dispositivos": dispositivos,
+        "notificaciones": _notificaciones(a, dispositivos, recibio), "dispositivos": dispositivos,
         "avisos": [{"creado_en": e.creado_en.isoformat(), "titulo": e.titulo, "cuerpo": e.cuerpo, "estado": e.estado,
                     "dispositivos": e.dispositivos} for e in entregas],
         "invitaciones": [_invitacion(i) | {"creado_por": nombres_personal.get(i.creado_por_id)} for i in invitaciones],

@@ -1,11 +1,13 @@
 // Inicio del director: cómo va el colegio hoy, en una pantalla. Cada bloque sale solo con su permiso.
 import {
-  Bell, ClipboardList, FileSpreadsheet, MessageCircle, Plus, QrCode, ScanLine, Search, Send, UserCheck,
+  Bell, BellOff, CircleCheck, ClipboardCheck, ClipboardList, FileSpreadsheet, MessageCircle, Plus, QrCode, ScanLine, Search,
+  Send, UserCheck,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api.js'
 import { hora12, LIMA, saludo } from '../tema.js'
+import { plural } from './comun/index.js'
 import './inicio.css'
 
 const TIPOS = { justificacion: 'Justificaciones', permiso_salida: 'Permisos de salida', citacion: 'Citaciones',
@@ -106,7 +108,7 @@ function IngresoDeHoy({ a }) {
       {!a.lectivo ? <p className="tenue">Hoy no es día de clases.</p> : (
         <div className="ingreso-cuerpo">
           <div className="anillo" style={{ '--pct': pct }} role="img"
-               aria-label={`Asistencia: ${a.porcentaje ?? 0} % (${a.hoy.presente + a.hoy.tarde} de ${a.alumnos} alumnos)`}>
+               aria-label={`Asistencia: ${a.porcentaje ?? 0} % (${a.hoy.presente + a.hoy.tarde} de ${plural(a.alumnos, 'alumno', 'alumnos')})`}>
             <div className="anillo-centro">
               <b>{a.porcentaje == null ? '—' : `${a.porcentaje}%`}</b>
               <span>asistencia</span>
@@ -114,7 +116,7 @@ function IngresoDeHoy({ a }) {
           </div>
           <div className="ingreso-datos">
             <p className="tenue ingreso-total">
-              Vinieron <b>{a.hoy.presente + a.hoy.tarde}</b> de {a.alumnos} alumnos
+              Vinieron <b>{a.hoy.presente + a.hoy.tarde}</b> de {plural(a.alumnos, 'alumno', 'alumnos')}
               {a.hoy.sin_registro > 0 && <> · {a.hoy.sin_registro} aún sin marcar</>}
             </p>
             <div className="cajas-estado">
@@ -147,7 +149,7 @@ function AvisosFamilias({ f, invitar }) {
         <p className="avisos-nota">Cuando activen la app en su celular, aquí verá cuántos avisos les llegan cada día.</p>
         <div className="avisos-sin-app">
           <p><b>{sinApp}</b> {sinApp === 1 ? 'apoderado sin la app' : 'apoderados sin la app'}
-            {f.pendientes > 0 && <> · {f.pendientes} esperan aprobación</>}</p>
+            {f.pendientes > 0 && <> · {plural(f.pendientes, 'espera', 'esperan')} aprobación</>}</p>
           {boton}
         </div>
       </section>
@@ -167,13 +169,13 @@ function AvisosFamilias({ f, invitar }) {
       </dl>
       {(av.sin_notificaciones > 0 || av.error > 0) && (
         <ul className="avisos-detalle">
-          {av.sin_notificaciones > 0 && <li>{av.sin_notificaciones} no llegaron: el apoderado no tiene las notificaciones activas</li>}
-          {av.error > 0 && <li className="avisos-error">{av.error} fallaron</li>}
+          {av.sin_notificaciones > 0 && <li>{av.sin_notificaciones === 1 ? '1 no llegó' : `${av.sin_notificaciones} no llegaron`}: el apoderado no tiene las notificaciones activas</li>}
+          {av.error > 0 && <li className="avisos-error">{av.error === 1 ? '1 falló' : `${av.error} fallaron`}</li>}
         </ul>
       )}
       <div className="avisos-sin-app">
         <p>{f.con_notificaciones} {f.con_notificaciones === 1 ? 'apoderado recibe' : 'apoderados reciben'} los avisos
-          {f.pendientes > 0 && <> · {f.pendientes} esperan aprobación</>}</p>
+          {f.pendientes > 0 && <> · {plural(f.pendientes, 'espera', 'esperan')} aprobación</>}</p>
         {boton}
       </div>
     </section>
@@ -231,7 +233,7 @@ function Llegadas({ ll }) {
             </div>
           </div>
           <table className="solo-lectores">
-            <caption>Llegadas por tramo de {ll.tramo_minutos} minutos</caption>
+            <caption>Llegadas por tramo de {plural(ll.tramo_minutos, 'minuto', 'minutos')}</caption>
             <thead><tr><th>Tramo</th><th>A tiempo</th><th>Después de la tolerancia</th></tr></thead>
             <tbody>{tramos.map((t) => <tr key={t.inicio}><td>{hora12(t.inicio)}</td><td>{t.a_tiempo}</td><td>{t.tarde}</td></tr>)}</tbody>
           </table>
@@ -250,7 +252,7 @@ function MasFaltas({ secciones }) {
         <ol className="lista-faltas">
           {secciones.map((s) => (
             <li key={s.id}>
-              <span className="lista-faltas-nombre">{s.nombre}</span>
+              <span className="lista-faltas-nombre" title={s.nombre}>{s.nombre}</span>
               <span className="barra-falta" aria-hidden="true"><span style={{ width: `${100 * s.faltas / max}%` }} /></span>
               <b>{s.faltas}</b>
             </li>
@@ -374,7 +376,7 @@ function Buscador() {
   useEffect(() => {
     if (q.trim().length < 2) { setRes(null); return undefined }
     const t = setTimeout(() => {
-      api(`/api/padron/alumnos?q=${encodeURIComponent(q.trim())}&limite=6`).then(setRes).catch(() => setRes(null))
+      api(`/api/padron/alumnos?q=${encodeURIComponent(q.trim())}&por_pagina=6`).then(setRes).catch(() => setRes(null))
     }, 250)
     return () => clearTimeout(t)
   }, [q])
@@ -382,7 +384,7 @@ function Buscador() {
 
   const ir = (a) => navegar(`/panel/padron?alumno=${a.id}`)
   return (
-    <div className="buscador" ref={caja} role="search">
+    <div className="buscador-inicio" ref={caja} role="search">
       <Search size={18} className="buscador-icono" aria-hidden="true" />
       <input type="search" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Buscar alumno por nombre o DNI"
              placeholder="Alumno: nombre o DNI" aria-controls="resultados-alumno" aria-expanded={Boolean(res)}
@@ -404,29 +406,57 @@ function Buscador() {
   )
 }
 
+// Pendientes del colegio: cada uno lleva a su página ya filtrada.
 function Campana({ d }) {
   const [abierta, setAbierta] = useState(false)
   const caja = useRef(null)
   useCerrarFuera(caja, () => setAbierta(false))
   const c = d.cuaderno, f = d.familias
   const porAprobar = c ? Object.values(c.por_aprobar).reduce((x, y) => x + y, 0) : 0
+  const respuestas = c?.sin_responder || 0
+  const apoderados = f?.pendientes || 0
+  const fallidos = f?.avisos_hoy.error || 0
   const items = [
-    porAprobar > 0 && ['/panel/cuaderno', `${porAprobar} pendientes de aprobar en el cuaderno`],
-    c?.sin_responder > 0 && ['/panel/cuaderno', `${c.sin_responder} respuestas de familias`],
-    f?.pendientes > 0 && ['/panel/familias', `${f.pendientes} apoderados esperan aprobación`],
-    f?.avisos_hoy.error > 0 && ['/panel/familias', `${f.avisos_hoy.error} avisos fallaron hoy`],
+    porAprobar > 0 && { n: porAprobar, a: '/panel/cuaderno?pendientes=1', icono: ClipboardCheck, tono: 'tarde',
+      titulo: `${porAprobar.toLocaleString('es-PE')} por aprobar en el cuaderno`, texto: 'Comunicados e incidencias de docentes' },
+    respuestas > 0 && { n: respuestas, a: '/panel/cuaderno?pendientes=1', icono: MessageCircle, tono: 'info',
+      titulo: plural(respuestas, 'respuesta de una familia', 'respuestas de familias'), texto: 'Esperan respuesta del colegio' },
+    apoderados > 0 && { n: apoderados, a: '/panel/familias?estado=pendiente', icono: UserCheck, tono: 'tarde',
+      titulo: `${plural(apoderados, 'apoderado espera', 'apoderados esperan')} aprobación`, texto: 'Revisa sus datos en Cuentas de padres' },
+    fallidos > 0 && { n: fallidos, a: '/panel/familias?avisos=error', icono: BellOff, tono: 'falta',
+      titulo: fallidos === 1 ? '1 aviso no llegó hoy' : `${plural(fallidos, 'aviso', 'avisos')} no llegaron hoy`,
+      texto: 'Revisa los celulares en Cuentas de padres' },
   ].filter(Boolean)
+  const total = items.reduce((x, i) => x + i.n, 0)
   return (
     <div className="campana" ref={caja}>
-      <button type="button" className="boton-icono" aria-label={`Avisos: ${items.length} pendientes`} aria-expanded={abierta}
-              onClick={() => setAbierta(!abierta)}>
+      <button type="button" className="boton-icono" aria-expanded={abierta} aria-controls="campana-lista"
+              aria-label={total ? `Pendientes: ${total}` : 'Pendientes: ninguno'} onClick={() => setAbierta(!abierta)}>
         <Bell size={20} aria-hidden="true" />
-        {items.length > 0 && <span className="campana-punto" aria-hidden="true">{items.length}</span>}
+        {total > 0 && <span className="campana-punto" aria-hidden="true">{total > 9 ? '9+' : total}</span>}
       </button>
       {abierta && (
-        <div className="campana-lista" role="dialog" aria-label="Pendientes">
-          {items.length === 0 ? <p className="tenue">No hay pendientes.</p> : (
-            <ul>{items.map(([a, t]) => <li key={t}><Link to={a}>{t}</Link></li>)}</ul>
+        <div id="campana-lista" className="campana-lista" role="dialog" aria-label="Pendientes">
+          <div className="campana-cabeza">
+            <h2>Pendientes</h2>
+            {total > 0 && <span className="campana-total">{total.toLocaleString('es-PE')}</span>}
+          </div>
+          {items.length === 0 ? (
+            <p className="campana-vacia"><CircleCheck size={22} aria-hidden="true" /> Todo al día</p>
+          ) : (
+            <ul>
+              {items.map((i) => {
+                const Icono = i.icono
+                return (
+                  <li key={i.titulo}>
+                    <Link to={i.a} onClick={() => setAbierta(false)}>
+                      <span className={`campana-icono ${i.tono}`}><Icono size={18} aria-hidden="true" /></span>
+                      <span className="campana-texto"><b>{i.titulo}</b><small>{i.texto}</small></span>
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
           )}
         </div>
       )}

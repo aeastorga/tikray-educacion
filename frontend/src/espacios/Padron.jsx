@@ -1,7 +1,11 @@
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, CalendarX2, FileSpreadsheet, Layers, UserPlus, Users } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
-import { NavLink, Route, Routes } from 'react-router-dom'
+import { NavLink, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, descargar, guardarArchivo } from '../api.js'
+import {
+  Buscador, documento, Encabezado, Filtros, Insignia, MenuAcciones, Paginacion, Persona, plural, Selector, Tabla,
+  usePaginado,
+} from './comun/index.js'
 
 const DIAS = [['1', 'Lu'], ['2', 'Ma'], ['3', 'Mi'], ['4', 'Ju'], ['5', 'Vi'], ['6', 'Sá'], ['7', 'Do']]
 const TIPOS_DOC = ['DNI', 'CE', 'PAS', 'OTRO']
@@ -88,23 +92,20 @@ function Anios({ editar, alCambiar }) {
 
   return (
     <>
-      <h2>Año escolar</h2>
-      <table>
-        <thead><tr><th>Año</th><th>Inicio</th><th>Fin</th><th>Días de clase</th><th>Estado</th>{editar && <th />}</tr></thead>
-        <tbody>
-          {(anios || []).map((a) => (
-            <tr key={a.id}>
-              <td>{a.anio}</td><td>{fecha(a.inicio)}</td><td>{fecha(a.fin)}</td>
-              <td>{DIAS.filter(([k]) => a.dias_semana.includes(k)).map(([, v]) => v).join(' ')}</td>
-              <td>{a.activo ? <b>Activo</b> : 'Inactivo'}</td>
-              {editar && <td>
-                <button className="enlace" onClick={() => setForm(a)}>Editar</button>
-                {!a.activo && <button className="enlace" onClick={() => api(`/api/padron/anios/${a.id}/activar`, { metodo: 'POST' }).then(cargar)}>Activar</button>}
-              </td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Encabezado titulo="Año escolar" descripcion="Fechas y días de clase. Solo un año está activo a la vez." />
+      <Tabla etiqueta="Años escolares" cargando={!anios && !error} filas={anios || []}
+             vacio={{ icono: CalendarX2, titulo: 'Todavía no hay años escolares', texto: editar ? 'Crea el primero con el formulario de abajo.' : null }}
+             columnas={[
+               { id: 'anio', titulo: 'Año', celda: (a) => a.anio },
+               { id: 'inicio', titulo: 'Inicio', nowrap: true, celda: (a) => fecha(a.inicio) },
+               { id: 'fin', titulo: 'Fin', nowrap: true, celda: (a) => fecha(a.fin) },
+               { id: 'dias', titulo: 'Días de clase', celda: (a) => DIAS.filter(([k]) => a.dias_semana.includes(k)).map(([, v]) => v).join(' ') },
+               { id: 'estado', titulo: 'Estado', celda: (a) => <Insignia tono={a.activo ? 'bien' : 'neutro'}>{a.activo ? 'Activo' : 'Inactivo'}</Insignia> },
+               editar && { id: 'acciones', acciones: true, celda: (a) => (
+                 <MenuAcciones etiqueta={`Año ${a.anio}`} principal={{ texto: 'Editar', alHacer: () => setForm(a) }}
+                               opciones={a.activo ? [] : [{ texto: 'Activar', alHacer: () => api(`/api/padron/anios/${a.id}/activar`, { metodo: 'POST' }).then(cargar) }]} />
+               ) },
+             ].filter(Boolean)} />
       {editar && (
         <form className="fila-form" onSubmit={enviar}>
           <label>Año<input type="number" value={form.anio} onChange={(e) => setForm({ ...form, anio: Number(e.target.value) })} required /></label>
@@ -142,7 +143,7 @@ function Estructura({ editar }) {
   if (!est) return <MensajeError texto={error} />
   return (
     <>
-      <h2>Niveles y grados</h2>
+      <Encabezado titulo="Niveles y grados" descripcion="Cada sección pertenece a un grado de un nivel." />
       {est.niveles.map((n) => (
         <div key={n.id} className="bloque">
           <b>{n.nombre}</b>{' '}
@@ -179,18 +180,19 @@ function Estructura({ editar }) {
         </>
       )}
 
-      <h2>Turnos</h2>
-      <table>
-        <thead><tr><th>Turno</th><th>Entrada</th><th>Tolerancia</th><th>Salida</th>{editar && <th />}</tr></thead>
-        <tbody>
-          {est.turnos.map((t) => (
-            <tr key={t.id}>
-              <td>{t.nombre}</td><td>{t.hora_entrada}</td><td>{t.tolerancia_minutos} min</td><td>{t.hora_salida}</td>
-              {editar && <td><button className="enlace" onClick={accion(() => api(`/api/padron/turnos/${t.id}`, { metodo: 'DELETE' }))}>Borrar</button></td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Encabezado titulo="Turnos" descripcion="La tardanza se cuenta desde la hora de entrada más la tolerancia." />
+      <Tabla etiqueta="Turnos" filas={est.turnos}
+             vacio={{ icono: CalendarX2, titulo: 'Sin turnos', texto: editar ? 'Agrega el primero con el formulario de abajo.' : null }}
+             columnas={[
+               { id: 'turno', titulo: 'Turno', celda: (t) => t.nombre },
+               { id: 'entrada', titulo: 'Entrada', numero: true, alinear: 'derecha', celda: (t) => t.hora_entrada },
+               { id: 'tolerancia', titulo: 'Tolerancia', numero: true, alinear: 'derecha', celda: (t) => `${t.tolerancia_minutos} min` },
+               { id: 'salida', titulo: 'Salida', numero: true, alinear: 'derecha', celda: (t) => t.hora_salida },
+               editar && { id: 'acciones', acciones: true, celda: (t) => (
+                 <MenuAcciones etiqueta={`Turno ${t.nombre}`}
+                               opciones={[{ texto: 'Borrar', peligro: true, alHacer: accion(() => api(`/api/padron/turnos/${t.id}`, { metodo: 'DELETE' })) }]} />
+               ) },
+             ].filter(Boolean)} />
       {editar && (
         <form className="fila-form" onSubmit={accion(async () => {
           await api('/api/padron/turnos', { metodo: 'POST', datos: { ...turno, tolerancia_minutos: Number(turno.tolerancia_minutos) } })
@@ -236,21 +238,19 @@ function Secciones({ editar }) {
 
   return (
     <>
-      <h2>Secciones del año</h2>
-      <table>
-        <thead><tr><th>Sección</th><th>Turno</th><th>Alumnos</th><th /></tr></thead>
-        <tbody>
-          {(secciones || []).map((s) => (
-            <tr key={s.id}>
-              <td>{s.etiqueta}</td><td>{s.turno}</td><td>{s.alumnos}</td>
-              <td>
-                {s.alumnos > 0 && <button className="enlace" onClick={() => carnets(s)}>Carnets PDF</button>}
-                {editar && <button className="enlace" onClick={() => borrar(s)}>Borrar</button>}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Encabezado titulo="Secciones del año" descripcion="Cada sección con su turno. Desde aquí se imprimen los carnets QR." />
+      <Tabla etiqueta="Secciones" cargando={!secciones && !error} filas={secciones || []}
+             vacio={{ icono: Layers, titulo: 'Todavía no hay secciones', texto: editar ? 'Agrega la primera con el formulario de abajo.' : null }}
+             columnas={[
+               { id: 'seccion', titulo: 'Sección', celda: (s) => s.etiqueta },
+               { id: 'turno', titulo: 'Turno', celda: (s) => s.turno },
+               { id: 'alumnos', titulo: 'Alumnos', numero: true, alinear: 'derecha', celda: (s) => s.alumnos },
+               { id: 'acciones', acciones: true, celda: (s) => (
+                 <MenuAcciones etiqueta={s.etiqueta}
+                               principal={s.alumnos > 0 ? { texto: 'Carnets PDF', alHacer: () => carnets(s) } : null}
+                               opciones={editar ? [{ texto: 'Borrar', peligro: true, alHacer: () => borrar(s) }] : []} />
+               ) },
+             ]} />
       {editar && est && (
         <form className="fila-form" onSubmit={crear}>
           <select value={form.grado_id} onChange={(e) => setForm({ ...form, grado_id: e.target.value })} required>
@@ -286,7 +286,7 @@ function Calendario({ editar }) {
     setError(null)
     try {
       const r = await api('/api/padron/dias-no-lectivos', { metodo: 'POST', datos: { ...form, hasta: form.hasta || null } })
-      setAviso(`${r.agregados} día(s) agregados`)
+      setAviso(r.agregados === 1 ? '1 día agregado' : `${plural(r.agregados, 'día', 'días')} agregados`)
       setForm({ desde: '', hasta: '', motivo: '' })
       cargar()
     } catch (err) { setError(err.message) }
@@ -294,8 +294,7 @@ function Calendario({ editar }) {
 
   return (
     <>
-      <h2>Días no lectivos</h2>
-      <p className="tenue">Feriados, vacaciones y días sin clase. Las faltas automáticas no se marcan en estos días.</p>
+      <Encabezado titulo="Días no lectivos" descripcion="Feriados, vacaciones y días sin clase. Las faltas automáticas no se marcan en estos días." />
       {editar && (
         <form className="fila-form" onSubmit={agregar}>
           <label>Desde<input type="date" value={form.desde} onChange={(e) => setForm({ ...form, desde: e.target.value })} required /></label>
@@ -306,67 +305,78 @@ function Calendario({ editar }) {
       )}
       {aviso && <p className="tenue">{aviso}</p>}
       <MensajeError texto={error} />
-      <ul className="lista">
-        {(dias || []).map((d) => (
-          <li key={d.id}>{fecha(d.fecha, true)} · {d.motivo}
-            {editar && <button className="enlace" onClick={() => api(`/api/padron/dias-no-lectivos/${d.id}`, { metodo: 'DELETE' }).then(cargar)}>Quitar</button>}
-          </li>
-        ))}
-      </ul>
+      <Tabla etiqueta="Días no lectivos" cargando={!dias && !error} filas={dias || []}
+             vacio={{ icono: CalendarX2, titulo: 'Sin días no lectivos', texto: 'Todos los días de clase del año cuentan para la asistencia.' }}
+             columnas={[
+               { id: 'fecha', titulo: 'Fecha', nowrap: true, ancho: '220px', celda: (d) => fecha(d.fecha, true) },
+               { id: 'motivo', titulo: 'Motivo', celda: (d) => d.motivo },
+               editar && { id: 'acciones', acciones: true, celda: (d) => (
+                 <MenuAcciones etiqueta={fecha(d.fecha, true)}
+                               opciones={[{ texto: 'Quitar', peligro: true, alHacer: () => api(`/api/padron/dias-no-lectivos/${d.id}`, { metodo: 'DELETE' }).then(cargar) }]} />
+               ) },
+             ].filter(Boolean)} />
     </>
   )
 }
 
 // --- Alumnos --------------------------------------------------------------------
 
+const ESTADO_ALUMNO = { activo: ['bien', 'Matriculado'], sin_matricula: ['neutro', 'Sin matrícula'], retirado: ['falta', 'Retirado'] }
+const estadoAlumno = (a) => (!a.activo ? 'retirado' : a.seccion ? 'activo' : 'sin_matricula')
+
 function Alumnos({ editar }) {
   const [secciones] = useCarga('/api/padron/secciones')
-  const [filtro, setFiltro] = useState({ q: '', seccion_id: '' })
-  const [datos, setDatos] = useState(null)
+  const [params, setParams] = useSearchParams()
+  const navegar = useNavigate()
+  const filtro = { q: params.get('q') || '', seccion_id: params.get('seccion') || '', estado: params.get('estado') || '' }
+  const poner = (k, v) => {
+    const p = new URLSearchParams(params)
+    if (v) p.set(k, v); else p.delete(k)
+    setParams(p, { replace: true })
+  }
   // Desde el buscador del inicio: /panel/padron?alumno=<id> abre su ficha.
-  const [abierto, setAbierto] = useState(() => Number(new URLSearchParams(window.location.search).get('alumno')) || null)
+  const [abierto, setAbierto] = useState(() => Number(params.get('alumno')) || null)
   const [nuevo, setNuevo] = useState(false)
-  const [error, setError] = useState(null)
+  const { datos, error, cargando, recargar, paginacion } = usePaginado('/api/padron/alumnos', filtro)
 
-  const cargar = useCallback(() => {
-    const p = new URLSearchParams()
-    if (filtro.q) p.set('q', filtro.q)
-    if (filtro.seccion_id) p.set('seccion_id', filtro.seccion_id)
-    api(`/api/padron/alumnos?${p}`).then(setDatos).catch((e) => setError(e.message))
-  }, [filtro])
-  useEffect(() => { const t = setTimeout(cargar, 250); return () => clearTimeout(t) }, [cargar])
+  if (abierto) return <FichaAlumno id={abierto} editar={editar} secciones={secciones || []} cerrar={() => { setAbierto(null); recargar() }} />
+  if (nuevo) return <FormAlumno secciones={secciones || []} cerrar={(id) => { setNuevo(false); if (id) setAbierto(id); else recargar() }} />
 
-  if (abierto) return <FichaAlumno id={abierto} editar={editar} secciones={secciones || []} cerrar={() => { setAbierto(null); cargar() }} />
-  if (nuevo) return <FormAlumno secciones={secciones || []} cerrar={(id) => { setNuevo(false); if (id) setAbierto(id); else cargar() }} />
-
+  const filtrado = filtro.q || filtro.seccion_id || filtro.estado
   return (
     <>
-      <div className="fila-form">
-        <input placeholder="Buscar por nombre o documento" value={filtro.q} onChange={(e) => setFiltro({ ...filtro, q: e.target.value })} />
-        <select value={filtro.seccion_id} onChange={(e) => setFiltro({ ...filtro, seccion_id: e.target.value })}>
-          <option value="">Todas las secciones</option>
-          {(secciones || []).map((s) => <option key={s.id} value={s.id}>{s.etiqueta}</option>)}
-        </select>
-        {editar && <button className="boton" onClick={() => setNuevo(true)}>Nuevo alumno</button>}
-      </div>
+      <Encabezado titulo="Alumnos" descripcion="Padrón del año activo: matrícula, documento y apoderados de cada alumno."
+                  acciones={editar && (
+                    <>
+                      <button className="boton secundario" onClick={() => navegar('/panel/padron/importar')}>
+                        <FileSpreadsheet size={18} aria-hidden="true" /> Cargar Excel
+                      </button>
+                      <button className="boton" onClick={() => setNuevo(true)}><UserPlus size={18} aria-hidden="true" /> Nuevo alumno</button>
+                    </>
+                  )} />
+      <Filtros total={datos && plural(datos.total, 'alumno', 'alumnos')}>
+        <Buscador valor={filtro.q} cambiar={(v) => poner('q', v)} placeholder="Buscar por nombre o documento" />
+        <Selector etiqueta="Sección" valor={filtro.seccion_id} cambiar={(v) => poner('seccion', v)}
+                  opciones={[['', 'Todas las secciones'], ...(secciones || []).map((s) => [String(s.id), s.etiqueta])]} />
+        <Selector etiqueta="Estado" valor={filtro.estado} cambiar={(v) => poner('estado', v)}
+                  opciones={[['', 'Todos los estados'], ['activo', 'Activos'], ['sin_matricula', 'Sin matrícula'], ['retirado', 'Retirados']]} />
+      </Filtros>
       <MensajeError texto={error} />
-      {datos && (
-        <>
-          <p className="tenue">{datos.total} alumno(s){datos.total > datos.alumnos.length && `, se muestran ${datos.alumnos.length}`}</p>
-          <table>
-            <thead><tr><th>Alumno</th><th>Documento</th><th>Sección</th></tr></thead>
-            <tbody>
-              {datos.alumnos.map((a) => (
-                <tr key={a.id} className="clic" onClick={() => setAbierto(a.id)}>
-                  <td>{a.apellidos}, {a.nombres}{!a.activo && <span className="tenue"> (retirado)</span>}</td>
-                  <td>{a.tipo_documento} {a.numero_documento}</td>
-                  <td>{a.seccion || <span className="tenue">Sin matrícula</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
+      <Tabla etiqueta="Alumnos" cargando={cargando} filas={datos?.alumnos} alFila={(a) => setAbierto(a.id)}
+             vacio={filtrado
+               ? { icono: Users, titulo: 'Ningún alumno coincide', texto: 'Prueba con otro nombre, sección o estado.' }
+               : { icono: Users, titulo: 'Todavía no hay alumnos', texto: 'Agrégalos uno por uno o cárgalos desde Excel.' }}
+             columnas={[
+               { id: 'alumno', titulo: 'Alumno', ancho: '34%', celda: (a) => <Persona nombre={`${a.apellidos}, ${a.nombres}`} detalle={`Código ${a.codigo}`} /> },
+               { id: 'documento', titulo: 'Documento', nowrap: true, celda: (a) => documento(a.tipo_documento, a.numero_documento) },
+               { id: 'seccion', titulo: 'Sección', vacio: (a) => !a.seccion, celda: (a) => a.seccion || <span className="tenue">—</span> },
+               { id: 'apoderados', titulo: 'Apoderados', numero: true, alinear: 'derecha', celda: (a) => a.apoderados },
+               { id: 'estado', titulo: 'Estado', celda: (a) => {
+                 const [tono, texto] = ESTADO_ALUMNO[estadoAlumno(a)]
+                 return <Insignia tono={tono}>{texto}</Insignia>
+               } },
+             ]} />
+      {paginacion && paginacion.total > 0 && <Paginacion {...paginacion} />}
     </>
   )
 }
@@ -550,7 +560,7 @@ function Importar() {
 
   return (
     <>
-      <h2>Carga masiva desde Excel</h2>
+      <Encabezado titulo="Carga masiva desde Excel" descripcion="Alumnos con sus apoderados y personal, en un solo archivo." />
       <ol className="pasos">
         <li>Descarga la plantilla. Trae las hojas Alumnos y Personal, y como referencia las secciones y roles que ya existen.
           <br /><button className="enlace" onClick={() => descargar('/api/padron/importacion/plantilla', 'plantilla-padron.xlsx').catch((e) => setError(e.message))}>Descargar plantilla</button>
@@ -569,15 +579,15 @@ function Importar() {
           <Resumen resumen={informe.resumen} />
           {informe.total_errores > 0 ? (
             <>
-              <p className="error">{informe.total_errores} error(es). Corrígelos en el Excel y vuelve a subirlo.</p>
-              <table>
-                <thead><tr><th>Hoja</th><th>Fila</th><th>Columna</th><th>Problema</th></tr></thead>
-                <tbody>
-                  {informe.errores.map((e, i) => (
-                    <tr key={i}><td>{e.hoja}</td><td>{e.fila ?? ''}</td><td>{e.columna ?? ''}</td><td>{e.mensaje}</td></tr>
-                  ))}
-                </tbody>
-              </table>
+              <p className="error">{informe.total_errores === 1 ? 'Hay 1 error' : `Hay ${plural(informe.total_errores, 'error', 'errores')}`}. Corrígelos en el Excel y vuelve a subirlo.</p>
+              <Tabla etiqueta="Errores del Excel" filas={informe.errores.map((e, i) => ({ ...e, id: i }))}
+                     columnas={[
+                       { id: 'problema', titulo: 'Problema', claseCelda: () => 'error-celda', celda: (e) => e.mensaje },
+                       { id: 'hoja', titulo: 'Hoja', celda: (e) => e.hoja },
+                       { id: 'fila', titulo: 'Fila', numero: true, alinear: 'derecha', vacio: (e) => e.fila == null, celda: (e) => e.fila ?? '—' },
+                       { id: 'columna', titulo: 'Columna', vacio: (e) => !e.columna, celda: (e) => e.columna || <span className="tenue">—</span> },
+                       { id: 'estado', titulo: 'Estado', celda: () => <Insignia tono="falta">Error</Insignia> },
+                     ]} />
               {informe.total_errores > informe.errores.length && <p className="tenue">Se muestran los primeros {informe.errores.length}.</p>}
             </>
           ) : (
@@ -594,7 +604,7 @@ function Importar() {
           <b>Padrón guardado.</b>
           <Resumen resumen={hecho.resumen} />
           {hecho.cartas_pdf && (
-            <p>Se descargó <b>accesos-personal.pdf</b> con el usuario y la clave temporal de las {hecho.personal_nuevo} persona(s) nuevas.
+            <p>Se descargó <b>accesos-personal.pdf</b> con el usuario y la clave temporal {hecho.personal_nuevo === 1 ? 'de la persona nueva' : `de las ${plural(hecho.personal_nuevo, 'persona', 'personas')} nuevas`}.
               Es la única copia: imprímelo y entrégalo en mano.{' '}
               <button className="enlace" onClick={() => descargarCartas(hecho.cartas_pdf)}>Descargar otra vez</button></p>
           )}

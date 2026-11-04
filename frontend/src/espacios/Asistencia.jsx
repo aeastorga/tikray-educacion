@@ -3,9 +3,12 @@ import { NavLink, Route, Routes } from 'react-router-dom'
 import { api, descargar } from '../api.js'
 import Porteria from '../porteria/Porteria.jsx'
 import { fechaLima } from '../porteria/reglas.js'
+import { CalendarOff, Users } from 'lucide-react'
+import { Cifras, Encabezado, Insignia, MenuAcciones, Paginacion, Persona, plural, Tabla, usePaginaLocal } from './comun/index.js'
 import './asistencia.css'
 
-const ESTADOS = { presente: 'Presente', tarde: 'Tarde', falta: 'Falta', justificada: 'Falta justificada', licencia: 'Licencia' }
+const ESTADOS = { presente: 'A tiempo', tarde: 'Tarde', falta: 'Falta', justificada: 'Justificada', licencia: 'Licencia' }
+const TONOS = { presente: 'bien', tarde: 'tarde', falta: 'falta', justificada: 'info', licencia: 'info' }
 const TIPOS_LICENCIA = { salud: 'Salud', personal: 'Personal', vacaciones: 'Vacaciones', comision: 'Comisión de servicio', maternidad: 'Maternidad / paternidad', otro: 'Otro' }
 
 export default function Asistencia({ yo, marcar, licencias, reglas }) {
@@ -39,12 +42,19 @@ function useDia(ruta) {
   return [datos, error, cargar]
 }
 
-function Estado({ valor }) {
-  return valor ? <span className={`estado ${valor}`}>{ESTADOS[valor]}</span> : <span className="tenue">Sin registro</span>
+function Estado({ valor, minutos }) {
+  if (!valor) return <Insignia tono="neutro">Sin marcar</Insignia>
+  return <Insignia tono={TONOS[valor]}>{ESTADOS[valor]}{minutos > 0 ? ` · ${minutos} min` : ''}</Insignia>
 }
 
+const numero = (id, titulo, campo = id) => ({ id, titulo, numero: true, alinear: 'derecha', celda: (s) => s[campo] })
+
 function Tardia({ si }) {
-  return si ? <span className="marca-tardia" title="Recibida más de 10 minutos después de su hora"> · registrada después</span> : null
+  return si ? <span className="segunda-linea marca-tardia" title="Recibida más de 10 minutos después de su hora">registrada después</span> : null
+}
+
+function Hora({ valor, tardia }) {
+  return <>{valor ? <span className="nowrap">{valor}</span> : <span className="tenue">—</span>}<Tardia si={tardia} /></>
 }
 
 function Mensual({ ruta, nombre }) {
@@ -71,49 +81,51 @@ function Alumnos() {
   const [seccion, setSeccion] = useState(null)
   const [dia, error] = useDia(`/api/asistencia/dia?fecha=${fecha}`)
   const [detalle] = useDia(seccion ? `/api/asistencia/dia?fecha=${fecha}&seccion_id=${seccion.id}` : null)
+  const secciones = usePaginaLocal(dia?.secciones)
+  const alumnos = usePaginaLocal(detalle?.alumnos)
 
   return (
     <>
-      <div className="fila-form sin-margen">
-        <label>Día<input type="date" value={fecha} onChange={(e) => { setFecha(e.target.value); setSeccion(null) }} /></label>
-        {dia && !dia.lectivo && <span className="aviso-chico">Día no lectivo</span>}
-      </div>
+      <Encabezado titulo="Asistencia de alumnos" descripcion="Toca una sección para ver a cada alumno. Los días no lectivos no tienen faltas."
+                  acciones={(
+                    <>
+                      {dia && !dia.lectivo && <Insignia tono="info">Día no lectivo</Insignia>}
+                      <label className="en-linea">Día<input type="date" value={fecha} onChange={(e) => { setFecha(e.target.value); setSeccion(null) }} /></label>
+                    </>
+                  )} />
       {error && <p className="error">{error}</p>}
       {dia && (
-        <>
-          <div className="totales">
-            {['presente', 'tarde', 'falta', 'justificada', 'sin_registro'].map((k) => (
-              <div key={k} className={`total ${k}`}><b>{dia.totales[k]}</b><span>{ESTADOS[k] || 'Sin registro'}</span></div>
-            ))}
-          </div>
-          <table>
-            <thead><tr><th>Sección</th><th>Alumnos</th><th>Presentes</th><th>Tarde</th><th>Faltas</th><th>Justificadas</th><th>Sin registro</th></tr></thead>
-            <tbody>
-              {dia.secciones.map((s) => (
-                <tr key={s.id} className="clic" onClick={() => setSeccion(s)}>
-                  <td>{s.nombre}</td><td>{s.total}</td><td>{s.presente}</td><td>{s.tarde}</td><td>{s.falta}</td><td>{s.justificada}</td><td>{s.sin_registro}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
+        <Cifras items={[
+          { etiqueta: 'A tiempo', valor: dia.totales.presente, tono: 'bien' },
+          { etiqueta: 'Tarde', valor: dia.totales.tarde, tono: 'tarde' },
+          { etiqueta: 'Falta', valor: dia.totales.falta, tono: 'falta' },
+          { etiqueta: 'Justificada', valor: dia.totales.justificada },
+          { etiqueta: 'Sin marcar', valor: dia.totales.sin_registro },
+        ]} />
       )}
+      <Tabla etiqueta="Asistencia por sección" cargando={!dia && !error} filas={secciones.filas} alFila={setSeccion}
+             claseFila={(s) => (s.id === seccion?.id ? 'seleccionada' : '')}
+             vacio={{ icono: Users, titulo: 'Sin secciones', texto: 'Crea las secciones del año en Padrón.' }}
+             columnas={[
+               { id: 'seccion', titulo: 'Sección', celda: (s) => s.nombre },
+               numero('total', 'Alumnos'), numero('presente', 'A tiempo'), numero('tarde', 'Tarde'), numero('falta', 'Faltas'),
+               { ...numero('justificada', 'Justificadas'), ocultarEnCelular: true }, numero('sin_registro', 'Sin marcar'),
+             ]} />
+      {secciones.paginacion && <Paginacion {...secciones.paginacion} />}
       {seccion && detalle?.alumnos && (
-        <>
-          <h3>{seccion.nombre} <button className="enlace" onClick={() => setSeccion(null)}>Cerrar</button></h3>
-          <table>
-            <thead><tr><th>Alumno</th><th>Estado</th><th>Entrada</th><th>Salida</th></tr></thead>
-            <tbody>
-              {detalle.alumnos.map((a) => (
-                <tr key={a.alumno_id}>
-                  <td>{a.nombre}</td>
-                  <td><Estado valor={a.estado} />{a.minutos_tarde > 0 && <span className="tenue"> {a.minutos_tarde} min</span>}</td>
-                  <td>{a.entrada || '—'}<Tardia si={a.registrada_despues} /></td><td>{a.salida || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
+        <section className="detalle-seccion">
+          <Encabezado nivel={3} titulo={seccion.nombre} descripcion={plural(detalle.alumnos.length, 'alumno', 'alumnos')}
+                      acciones={<button className="boton secundario chico" onClick={() => setSeccion(null)}>Cerrar</button>} />
+          <Tabla etiqueta={`Alumnos de ${seccion.nombre}`} filas={alumnos.filas} clave={(a) => a.alumno_id}
+                 vacio={{ icono: Users, titulo: 'Sección sin alumnos' }}
+                 columnas={[
+                   { id: 'alumno', titulo: 'Alumno', celda: (a) => <Persona nombre={a.nombre} /> },
+                   { id: 'estado', titulo: 'Estado', nowrap: true, celda: (a) => <Estado valor={a.estado} minutos={a.minutos_tarde} /> },
+                   { id: 'entrada', titulo: 'Entrada', numero: true, alinear: 'derecha', vacio: (a) => !a.entrada, celda: (a) => <Hora valor={a.entrada} tardia={a.registrada_despues} /> },
+                   { id: 'salida', titulo: 'Salida', numero: true, alinear: 'derecha', vacio: (a) => !a.salida, celda: (a) => <Hora valor={a.salida} /> },
+                 ]} />
+          {alumnos.paginacion && <Paginacion {...alumnos.paginacion} />}
+        </section>
       )}
       <Mensual ruta={`/api/asistencia/mensual.xlsx${seccion ? `?seccion_id=${seccion.id}` : ''}`} nombre="asistencia" />
     </>
@@ -139,6 +151,8 @@ function Personal({ licencias: editar }) {
     } catch (err) { setErrorForm(err.message) }
   }
 
+  const personal = usePaginaLocal(dia?.personal)
+
   async function borrar(l) {
     if (!confirm(`¿Quitar la licencia de ${l.nombre}?`)) return
     try { await api(`/api/asistencia/licencias/${l.id}`, { metodo: 'DELETE' }); recargar(); recargarLicencias() }
@@ -147,43 +161,38 @@ function Personal({ licencias: editar }) {
 
   return (
     <>
-      <div className="fila-form sin-margen">
-        <label>Día<input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></label>
-        {dia && !dia.lectivo && <span className="aviso-chico">Día no lectivo</span>}
-      </div>
+      <Encabezado titulo="Asistencia del personal" descripcion="Solo el personal con turno asignado recibe tardanza y falta automática."
+                  acciones={(
+                    <>
+                      {dia && !dia.lectivo && <Insignia tono="info">Día no lectivo</Insignia>}
+                      <label className="en-linea">Día<input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></label>
+                    </>
+                  )} />
       {error && <p className="error">{error}</p>}
-      {dia && (
-        <table>
-          <thead><tr><th>Persona</th><th>Rol</th><th>Turno</th><th>Estado</th><th>Entrada</th><th>Salida</th></tr></thead>
-          <tbody>
-            {dia.personal.map((p) => (
-              <tr key={p.usuario_id}>
-                <td>{p.nombre}</td><td>{p.rol}</td><td>{p.turno || <span className="tenue">Sin turno</span>}</td>
-                <td><Estado valor={p.estado} />{p.minutos_tarde > 0 && <span className="tenue"> {p.minutos_tarde} min</span>}</td>
-                <td>{p.entrada || '—'}<Tardia si={p.registrada_despues} /></td><td>{p.salida || '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      <p className="tenue">Solo el personal con turno asignado (pestaña Personal) recibe tardanza y falta automática.</p>
+      <Tabla etiqueta="Asistencia del personal" cargando={!dia && !error} filas={personal.filas} clave={(p) => p.usuario_id}
+             vacio={{ icono: Users, titulo: 'Sin personal registrado', texto: 'Agrégalo en la pestaña Personal.' }}
+             columnas={[
+               { id: 'persona', titulo: 'Persona', celda: (p) => <Persona nombre={p.nombre} detalle={p.rol} /> },
+               { id: 'turno', titulo: 'Turno', celda: (p) => p.turno || <span className="tenue">Sin turno</span> },
+               { id: 'estado', titulo: 'Estado', nowrap: true, celda: (p) => <Estado valor={p.estado} minutos={p.minutos_tarde} /> },
+               { id: 'entrada', titulo: 'Entrada', numero: true, alinear: 'derecha', vacio: (p) => !p.entrada, celda: (p) => <Hora valor={p.entrada} tardia={p.registrada_despues} /> },
+               { id: 'salida', titulo: 'Salida', numero: true, alinear: 'derecha', vacio: (p) => !p.salida, celda: (p) => <Hora valor={p.salida} /> },
+             ]} />
+      {personal.paginacion && <Paginacion {...personal.paginacion} />}
       <Mensual ruta="/api/asistencia/personal/mensual.xlsx" nombre="asistencia-personal" />
 
-      <h3>Licencias</h3>
-      {lista && lista.length === 0 && <p className="tenue">No hay licencias registradas.</p>}
-      {lista && lista.length > 0 && (
-        <table>
-          <thead><tr><th>Persona</th><th>Tipo</th><th>Desde</th><th>Hasta</th><th>Motivo</th>{editar && <th />}</tr></thead>
-          <tbody>
-            {lista.map((l) => (
-              <tr key={l.id}>
-                <td>{l.nombre}</td><td>{TIPOS_LICENCIA[l.tipo]}</td><td>{l.desde}</td><td>{l.hasta}</td><td>{l.motivo || ''}</td>
-                {editar && <td><button className="enlace" onClick={() => borrar(l)}>Quitar</button></td>}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <Encabezado nivel={3} titulo="Licencias" descripcion="Los días con licencia no cuentan como falta." />
+      <Tabla etiqueta="Licencias" cargando={!lista} filas={lista}
+             vacio={{ icono: CalendarOff, titulo: 'No hay licencias registradas', texto: editar ? 'Regístralas con el formulario de abajo.' : null }}
+             columnas={[
+               { id: 'persona', titulo: 'Persona', celda: (l) => <Persona nombre={l.nombre} detalle={l.motivo} /> },
+               { id: 'tipo', titulo: 'Tipo', celda: (l) => <Insignia tono="info">{TIPOS_LICENCIA[l.tipo]}</Insignia> },
+               { id: 'desde', titulo: 'Desde', nowrap: true, celda: (l) => fechaCorta(l.desde) },
+               { id: 'hasta', titulo: 'Hasta', nowrap: true, celda: (l) => fechaCorta(l.hasta) },
+               editar && { id: 'acciones', acciones: true, celda: (l) => (
+                 <MenuAcciones etiqueta={l.nombre} opciones={[{ texto: 'Quitar licencia', peligro: true, alHacer: () => borrar(l) }]} />
+               ) },
+             ].filter(Boolean)} />
       {editar && dia && (
         <form className="fila-form" onSubmit={crear}>
           <select required value={form.usuario_id} onChange={(e) => setForm({ ...form, usuario_id: e.target.value })}>
@@ -202,6 +211,11 @@ function Personal({ licencias: editar }) {
       )}
     </>
   )
+}
+
+function fechaCorta(iso) {
+  const [a, m, d] = iso.split('-').map(Number)
+  return new Date(a, m - 1, d).toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric' }).replace(/\s/g, '\u00A0')
 }
 
 function Reglas() {

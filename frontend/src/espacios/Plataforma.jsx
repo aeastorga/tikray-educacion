@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, guardarToken, leerToken } from '../api.js'
+import { School } from 'lucide-react'
+import { Encabezado, Insignia, MenuAcciones, plural, Tabla } from './comun/index.js'
 import { CamposPerfil } from './Configuracion.jsx'
 import './configuracion.css'
 
@@ -123,7 +125,7 @@ function Colegios({ salir }) {
         )}
         {demoLista && (
           <div className="aviso">
-            Demo lista: {demoLista.alumnos} alumnos, {demoLista.apoderados} apoderados, {demoLista.personal} del personal.
+            Demo lista: {plural(demoLista.alumnos, 'alumno', 'alumnos')}, {plural(demoLista.apoderados, 'apoderado', 'apoderados')}, {demoLista.personal} del personal.
             Clave del personal <code>{demoLista.credenciales.director.clave}</code>: director <code>{demoLista.credenciales.director.usuario}</code>,
             portería <code>{demoLista.credenciales.porteria.usuario}</code>, docente <code>{demoLista.credenciales.docente.usuario}</code>.
             Familia <code>{demoLista.credenciales.familia.documento}</code> con PIN <code>{demoLista.credenciales.familia.pin}</code>.
@@ -134,40 +136,45 @@ function Colegios({ salir }) {
           <div className="aviso">
             <b>{activado.colegio.nombre}</b> ya está activo.
             {Object.keys(activado.borrados).length > 0 && <> Se borraron los datos de ejemplo
-              ({activado.borrados.alumno || 0} alumnos, {activado.borrados.apoderado || 0} apoderados).</>}
+              ({plural(activado.borrados.alumno || 0, 'alumno', 'alumnos')}, {plural(activado.borrados.apoderado || 0, 'apoderado', 'apoderados')}).</>}
             <button className="enlace" onClick={() => setActivado(null)}>Cerrar</button>
           </div>
         )}
-        <table>
-          <thead><tr><th>Colegio</th><th>Dirección</th><th>Estado</th><th>Vence</th><th>Módulos</th><th></th></tr></thead>
-          <tbody>
-            {lista.map((c) => (
-              <tr key={c.id}>
-                <td>{c.nombre}</td>
-                <td><a href={`//${c.subdominio}.${base}`} target="_blank" rel="noreferrer">{c.subdominio}.{base}</a>
-                  {c.dominio_propio && <> · {c.dominio_propio}</>}</td>
-                <td>
-                  <select value={c.estado} onChange={(e) => cambiar(c, { estado: e.target.value })}>
-                    {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
-                  {!c.disponible && c.estado !== 'suspendido' && <span className="error"> vencido</span>}
-                </td>
-                <td>
-                  <input type="date" value={c.vence_en || ''}
-                         onChange={(e) => cambiar(c, { vence_en: e.target.value || null })} />
-                </td>
-                <td className="tenue">{c.modulos.filter((m) => m.contratado).map((m) => m.nombre).join(', ') || 'Ninguno'}</td>
-                <td>
-                  <div className="acciones">
-                    <button className="enlace" onClick={() => setEditando(c)}>Perfil y módulos</button>
-                    {c.estado === 'prueba' && !c.es_demo && <button className="enlace" onClick={() => setActivando(c)}>Activar colegio</button>}
-                    {c.es_demo && <button className="enlace" onClick={() => demo(c)}>Reiniciar demo</button>}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <Encabezado titulo="Colegios" descripcion="Estado, vencimiento y módulos contratados de cada colegio." />
+        <Tabla etiqueta="Colegios" filas={lista}
+               vacio={{ icono: School, titulo: 'Todavía no hay colegios', texto: 'Crea el primero con el formulario de abajo.' }}
+               columnas={[
+                 { id: 'colegio', titulo: 'Colegio', ancho: '24%', celda: (c) => (
+                   <>
+                     <b>{c.nombre}</b>
+                     <span className="segunda-linea">
+                       <a href={`//${c.subdominio}.${base}`} target="_blank" rel="noreferrer">{c.subdominio}.{base}</a>
+                       {c.dominio_propio && <> · {c.dominio_propio}</>}
+                     </span>
+                   </>
+                 ) },
+                 { id: 'estado', titulo: 'Estado', celda: (c) => (
+                   <>
+                     <select value={c.estado} aria-label={`Estado de ${c.nombre}`} onChange={(e) => cambiar(c, { estado: e.target.value })}>
+                       {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                     </select>
+                     {!c.disponible && c.estado !== 'suspendido' && <> <Insignia tono="falta">Vencido</Insignia></>}
+                   </>
+                 ) },
+                 { id: 'vence', titulo: 'Vence', celda: (c) => (
+                   <input type="date" value={c.vence_en || ''} aria-label={`Vencimiento de ${c.nombre}`}
+                          onChange={(e) => cambiar(c, { vence_en: e.target.value || null })} />
+                 ) },
+                 { id: 'modulos', titulo: 'Módulos', ocultarEnCelular: true,
+                   celda: (c) => <span className="tenue">{c.modulos.filter((m) => m.contratado).map((m) => m.nombre).join(', ') || 'Ninguno'}</span> },
+                 { id: 'acciones', acciones: true, celda: (c) => (
+                   <MenuAcciones etiqueta={c.nombre} principal={{ texto: 'Perfil y módulos', alHacer: () => setEditando(c) }}
+                                 opciones={[
+                                   c.estado === 'prueba' && !c.es_demo && { texto: 'Activar colegio', alHacer: () => setActivando(c) },
+                                   c.es_demo && { texto: 'Reiniciar demo', alHacer: () => demo(c) },
+                                 ].filter(Boolean)} />
+                 ) },
+               ]} />
         {editando && <EditarColegio colegio={editando} cerrar={() => setEditando(null)} alGuardar={cargar} />}
         {activando && <ActivarColegio colegio={activando} cerrar={() => setActivando(null)}
                                       alActivar={(r) => { setActivando(null); setActivado(r); cargar() }} />}

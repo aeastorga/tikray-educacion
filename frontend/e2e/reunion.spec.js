@@ -12,7 +12,7 @@ test('reunión de padres: el padre llena su ficha, el tutor la aprueba y el padr
   await tutor.getByLabel('Clave').fill(d.clave)
   await tutor.getByRole('button', { name: 'Ingresar' }).click()
   await tutor.getByRole('button', { name: 'Abrir reunión' }).click()
-  await expect(tutor.getByRole('img', { name: /QR de la reunión de 1° A/ })).toBeVisible()
+  await expect(tutor.getByRole('img', { name: /QR de la reunión de Primaria · 1° A/ })).toBeVisible()
   const quiosco = await tutor.getByRole('link', { name: /modo quiosco/ }).getAttribute('href')
   const qr = quiosco.replace('?quiosco=1', '')
 

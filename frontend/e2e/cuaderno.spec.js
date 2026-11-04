@@ -33,7 +33,7 @@ test('comunicado con firma: la familia firma y responde, el colegio ve quién fi
   await expect(colegio.getByLabel('Pedir firma de lectura a cada apoderado')).toBeChecked()
   await colegio.getByRole('button', { name: 'Enviar' }).click()
   await expect(colegio.getByRole('heading', { name: 'Paseo al museo' })).toBeVisible()
-  await expect(colegio.getByText('Familias: 0 de 1 firmó')).toBeVisible()
+  await expect(colegio.getByText('0 de 1 familia firmó', { exact: false })).toBeVisible()
 
   const casa = await (await browser.newContext()).newPage()
   await familia(casa)
@@ -46,7 +46,7 @@ test('comunicado con firma: la familia firma y responde, el colegio ve quién fi
   await expect(casa.locator('.hilo')).toContainText('¿Llevan lonchera?')
 
   await colegio.reload()
-  await expect(colegio.getByText('Familias: 1 de 1 firmó')).toBeVisible()
+  await expect(colegio.getByText('1 de 1 familia firmó', { exact: false })).toBeVisible()
   await expect(colegio.locator('.hilo')).toContainText('¿Llevan lonchera?')
   await colegio.getByPlaceholder('Responder a la familia').fill('Sí, y agua.')
   await colegio.getByRole('button', { name: 'Responder' }).click()
@@ -66,7 +66,8 @@ test('permiso de salida pedido por la familia y aprobado por el colegio', async 
 
   const colegio = await (await browser.newContext()).newPage()
   await director(colegio)
-  await colegio.getByLabel('Solo lo que espera al colegio').check()
+  await colegio.getByLabel('Solo lo que espera al colegio').click()
+  await expect(colegio.getByLabel('Solo lo que espera al colegio')).toBeChecked()
   await colegio.getByRole('row', { name: /Cita con el dentista/ }).click()
   await expect(colegio.getByText('¿Se autoriza esta salida?')).toBeVisible()
   await colegio.getByRole('button', { name: 'Aprobar' }).click()

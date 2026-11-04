@@ -64,10 +64,10 @@ def detalle(client, hd, rid) -> dict:
 def test_padre_llena_su_ficha_el_tutor_aprueba_y_activa_en_el_momento(client, db, e):
     hd = tutor(client, db, e, [e.sec_a])
     r = abrir(client, hd, e.sec_a, horas=2)
-    assert r["estado"] == "abierta" and r["seccion"] == "1° A" and r["alumnos"] == 1
+    assert r["estado"] == "abierta" and r["seccion"] == "Primaria · 1° A" and r["alumnos"] == 1
 
     info = client.post("/api/familia/reunion/abrir", json={"token": r["token"]}, headers=host("alfa")).json()
-    assert info["seccion"] == "1° A" and "Ley 29733" in info["consentimiento"]["texto"]
+    assert info["seccion"] == "Primaria · 1° A" and "Ley 29733" in info["consentimiento"]["texto"]
     # Confirma el alumno sin revelar nada de los apoderados.
     a = client.post("/api/familia/reunion/alumno", json={"token": r["token"], "documento_alumno": "7000 0000"},
                     headers=host("alfa"))
@@ -410,7 +410,7 @@ def test_ficha_en_papel_y_pdf_prellenado(client, db, e, h):
                        json={"alumno_id": e.a2.id, "apoderado": persona(), "acepto": True}).status_code == 404
     p = client.get(f"/api/reuniones/secciones/{e.sec_a.id}/fichas.pdf", headers=h)
     assert p.status_code == 200 and p.content.startswith(b"%PDF")
-    assert "fichas-1-a" in p.headers["content-disposition"]
+    assert "fichas-primaria-1-a" in p.headers["content-disposition"]
 
 
 def test_quien_falto_y_su_enlace_por_whatsapp(client, db, e, h):

@@ -8,7 +8,7 @@ historial es solo del director.
 from datetime import date, datetime, time, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -18,6 +18,7 @@ from app.comun import guardar, obtener
 from app.db import get_db
 from app.deps import Sesion, puede, requerir_permiso, solo_director, usuario_actual
 from app.fechas import LIMA
+from app.paginacion import Pagina, contar, pagina, recortar
 from app.models import CategoriaIncidencia, Colegio, EntradaCuaderno, PlantillaComunicado, RegistroActividad, Usuario
 from app.models.colegio import CONTRATABLES, TIPOS_AVISO
 from app.modulos import MODULOS
@@ -281,15 +282,14 @@ def borrar_categoria(categoria_id: int, s: Sesion = Depends(editar), db: Session
 
 # --- Historial de actividad (solo el director) --------------------------------------------
 
-POR_PAGINA = 50
 NOMBRE_MODULO = {**MODULOS, "configuracion": "Configuración"}
 
 
 @router.get("/historial")
 def historial(usuario_id: int | None = None, modulo: str | None = None, desde: date | None = None,
-              hasta: date | None = None, pagina: int = Query(1, ge=1, le=10000),
+              hasta: date | None = None, p: Pagina = Depends(pagina),
               s: Sesion = Depends(solo_director), db: Session = Depends(get_db)) -> dict:
-    """Lo último primero, de a 50. Las fechas del filtro son días de Lima."""
+    """Lo último primero, por páginas. Las fechas del filtro son días de Lima."""
     cid = s.colegio.id
     q = select(RegistroActividad).where(RegistroActividad.colegio_id == cid)
     if usuario_id is not None:
@@ -300,9 +300,8 @@ def historial(usuario_id: int | None = None, modulo: str | None = None, desde: d
         q = q.where(RegistroActividad.creado_en >= datetime.combine(desde, time(0), LIMA))
     if hasta:
         q = q.where(RegistroActividad.creado_en < datetime.combine(hasta + timedelta(days=1), time(0), LIMA))
-    total = db.scalar(select(func.count()).select_from(q.subquery())) or 0
-    filas = db.scalars(q.order_by(RegistroActividad.creado_en.desc(), RegistroActividad.id.desc())
-                       .offset((pagina - 1) * POR_PAGINA).limit(POR_PAGINA)).all()
+    total = contar(db, q)
+    filas = db.scalars(recortar(q.order_by(RegistroActividad.creado_en.desc(), RegistroActividad.id.desc()), p)).all()
     personas = db.execute(select(Usuario.id, Usuario.apellidos + ", " + Usuario.nombres)
                           .where(Usuario.colegio_id == cid,
                                  Usuario.id.in_(select(RegistroActividad.usuario_id.distinct()).where(
@@ -310,7 +309,7 @@ def historial(usuario_id: int | None = None, modulo: str | None = None, desde: d
                           .order_by(Usuario.apellidos, Usuario.nombres)).all()
     modulos = db.scalars(select(RegistroActividad.modulo.distinct()).where(RegistroActividad.colegio_id == cid)).all()
     return {
-        "total": total, "pagina": pagina, "paginas": max(1, -(-total // POR_PAGINA)), "por_pagina": POR_PAGINA,
+        **p.datos(total),
         "items": [{"id": r.id, "creado_en": r.creado_en.isoformat(), "quien": r.quien, "usuario_id": r.usuario_id,
                    "accion": r.accion, "modulo": r.modulo, "modulo_nombre": NOMBRE_MODULO.get(r.modulo, r.modulo),
                    "que": r.que, "objeto_id": r.objeto_id, "resumen": r.resumen} for r in filas],

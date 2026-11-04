@@ -5,11 +5,12 @@ import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, select, update
 from sqlalchemy.orm import Session
 
 from app.fechas import LIMA, hoy_lima
-from app.models import Apoderado, CambioApoderado, ColaAviso, Colegio, ConfigFamilias, CuentaFamilia, InvitacionFamilia
+from app.models import (Apoderado, CambioApoderado, ColaAviso, Colegio, ConfigFamilias, CuentaFamilia, EntregaAviso,
+                        InvitacionFamilia)
 
 VIGENCIA_INVITACION = timedelta(days=7)
 INTENTOS_INVITACION = 5
@@ -19,6 +20,15 @@ CONSENTIMIENTO_VERSION = "2026-11"
 # PIN fallidos seguidos (en cualquier colegio) antes de bloquear el ingreso con PIN.
 LIMITE_PIN = 10
 BLOQUEO_PIN = timedelta(hours=24)
+
+
+def recibio_hoy(colegio_id: int):
+    """Condición: hoy le llegó algún aviso. Junto con tener un celular suscrito, define "recibe avisos"
+    (lo segundo cubre la demo, que simula entregas sin crear suscripciones)."""
+    return Apoderado.id.in_(
+        select(EntregaAviso.apoderado_id)
+        .join(ColaAviso, and_(ColaAviso.colegio_id == EntregaAviso.colegio_id, ColaAviso.id == EntregaAviso.aviso_id))
+        .where(EntregaAviso.colegio_id == colegio_id, EntregaAviso.estado == "enviado", ColaAviso.fecha == hoy_lima()))
 
 
 def texto_consentimiento(colegio: str) -> str:
