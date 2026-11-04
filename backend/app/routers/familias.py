@@ -7,6 +7,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import and_, func, or_, select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from app import familias
@@ -27,11 +28,12 @@ editar = requerir_permiso("familias", "editar")
 editar_reglas = requerir_permiso("configuracion", "editar")
 
 
-def _notificaciones(ap: Apoderado, dispositivos: int) -> str:
-    """activas: le llegan push. sin_permiso: entró a la app pero no aceptó notificaciones. sin_app: nunca entró."""
+def _notificaciones(ap: Apoderado, dispositivos: int, recibio_hoy: bool = False) -> str:
+    """activas: tiene un celular suscrito o hoy le llegó un aviso (la misma regla que la cifra "Reciben avisos" y
+    el filtro avisos=activas). sin_permiso: entró a la app pero no le llegan. sin_app: nunca entró."""
     if ap.cuenta_id is None:
         return "sin_app"
-    return "activas" if dispositivos else "sin_permiso"
+    return "activas" if dispositivos or recibio_hoy else "sin_permiso"
 
 
 def _invitacion(inv: InvitacionFamilia | None) -> dict | None:
@@ -43,6 +45,11 @@ def _invitacion(inv: InvitacionFamilia | None) -> dict | None:
 
 def _con_push():
     return Apoderado.cuenta_id.in_(select(SuscripcionPush.cuenta_id).where(SuscripcionPush.cuenta_id.is_not(None)))
+
+
+def _recibe_avisos(cid: int):
+    """Regla única de "recibe avisos": cuenta con un celular suscrito, o que hoy le llegó alguno."""
+    return and_(Apoderado.cuenta_id.is_not(None), or_(_con_push(), familias.recibio_hoy(cid)))
 
 
 def _fallo_hoy(cid: int):
@@ -59,7 +66,7 @@ def resumen_familias(db: Session, cid: int) -> dict:
     fila = db.execute(select(
         func.count(),
         func.count().filter(activo),
-        func.count().filter(activo, or_(_con_push(), familias.recibio_hoy(cid))),
+        func.count().filter(activo, _recibe_avisos(cid)),
         func.count().filter(Apoderado.estado_acceso == "pendiente"),
         func.count().filter(Apoderado.estado_acceso == "sin_cuenta"),
         func.count().filter(Apoderado.estado_acceso == "bloqueado"),
@@ -76,9 +83,9 @@ def listar(q: str = "", estado: Literal["sin_cuenta", "pendiente", "activo", "bl
     if estado:
         consulta = consulta.where(Apoderado.estado_acceso == estado)
     if avisos == "activas":
-        consulta = consulta.where(_con_push())
+        consulta = consulta.where(_recibe_avisos(cid))
     elif avisos == "sin_permiso":
-        consulta = consulta.where(Apoderado.cuenta_id.is_not(None), ~_con_push())
+        consulta = consulta.where(Apoderado.cuenta_id.is_not(None), ~or_(_con_push(), familias.recibio_hoy(cid)))
     elif avisos == "sin_app":
         consulta = consulta.where(Apoderado.cuenta_id.is_(None))
     elif avisos == "error":
@@ -119,12 +126,14 @@ def listar(q: str = "", estado: Literal["sin_cuenta", "pendiente", "activo", "bl
     ultima_entrega = {e.apoderado_id: e for e in db.scalars(
         select(EntregaAviso).where(EntregaAviso.colegio_id == cid, EntregaAviso.apoderado_id.in_(ids))
         .order_by(EntregaAviso.apoderado_id, EntregaAviso.creado_en.desc())
-        .distinct(EntregaAviso.apoderado_id))} if ids else {}
+        .ext(postgresql.distinct_on(EntregaAviso.apoderado_id)))} if ids else {}
+    recibieron = set(db.scalars(select(Apoderado.id).where(
+        Apoderado.colegio_id == cid, Apoderado.id.in_(ids), familias.recibio_hoy(cid)))) if ids else set()
     return {**p.datos(total), "resumen": resumen_familias(db, cid), "filas": [{
         "id": a.id, "nombre": f"{a.apellidos}, {a.nombres}", "nombres": a.nombres,
         "tipo_documento": a.tipo_documento, "numero_documento": a.numero_documento, "celular": a.celular,
         "hijos": hijos.get(a.id, []), "estado": a.estado_acceso,
-        "notificaciones": _notificaciones(a, dispositivos.get(a.cuenta_id, 0)),
+        "notificaciones": _notificaciones(a, dispositivos.get(a.cuenta_id, 0), a.id in recibieron),
         "invitacion": _invitacion(ultima_inv.get(a.id)),
         "ultimo_aviso": ({"cuerpo": e.cuerpo, "estado": e.estado, "creado_en": e.creado_en.isoformat()}
                          if (e := ultima_entrega.get(a.id)) else None),
@@ -151,10 +160,12 @@ def detalle(apoderado_id: int, s: Sesion = Depends(ver), db: Session = Depends(g
                          .order_by(CambioApoderado.creado_en.desc()).limit(50))
     dispositivos = db.scalar(select(func.count()).select_from(SuscripcionPush)
                              .where(SuscripcionPush.cuenta_id == a.cuenta_id)) if a.cuenta_id else 0
+    recibio = db.scalar(select(func.count()).where(Apoderado.colegio_id == cid, Apoderado.id == a.id,
+                                                   familias.recibio_hoy(cid))) > 0
     return {
         "id": a.id, "nombre": f"{a.apellidos}, {a.nombres}", "celular": a.celular, "estado": a.estado_acceso,
         "activado_en": a.activado_en.isoformat() if a.activado_en else None,
-        "notificaciones": _notificaciones(a, dispositivos), "dispositivos": dispositivos,
+        "notificaciones": _notificaciones(a, dispositivos, recibio), "dispositivos": dispositivos,
         "avisos": [{"creado_en": e.creado_en.isoformat(), "titulo": e.titulo, "cuerpo": e.cuerpo, "estado": e.estado,
                     "dispositivos": e.dispositivos} for e in entregas],
         "invitaciones": [_invitacion(i) | {"creado_por": nombres_personal.get(i.creado_por_id)} for i in invitaciones],

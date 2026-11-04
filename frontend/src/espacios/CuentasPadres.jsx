@@ -105,7 +105,7 @@ function Lista({ colegio, editar, reglas }) {
   const columnas = [
     { id: 'apoderado', titulo: 'Apoderado', ancho: '24%',
       celda: (a) => <Persona nombre={a.nombre} detalle={[documento(a.tipo_documento, a.numero_documento), a.celular].filter(Boolean).join(' · ')} /> },
-    { id: 'hijos', titulo: 'Hijos', celda: (a) => <Hijos hijos={a.hijos} /> },
+    { id: 'hijos', titulo: 'Hijos', vacio: (a) => !a.hijos.length, celda: (a) => <Hijos hijos={a.hijos} /> },
     { id: 'cuenta', titulo: 'Cuenta', celda: (a) => <Insignia tono={TONO_ESTADO[a.estado]}>{ESTADO[a.estado]}</Insignia> },
     { id: 'avisos', titulo: 'Avisos', ocultarEnCelular: true, celda: (a) => (
       <>
@@ -115,7 +115,7 @@ function Lista({ colegio, editar, reglas }) {
         {a.ultimo_aviso && <span className="segunda-linea" title={a.ultimo_aviso.cuerpo}>Último {hace(a.ultimo_aviso.creado_en)}</span>}
       </>
     ) },
-    { id: 'enlace', titulo: 'Enlace', ocultarEnCelular: true, nowrap: true, celda: (a) => (a.invitacion ? (
+    { id: 'enlace', titulo: 'Enlace', ocultarEnCelular: true, nowrap: true, vacio: (a) => !a.invitacion, celda: (a) => (a.invitacion ? (
       <span className="nowrap"><Insignia tono={TONO_ENLACE[a.invitacion.estado]}>{ENLACE[a.invitacion.estado]}</Insignia>{' '}
         <span className="tenue">{fechaHora(a.invitacion.creado_en)}</span></span>
     ) : <span className="tenue">—</span>) },
@@ -244,7 +244,7 @@ function Detalle() {
                vacio={{ icono: Link2, titulo: 'Ningún enlace', texto: 'Aún no se le envió un enlace de activación.' }}
                columnas={[
                  { id: 'creado', titulo: 'Creado', nowrap: true, celda: (i) => fechaHora(i.creado_en) },
-                 { id: 'por', titulo: 'Por', celda: (i) => i.creado_por || '—' },
+                 { id: 'por', titulo: 'Por', vacio: (i) => !i.creado_por, celda: (i) => i.creado_por || '—' },
                  { id: 'estado', titulo: 'Estado', celda: (i) => (
                    <><Insignia tono={TONO_ENLACE[i.estado]}>{ENLACE[i.estado]}</Insignia>
                      {i.motivo_anulacion && <span className="segunda-linea">{i.motivo_anulacion}</span>}</>) },
@@ -258,7 +258,7 @@ function Detalle() {
                columnas={[
                  { id: 'dato', titulo: 'Dato', celda: (c) => c.campo },
                  { id: 'fecha', titulo: 'Fecha', nowrap: true, celda: (c) => fechaHora(c.creado_en) },
-                 { id: 'antes', titulo: 'Antes', celda: (c) => c.antes || '—' },
+                 { id: 'antes', titulo: 'Antes', vacio: (c) => !c.antes, celda: (c) => c.antes || '—' },
                  { id: 'despues', titulo: 'Después', celda: (c) => c.despues },
                  { id: 'por', titulo: 'Por', celda: (c) => <>{c.por || '—'} <span className="tenue">({ORIGEN[c.origen]})</span></> },
                ]} />

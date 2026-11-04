@@ -121,8 +121,8 @@ function Alumnos() {
                  columnas={[
                    { id: 'alumno', titulo: 'Alumno', celda: (a) => <Persona nombre={a.nombre} /> },
                    { id: 'estado', titulo: 'Estado', nowrap: true, celda: (a) => <Estado valor={a.estado} minutos={a.minutos_tarde} /> },
-                   { id: 'entrada', titulo: 'Entrada', numero: true, alinear: 'derecha', celda: (a) => <Hora valor={a.entrada} tardia={a.registrada_despues} /> },
-                   { id: 'salida', titulo: 'Salida', numero: true, alinear: 'derecha', celda: (a) => <Hora valor={a.salida} /> },
+                   { id: 'entrada', titulo: 'Entrada', numero: true, alinear: 'derecha', vacio: (a) => !a.entrada, celda: (a) => <Hora valor={a.entrada} tardia={a.registrada_despues} /> },
+                   { id: 'salida', titulo: 'Salida', numero: true, alinear: 'derecha', vacio: (a) => !a.salida, celda: (a) => <Hora valor={a.salida} /> },
                  ]} />
           {alumnos.paginacion && <Paginacion {...alumnos.paginacion} />}
         </section>
@@ -175,8 +175,8 @@ function Personal({ licencias: editar }) {
                { id: 'persona', titulo: 'Persona', celda: (p) => <Persona nombre={p.nombre} detalle={p.rol} /> },
                { id: 'turno', titulo: 'Turno', celda: (p) => p.turno || <span className="tenue">Sin turno</span> },
                { id: 'estado', titulo: 'Estado', nowrap: true, celda: (p) => <Estado valor={p.estado} minutos={p.minutos_tarde} /> },
-               { id: 'entrada', titulo: 'Entrada', numero: true, alinear: 'derecha', celda: (p) => <Hora valor={p.entrada} tardia={p.registrada_despues} /> },
-               { id: 'salida', titulo: 'Salida', numero: true, alinear: 'derecha', celda: (p) => <Hora valor={p.salida} /> },
+               { id: 'entrada', titulo: 'Entrada', numero: true, alinear: 'derecha', vacio: (p) => !p.entrada, celda: (p) => <Hora valor={p.entrada} tardia={p.registrada_despues} /> },
+               { id: 'salida', titulo: 'Salida', numero: true, alinear: 'derecha', vacio: (p) => !p.salida, celda: (p) => <Hora valor={p.salida} /> },
              ]} />
       {personal.paginacion && <Paginacion {...personal.paginacion} />}
       <Mensual ruta="/api/asistencia/personal/mensual.xlsx" nombre="asistencia-personal" />

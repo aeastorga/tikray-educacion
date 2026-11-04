@@ -93,14 +93,13 @@
 .ingreso-datos { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 12px; }
 .ingreso-total { margin: 0; }
 .ingreso-total b { color: var(--texto); }
-.cajas-estado { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-@media (max-width: 520px) { .cajas-estado { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.cajas-estado { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; }
 .caja-numero {
-  display: flex; flex-direction: column; gap: 2px; padding: 14px; border-radius: 14px; text-decoration: none;
-  background: var(--fondo); color: var(--texto); min-height: var(--toque);
+  display: flex; flex-direction: column; gap: 2px; padding: 14px 12px; border-radius: 14px; text-decoration: none;
+  background: var(--fondo); color: var(--texto); min-height: var(--toque); min-width: 0;
 }
 .caja-numero b { font-family: var(--letra-titulo); font-size: 1.85rem; font-weight: 800; line-height: 1.05; }
-.caja-numero span { font-size: .82rem; font-weight: 700; }
+.caja-numero span { font-size: .82rem; font-weight: 700; overflow-wrap: anywhere; hyphens: auto; line-height: 1.25; }
 .caja-numero.a-tiempo { background: var(--acento-suave); color: var(--acento-fuerte); }
 .caja-numero.tarde { background: var(--tarde-fondo); color: var(--tarde-texto); }
 .caja-numero.falta { background: var(--falta-fondo); color: var(--falta-texto); }
@@ -124,9 +123,9 @@
 .avisos-sin-app b { font-size: 1.15rem; color: #fff; }
 .avisos-vacio { margin: 0; font-family: var(--letra-titulo); font-size: 1.25rem; font-weight: 700; line-height: 1.3; color: #fff; }
 .avisos-nota { margin: 0; color: #D1D5DB; font-size: .9rem; }
-.avisos-cifras { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
-.avisos-cifras div { background: rgba(255, 255, 255, .08); border-radius: var(--radio-chico); padding: 10px 12px; }
-.avisos-cifras dt { font-size: .78rem; color: #D1D5DB; font-weight: 600; }
+.avisos-cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; margin: 0; }
+.avisos-cifras div { background: rgba(255, 255, 255, .08); border-radius: var(--radio-chico); padding: 10px 12px; min-width: 0; }
+.avisos-cifras dt { font-size: .78rem; color: #D1D5DB; font-weight: 600; overflow-wrap: anywhere; hyphens: auto; line-height: 1.25; }
 .avisos-cifras dd { margin: 2px 0 0; font-family: var(--letra-titulo); font-size: 1.45rem; font-weight: 800; color: #fff; line-height: 1.1; }
 .solo-secciones {
   margin-left: 10px; padding: 2px 10px; border-radius: 999px; background: var(--acento-suave); color: var(--acento-texto);
@@ -171,8 +170,11 @@
 
 /* Más faltas por sección */
 .lista-faltas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.lista-faltas li { display: grid; grid-template-columns: minmax(70px, 110px) minmax(0, 1fr) 30px; gap: 10px; align-items: center; }
-.lista-faltas-nombre { font-weight: 600; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lista-faltas li { display: grid; grid-template-columns: minmax(0, 1fr) 30px; grid-template-areas: "nombre nombre" "barra numero"; gap: 4px 10px; align-items: center; }
+/* El nombre lleva el nivel ("Secundaria · 3° A"): va completo en su línea, sin recortar. */
+.lista-faltas-nombre { grid-area: nombre; font-weight: 600; font-size: .9rem; overflow-wrap: anywhere; }
+.lista-faltas .barra-falta { grid-area: barra; }
+.lista-faltas b { grid-area: numero; }
 .lista-faltas b { text-align: right; color: var(--falta-texto); }
 .barra-falta { height: 10px; border-radius: 999px; background: var(--falta-fondo); overflow: hidden; }
 .barra-falta span { display: block; height: 100%; border-radius: 999px; background: var(--falta-barra); }

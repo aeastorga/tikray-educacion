@@ -134,3 +134,67 @@ def test_secciones_de_reunion_con_nivel_docente_y_alumnos(client, db, h, hb, dos
     lb = client.get("/api/reuniones/secciones", headers=hb).json()
     assert {x["id"] for x in lb} == {b.sec_a.id, b.sec_b.id, b.sec_secundaria.id}
     assert all(x["docente"] is None for x in lb)
+
+
+def test_reciben_avisos_misma_regla_en_cifra_filtro_y_filas(client, db, h, hb, dos):
+    """Sin celulares suscritos, a la madre le llegó un aviso hoy: la cifra, el filtro y su fila dicen lo mismo."""
+    from datetime import UTC, datetime
+
+    from app.fechas import hoy_lima
+    from app.models import ColaAviso, EntregaAviso, SuscripcionPush
+
+    a, b = dos
+    assert db.scalar(select(SuscripcionPush).where(SuscripcionPush.cuenta_id.in_(
+        [a.madre.cuenta_id, a.otro.cuenta_id]))) is None
+    for esc in (a, b):  # también en beta: nunca debe sumarse en alfa
+        cola = ColaAviso(colegio_id=esc.colegio.id, alumno_id=esc.a1.id, fecha=hoy_lima(), tipo="ingreso",
+                         momento=datetime.now(UTC), datos={"hora": "07:50"})
+        db.add(cola)
+        db.flush()
+        db.add(EntregaAviso(colegio_id=esc.colegio.id, aviso_id=cola.id, apoderado_id=esc.madre.id, estado="enviado",
+                            dispositivos=1, titulo="Ingreso", cuerpo="Llegó a las 7:50", creado_en=datetime.now(UTC)))
+    db.commit()
+
+    r = client.get("/api/familias/apoderados?estado=activo&avisos=activas", headers=h).json()
+    assert r["total"] == r["resumen"]["avisos"] == 1
+    assert [(x["id"], x["notificaciones"]) for x in r["filas"]] == [(a.madre.id, "activas")]
+    sin = client.get("/api/familias/apoderados?avisos=sin_permiso&por_pagina=100", headers=h).json()
+    assert {x["id"] for x in sin["filas"]} == {a.otro.id}
+    assert all(x["notificaciones"] == "sin_permiso" for x in sin["filas"])
+    assert client.get(f"/api/familias/apoderados/{a.madre.id}", headers=h).json()["notificaciones"] == "activas"
+    rb = client.get("/api/familias/apoderados?estado=activo&avisos=activas", headers=hb).json()
+    assert rb["total"] == rb["resumen"]["avisos"] == 1
+
+
+def test_bandeja_por_fecha_no_por_id(client, db, h, dos):
+    """El id va al revés de la fecha: manda la fecha, y lo programado (por su hora de salida) queda arriba."""
+    from datetime import UTC, datetime, timedelta
+
+    a, _ = dos
+    director = db.scalar(select(Usuario).where(Usuario.colegio_id == a.colegio.id))
+    ahora = datetime.now(UTC)
+    nueva = EntradaCuaderno(colegio_id=a.colegio.id, creado_por_id=director.id, tipo="comunicado", alcance="colegio",
+                            titulo="Primera creada, fecha de ayer", creado_en=ahora - timedelta(days=1))
+    db.add(nueva)
+    db.flush()
+    vieja = EntradaCuaderno(colegio_id=a.colegio.id, creado_por_id=director.id, tipo="comunicado", alcance="colegio",
+                            titulo="Segunda creada, fecha de hace tres días", creado_en=ahora - timedelta(days=3))
+    programada = EntradaCuaderno(colegio_id=a.colegio.id, creado_por_id=director.id, tipo="comunicado",
+                                 alcance="colegio", titulo="Sale mañana", creado_en=ahora - timedelta(days=5),
+                                 programado_para=ahora + timedelta(days=1))
+    db.add_all([vieja, programada])
+    db.commit()
+    assert vieja.id > nueva.id
+    titulos = [x["titulo"] for x in client.get("/api/cuaderno/entradas", headers=h).json()["entradas"]]
+    assert titulos == ["Sale mañana", "Primera creada, fecha de ayer", "Segunda creada, fecha de hace tres días"]
+
+
+def test_destino_de_un_alumno_trae_la_seccion_aparte(client, h, dos):
+    a, _ = dos
+    eid = escribir(client, h, tipo="incidencia", alcance="alumno", alumno_id=a.a1.id).json()["id"]
+    fila = next(x for x in client.get("/api/cuaderno/entradas", headers=h).json()["entradas"] if x["id"] == eid)
+    det = client.get(f"/api/cuaderno/entradas/{eid}", headers=h).json()
+    for x in (fila, det):
+        assert x["destino_seccion"] == "Primaria · 1° A" and "·" not in x["destino"]
+    colegio = escribir(client, h, tipo="comunicado", alcance="colegio").json()["id"]
+    assert client.get(f"/api/cuaderno/entradas/{colegio}", headers=h).json()["destino_seccion"] is None

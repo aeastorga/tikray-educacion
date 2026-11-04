@@ -252,7 +252,7 @@ function MasFaltas({ secciones }) {
         <ol className="lista-faltas">
           {secciones.map((s) => (
             <li key={s.id}>
-              <span className="lista-faltas-nombre">{s.nombre}</span>
+              <span className="lista-faltas-nombre" title={s.nombre}>{s.nombre}</span>
               <span className="barra-falta" aria-hidden="true"><span style={{ width: `${100 * s.faltas / max}%` }} /></span>
               <b>{s.faltas}</b>
             </li>

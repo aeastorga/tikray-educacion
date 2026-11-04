@@ -26,6 +26,11 @@ export function TipoEntrada({ e }) {
   return <Insignia tono={tono} icono={merito ? Award : ICONO_TIPO[e.tipo]}>{TIPOS[e.tipo]}</Insignia>
 }
 
+// A quién va: el nombre arriba; la sección del alumno debajo, en tenue y sin partirse.
+function Destino({ e }) {
+  return <>{e.destino}{e.destino_seccion && <span className="destino-seccion">{e.destino_seccion}</span>}</>
+}
+
 function EstadoEntrada({ e }) {
   if (programadoPendiente(e)) return <Insignia tono="info" titulo={`Sale el ${fechaHora(e.programado_para)}`}>Programado</Insignia>
   if (e.estado) return <Insignia tono={TONO_ESTADO[e.estado]}>{ESTADOS[e.estado]}</Insignia>
@@ -116,8 +121,8 @@ function Bandeja() {
         </>
       )
     } },
-    { id: 'para', titulo: 'Para', ancho: '22%', celda: (e) => e.destino },
-    { id: 'familias', titulo: 'Familias', ocultarEnCelular: true, celda: (e) => {
+    { id: 'para', titulo: 'Para', ancho: '22%', celda: (e) => <Destino e={e} /> },
+    { id: 'familias', titulo: 'Familias', ocultarEnCelular: true, vacio: (e) => !e.apoderados, celda: (e) => {
       const hechos = e.pide_firma ? e.firmados : e.vistos
       const verbo = e.pide_firma ? FIRMA[e.tipo].toLowerCase() : 'vieron'
       if (!e.apoderados) return <span className="tenue">—</span>
@@ -208,7 +213,7 @@ function Detalle({ editar }) {
     <article className="cuaderno-detalle">
       <button className="enlace" onClick={() => navegar('/panel/cuaderno')}><ArrowLeft size={18} aria-hidden="true" /> Bandeja</button>
       <p className="tenue">
-        <TipoEntrada e={e} /> {e.destino} · {fechaHora(e.creado_en)}
+        <TipoEntrada e={e} /> {e.destino}{e.destino_seccion && <> <span className="nowrap">({e.destino_seccion})</span></>} · {fechaHora(e.creado_en)}
         {e.autor && ` · ${e.de_familia ? 'Enviado por' : 'Escrito por'} ${e.autor}`}
         {' '}<Categoria c={e.categoria} />
       </p>

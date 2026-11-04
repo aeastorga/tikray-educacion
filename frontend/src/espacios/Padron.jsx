@@ -369,7 +369,7 @@ function Alumnos({ editar }) {
              columnas={[
                { id: 'alumno', titulo: 'Alumno', ancho: '34%', celda: (a) => <Persona nombre={`${a.apellidos}, ${a.nombres}`} detalle={`Código ${a.codigo}`} /> },
                { id: 'documento', titulo: 'Documento', nowrap: true, celda: (a) => documento(a.tipo_documento, a.numero_documento) },
-               { id: 'seccion', titulo: 'Sección', celda: (a) => a.seccion || <span className="tenue">—</span> },
+               { id: 'seccion', titulo: 'Sección', vacio: (a) => !a.seccion, celda: (a) => a.seccion || <span className="tenue">—</span> },
                { id: 'apoderados', titulo: 'Apoderados', numero: true, alinear: 'derecha', celda: (a) => a.apoderados },
                { id: 'estado', titulo: 'Estado', celda: (a) => {
                  const [tono, texto] = ESTADO_ALUMNO[estadoAlumno(a)]
@@ -584,8 +584,8 @@ function Importar() {
                      columnas={[
                        { id: 'problema', titulo: 'Problema', claseCelda: () => 'error-celda', celda: (e) => e.mensaje },
                        { id: 'hoja', titulo: 'Hoja', celda: (e) => e.hoja },
-                       { id: 'fila', titulo: 'Fila', numero: true, alinear: 'derecha', celda: (e) => e.fila ?? '—' },
-                       { id: 'columna', titulo: 'Columna', celda: (e) => e.columna || <span className="tenue">—</span> },
+                       { id: 'fila', titulo: 'Fila', numero: true, alinear: 'derecha', vacio: (e) => e.fila == null, celda: (e) => e.fila ?? '—' },
+                       { id: 'columna', titulo: 'Columna', vacio: (e) => !e.columna, celda: (e) => e.columna || <span className="tenue">—</span> },
                        { id: 'estado', titulo: 'Estado', celda: () => <Insignia tono="falta">Error</Insignia> },
                      ]} />
               {informe.total_errores > informe.errores.length && <p className="tenue">Se muestran los primeros {informe.errores.length}.</p>}

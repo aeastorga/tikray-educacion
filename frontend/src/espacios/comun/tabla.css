@@ -105,6 +105,8 @@ table.tabla { border: 0; border-radius: 0; width: 100%; table-layout: auto; back
   .tabla tbody td { display: block; height: auto; padding: 0; border: 0; min-width: 0; text-align: left; }
   .tabla tbody td.principal { grid-column: 1 / -1; font-weight: 700; }
   .tabla tbody td.ocultar-celular { grid-column: 1 / -1; }
+  /* Sin dato ("—"): en la tarjeta no se muestra la etiqueta con un guion. */
+  .tabla tbody td.vacia { display: none; }
   .tabla tbody td[data-etiqueta]::before {
     content: attr(data-etiqueta); display: block; font-size: .75rem; font-weight: 700; letter-spacing: .03em;
     text-transform: uppercase; color: var(--tenue); margin-bottom: 2px;
@@ -201,3 +203,6 @@ table.tabla { border: 0; border-radius: 0; width: 100%; table-layout: auto; back
 .lectores { margin-top: 24px; }
 .tabla tr.seleccionada td { background: var(--acento-suave); }
 .detalle-seccion { margin-top: 24px; }
+
+/* Destino de una entrada: el nombre arriba y, si es un alumno, su sección debajo y sin partirse. */
+.destino-seccion { display: block; font-size: .85rem; color: var(--tenue); white-space: nowrap; }

@@ -4,7 +4,8 @@ const INTERACTIVO = 'button, a, input, select, textarea, label, [role="menu"]'
 
 // Tabla común del panel. En celular (menos de 760 px) cada fila es una tarjeta: la primera columna arriba
 // en negrita, el resto como "etiqueta: valor" en dos columnas y las acciones abajo, a todo el ancho.
-// columnas: [{ id, titulo, celda, ancho, alinear, ocultarEnCelular, acciones, numero, nowrap, claseCelda }]
+// columnas: [{ id, titulo, celda, ancho, alinear, ocultarEnCelular, acciones, numero, nowrap, claseCelda, vacio }]
+// vacio(fila): la celda no tiene dato (muestra "—"); en modo tarjeta no se muestra.
 export default function Tabla({ columnas, filas, clave = (f) => f.id, alFila, vacio, cargando, etiqueta, claseFila }) {
   if (!cargando && filas && filas.length === 0 && vacio) return <Vacio {...vacio} />
   const lista = cargando || !filas ? null : filas
@@ -35,7 +36,7 @@ export default function Tabla({ columnas, filas, clave = (f) => f.id, alFila, va
                   onClick={abrir && ((e) => { if (!e.target.closest(INTERACTIVO)) abrir() })}
                   onKeyDown={abrir && ((e) => { if (e.key === 'Enter' && e.target === e.currentTarget) { e.preventDefault(); abrir() } })}>
                 {columnas.map((c, i) => (
-                  <td key={c.id} className={[clases(c, i), c.claseCelda?.(f)].filter(Boolean).join(' ') || undefined} data-etiqueta={c.acciones || i === 0 ? undefined : c.titulo}>
+                  <td key={c.id} className={[clases(c, i), c.claseCelda?.(f), c.vacio?.(f) && 'vacia'].filter(Boolean).join(' ') || undefined} data-etiqueta={c.acciones || i === 0 ? undefined : c.titulo}>
                     {c.celda(f)}
                   </td>
                 ))}

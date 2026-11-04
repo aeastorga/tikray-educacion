@@ -11,6 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field, ValidationError, model_validator
 from sqlalchemy import and_, case, delete, func, or_, select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from app import configuracion, cuaderno
@@ -262,16 +263,20 @@ def cancelar_programado(entrada_id: int, s: Sesion = Depends(editar), db: Sessio
 
 # --- Leer ------------------------------------------------------------------------------
 
-def _destino_texto(e: EntradaCuaderno, etiquetas: dict[int, str], nombres: dict, alumnos: dict) -> str:
+def _destino(e: EntradaCuaderno, etiquetas: dict[int, str], nombres: dict, alumnos: dict) -> dict:
+    """A quién va: `destino` es el nombre; si es un alumno, `destino_seccion` trae su sección aparte."""
+    seccion = None
     if e.alcance == "colegio":
-        return "Todo el colegio"
-    if e.alcance == "nivel":
-        return nombres["nivel"].get(e.nivel_id, "Nivel")
-    if e.alcance == "grado":
-        return nombres["grado"].get(e.grado_id, "Grado")
-    if e.alcance == "seccion":
-        return etiquetas.get(e.seccion_id, "Sección")
-    return alumnos.get(e.alumno_id, "Alumno") + (f" · {etiquetas[e.seccion_id]}" if e.seccion_id in etiquetas else "")
+        texto = "Todo el colegio"
+    elif e.alcance == "nivel":
+        texto = nombres["nivel"].get(e.nivel_id, "Nivel")
+    elif e.alcance == "grado":
+        texto = nombres["grado"].get(e.grado_id, "Grado")
+    elif e.alcance == "seccion":
+        texto = etiquetas.get(e.seccion_id, "Sección")
+    else:
+        texto, seccion = alumnos.get(e.alumno_id, "Alumno"), etiquetas.get(e.seccion_id)
+    return {"destino": texto, "destino_seccion": seccion}
 
 
 def _nombres(db: Session, cid: int, alumno_ids) -> tuple[dict, dict]:
@@ -314,7 +319,9 @@ def listar(tipo: str | None = None, estado: str | None = None, seccion_id: int |
     if pendientes:
         q = q.where(or_(EntradaCuaderno.estado == "pendiente", ultimo.is_(True)))
     cuantas = contar(db, q)
-    entradas = db.scalars(recortar(q.order_by(EntradaCuaderno.id.desc()), p)).all()
+    # Por fecha (lo programado, por su hora de salida: queda arriba); el id desempata y fija las páginas.
+    entradas = db.scalars(recortar(q.order_by(
+        func.coalesce(EntradaCuaderno.programado_para, EntradaCuaderno.creado_en).desc(), EntradaCuaderno.id.desc()), p)).all()
     ids = [e.id for e in entradas]
     conteos = {}
     if ids:
@@ -333,7 +340,7 @@ def listar(tipo: str | None = None, estado: str | None = None, seccion_id: int |
                                   .group_by(MensajeCuaderno.entrada_id)).all())
         ultimos = dict(db.execute(select(MensajeCuaderno.entrada_id, MensajeCuaderno.de_familia)
                                   .where(MensajeCuaderno.colegio_id == cid, MensajeCuaderno.entrada_id.in_(ids))
-                                  .distinct(MensajeCuaderno.entrada_id)
+                                  .ext(postgresql.distinct_on(MensajeCuaderno.entrada_id))
                                   .order_by(MensajeCuaderno.entrada_id, MensajeCuaderno.id.desc())).all())
         mensajes = {eid: (n, ultimos.get(eid, False)) for eid, n in cuantos.items()}
     etiquetas = _etiquetas_secciones(db, cid)
@@ -344,7 +351,7 @@ def listar(tipo: str | None = None, estado: str | None = None, seccion_id: int |
     for e in entradas:
         total, vistos, firmados = conteos.get(e.id, (0, 0, 0))
         n, ult_familia = mensajes.get(e.id, (0, False))
-        salida.append({**cuaderno.entrada_basica(e, categorias), "destino": _destino_texto(e, etiquetas, nombres, alumnos_n),
+        salida.append({**cuaderno.entrada_basica(e, categorias), **_destino(e, etiquetas, nombres, alumnos_n),
                        "apoderados": total, "vistos": vistos, "firmados": firmados, "respuestas": n,
                        "espera_al_colegio": e.estado == "pendiente" or ult_familia,
                        "adjuntos": len(adjuntos.get(e.id, []))})
@@ -377,7 +384,7 @@ def detalle(entrada_id: int, s: Sesion = Depends(ver), db: Session = Depends(get
              if e.apoderado_autor_id else None)
     return {
         **cuaderno.entrada_basica(e, cuaderno.categorias_de(db, cid)),
-        "destino": _destino_texto(e, etiquetas, nombres, alumnos_n), "autor": autor, "resuelto_por": personal.get(e.resuelto_por_id),
+        **_destino(e, etiquetas, nombres, alumnos_n), "autor": autor, "resuelto_por": personal.get(e.resuelto_por_id),
         "anulada_por": personal.get(e.anulada_por_id), "anulada_en": cuaderno.iso(e.anulada_en),
         "adjuntos": cuaderno.adjuntos_de(db, cid, [e.id]).get(e.id, []),
         "familias": {"total": total, "vieron": vieron, "firmaron": firmaron},
