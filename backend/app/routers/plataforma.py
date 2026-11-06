@@ -81,7 +81,7 @@ class CambioColegio(BaseModel):
     estado: Estado | None = None
     vence_en: date | None = None
     perfil: Perfil | None = None
-    modulos_contratados: list[Literal["asistencia", "cuaderno", "familias", "reuniones"]] | None = None
+    modulos_contratados: list[Literal[CONTRATABLES]] | None = None
 
     _norm_dominio = field_validator("dominio_propio")(classmethod(lambda cls, v: _dominio(v)))
 

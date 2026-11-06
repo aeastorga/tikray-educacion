@@ -215,3 +215,97 @@ def test_token_familia_no_entra_a_rutas_del_personal(client, db, dos, metodo, ru
     crear_familia(db, dos[0])
     tok = token_familia(client, "alfa")
     assert client.request(metodo, ruta, headers=auth("alfa", tok)).status_code == 401
+
+
+# --- Pensiones y caja: el colegio A no ve ni paga lo de B, ni con ids adivinados ------------------
+
+def test_pensiones_y_caja_aisladas_por_colegio(client, db):
+    import json
+
+    from app.models import CuotaAlumno, Gasto, Pago
+    from tests.test_pensiones import HOY, abrir, armar, cobrar, cuotas, preparar
+
+    ea, eb = preparar(db, "alfa"), preparar(db, "beta", dni_madre="45555555")
+    ha, hb = auth("alfa", token(client, "alfa")), auth("beta", token(client, "beta"))
+    ca, cb = armar(client, ha, ea), armar(client, hb, eb)
+    cuota_b = cuotas(client, hb, eb.a1.id)[0]
+    abrir(client, hb)
+    pago_b = cobrar(client, hb, eb.a1.id, [(cuota_b["id"], "10")]).json()
+    from app.configuracion import crear_categorias_por_defecto
+    crear_categorias_por_defecto(db, eb.colegio.id)
+    crear_categorias_por_defecto(db, ea.colegio.id)
+    db.commit()
+    cat_b = client.get("/api/caja/categorias", headers=hb).json()[0]["id"]
+    gasto_b = client.post("/api/caja/gastos", headers=hb, data={"datos": json.dumps({
+        "fecha": HOY.isoformat(), "categoria_id": cat_b, "descripcion": "Luz", "monto": "5", "medio": "efectivo"})},
+        files={"archivo": ("a.pdf", b"%PDF-1.4", "application/pdf")}).json()
+
+    # Listados: solo lo propio.
+    assert {c["id"] for c in client.get("/api/pensiones/conceptos", headers=ha).json()["conceptos"]} == {ca["id"]}
+    assert client.get("/api/caja/pagos", headers=ha).json()["total"] == 0
+    assert client.get("/api/caja/gastos", headers=ha).json()["total"] == 0
+    assert client.get("/api/caja/cajas", headers=ha).json()["total"] == 0
+    assert {a["id"] for a in client.get("/api/pensiones/alumnos", headers=ha).json()["items"]} == {
+        ea.a1.id, ea.a2.id, ea.a3.id}
+    assert client.get("/api/caja/alumnos", headers=ha, params={"q": "Ape"}).json() and all(
+        a["id"] in (ea.a1.id, ea.a2.id, ea.a3.id) for a in client.get("/api/caja/alumnos", headers=ha,
+                                                                        params={"q": "Ape"}).json())
+    assert client.get("/api/caja/reportes/ingresos", headers=ha).json()["total"] == "0.00"
+    assert {f["alumno_id"] for f in client.get("/api/pensiones/morosidad", headers=ha).json()["items"]} == {
+        ea.a1.id, ea.a2.id, ea.a3.id}
+
+    # Por id: 404 como si no existiera.
+    assert client.get(f"/api/pensiones/alumnos/{eb.a1.id}", headers=ha).status_code == 404
+    assert client.get(f"/api/caja/alumnos/{eb.a1.id}", headers=ha).status_code == 404
+    assert client.get(f"/api/caja/pagos/{pago_b['id']}", headers=ha).status_code == 404
+    assert client.get(f"/api/caja/pagos/{pago_b['id']}/recibo.pdf", headers=ha).status_code == 404
+    assert client.post(f"/api/caja/pagos/{pago_b['id']}/anular", headers=ha, json={"motivo": "xxx"}).status_code == 404
+    assert client.get(f"/api/caja/gastos/{gasto_b['id']}/archivo", headers=ha).status_code == 404
+    assert client.post(f"/api/caja/gastos/{gasto_b['id']}/anular", headers=ha, json={"motivo": "xxx"}).status_code == 404
+    assert client.put(f"/api/pensiones/conceptos/{cb['id']}", headers=ha, json={"nombre": "X", "tipo": "otro"}
+                      ).status_code == 404
+    assert client.put(f"/api/pensiones/conceptos/{cb['id']}/montos", headers=ha, json={"montos": []}).status_code == 404
+    assert client.put(f"/api/pensiones/conceptos/{ca['id']}/montos", headers=ha, json={"montos": [
+        {"grado_id": eb.g1.id, "monto": "1"}]}).status_code == 404
+    assert client.delete(f"/api/pensiones/cronograma/{cb['cronograma'][0]['id']}", headers=ha).status_code == 404
+    assert client.post("/api/pensiones/descuentos", headers=ha, json={
+        "alumno_id": eb.a1.id, "tipo": "porcentaje", "valor": "10", "motivo": "Beca"}).status_code == 404
+    assert client.post("/api/pensiones/descuentos", headers=ha, json={
+        "alumno_id": ea.a1.id, "concepto_id": cb["id"], "tipo": "porcentaje", "valor": "10", "motivo": "Beca"}
+                       ).status_code == 404
+
+    # Cobrar una cuota de B desde A: ni con el alumno de B ni mezclada con un alumno propio.
+    abrir(client, ha)
+    assert cobrar(client, ha, eb.a1.id, [(cuota_b["id"], "1")]).status_code == 404
+    assert cobrar(client, ha, ea.a1.id, [(cuota_b["id"], "1")]).status_code == 404
+    db.expire_all()
+    assert db.get(CuotaAlumno, cuota_b["id"]).pagado == 10
+    assert db.scalar(select_count(Pago, ea.colegio.id)) == 0
+    assert db.scalar(select_count(Gasto, ea.colegio.id)) == 0
+
+    # La base tampoco acepta un detalle de pago que apunte a una cuota de otro colegio.
+    from app.models import PagoDetalle
+    otro_pago = cobrar(client, ha, ea.a1.id, [(cuotas(client, ha, ea.a1.id)[0]["id"], "1")]).json()
+    db.add(PagoDetalle(colegio_id=ea.colegio.id, pago_id=otro_pago["id"], cuota_id=cuota_b["id"], monto=1))
+    with pytest.raises(IntegrityError):
+        db.commit()
+
+
+def test_familia_no_ve_pagos_de_otro_colegio(client, db):
+    from tests.test_pensiones import abrir, armar, cobrar, cuotas, preparar
+
+    ea, eb = preparar(db, "alfa"), preparar(db, "beta", dni_madre="45555555")
+    ha, hb = auth("alfa", token(client, "alfa")), auth("beta", token(client, "beta"))
+    armar(client, ha, ea)
+    armar(client, hb, eb)
+    abrir(client, hb)
+    pago_b = cobrar(client, hb, eb.a1.id, [(cuotas(client, hb, eb.a1.id)[0]["id"], "10")]).json()
+    hf = auth("alfa", token_familia(client, "alfa"))
+    assert {x["id"] for x in client.get("/api/familia/pagos", headers=hf).json()["hijos"]} == {ea.a1.id, ea.a2.id}
+    assert client.get(f"/api/familia/pagos/{pago_b['id']}/recibo.pdf", headers=hf).status_code == 404
+
+
+def select_count(modelo, colegio_id):
+    from sqlalchemy import func, select
+
+    return select(func.count()).select_from(modelo).where(modelo.colegio_id == colegio_id)

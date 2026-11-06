@@ -1,7 +1,7 @@
 // Menú lateral del panel del colegio. Solo muestra los módulos que el rol permite.
 import {
-  BookUser, CalendarCheck, History, IdCard, KeyRound, LayoutDashboard, LogOut, Menu as IconoMenu, NotebookPen, Presentation,
-  ScanLine, Settings, ShieldCheck, UsersRound, X,
+  BookUser, CalendarCheck, CircleDollarSign, History, IdCard, KeyRound, LayoutDashboard, LogOut, Menu as IconoMenu, NotebookPen, Presentation,
+  ScanLine, Settings, ShieldCheck, UsersRound, Wallet, X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
@@ -40,6 +40,7 @@ export default function Menu({ colegio, yo, puede, salir }) {
       puede('asistencia', 'editar') && { a: '/panel/asistencia/porteria', texto: 'Portería', icono: ScanLine, vivo: true },
       puede('cuaderno') && { a: '/panel/cuaderno', texto: 'Cuaderno de control', icono: NotebookPen,
         contador: datos.cuaderno_pendientes, titulo: 'pendientes de aprobar' },
+      puede('caja') && { a: '/panel/caja', texto: 'Caja', icono: Wallet },
     ]],
     ['Familias', [
       puede('familias') && { a: '/panel/familias', texto: 'Cuentas de padres', icono: UsersRound,
@@ -48,6 +49,7 @@ export default function Menu({ colegio, yo, puede, salir }) {
     ]],
     ['Colegio', [
       puede('padron') && { a: '/panel/padron', texto: 'Padrón', icono: BookUser },
+      puede('pensiones') && { a: '/panel/pensiones', texto: 'Pensiones', icono: CircleDollarSign },
       puede('personal') && { a: '/panel/personal', texto: 'Personal', icono: IdCard },
       puede('roles') && { a: '/panel/roles', texto: 'Roles y permisos', icono: ShieldCheck },
       puede('configuracion') && { a: '/panel/configuracion', texto: 'Configuración', icono: Settings },

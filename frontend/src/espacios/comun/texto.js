@@ -62,3 +62,18 @@ export function iniciales(nombre) {
   const letras = apellidos ? [n[0], a[0]] : [n[0], n[n.length - 1]]
   return letras.filter(Boolean).map((x) => x[0]).join('').toUpperCase().slice(0, 2) || '?'
 }
+
+// "S/ 1,234.50" (con espacio que no se parte). Los montos llegan del servidor como texto con dos decimales (nunca se suman aquí en float).
+export function soles(monto) {
+  if (monto == null || monto === '') return ''
+  const [entero, dec = '00'] = String(monto).split('.')
+  const signo = entero.startsWith('-') ? '-' : ''
+  return `${signo}S/\u00a0${Number(entero.replace('-', '')).toLocaleString('en-US')}.${dec.padEnd(2, '0').slice(0, 2)}`
+}
+
+// "31/03/2026" desde "2026-03-31" (una fecha de Lima, sin hora: no pasa por la zona del navegador).
+export function fechaCorta(iso) {
+  if (!iso) return ''
+  const [a, m, d] = iso.slice(0, 10).split('-')
+  return `${d}/${m}/${a}`
+}

@@ -4,6 +4,7 @@ import { api, descargar, ErrorApi, guardarToken, leerToken } from '../api.js'
 import { borrarPadron } from '../porteria/almacen.js'
 import { KeyRound, ShieldCheck, Users } from 'lucide-react'
 import Asistencia from './Asistencia.jsx'
+import Caja from './Caja.jsx'
 import {
   documento, Encabezado, Insignia, MenuAcciones, Paginacion, Persona, Tabla, usePaginaLocal,
 } from './comun/index.js'
@@ -13,6 +14,7 @@ import Menu from './Menu.jsx'
 import Cuaderno from './Cuaderno.jsx'
 import CuentasPadres from './CuentasPadres.jsx'
 import Padron from './Padron.jsx'
+import Pensiones from './Pensiones.jsx'
 import Resumen from './Resumen.jsx'
 import Reunion from './Reunion.jsx'
 
@@ -62,6 +64,8 @@ export default function PanelColegio({ colegio, setColegio }) {
             licencias={puede(yo, 'personal', 'editar')} reglas={puede(yo, 'configuracion', 'editar')} />} />
           <Route path="cuaderno/*" element={<Cuaderno editar={puede(yo, 'cuaderno', 'editar')}
             docentes={puede(yo, 'padron', 'editar')} />} />
+          {puede(yo, 'pensiones') && <Route path="pensiones/*" element={<Pensiones editar={puede(yo, 'pensiones', 'editar')} />} />}
+          {puede(yo, 'caja') && <Route path="caja/*" element={<Caja yo={yo} editar={puede(yo, 'caja', 'editar')} />} />}
           <Route path="padron/*" element={<Padron editar={puede(yo, 'padron', 'editar')} />} />
           <Route path="familias/*" element={<CuentasPadres colegio={colegio} editar={puede(yo, 'familias', 'editar')}
             reglas={puede(yo, 'configuracion', 'editar')} />} />

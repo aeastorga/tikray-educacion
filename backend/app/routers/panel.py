@@ -11,13 +11,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
-from app import cuaderno, familias
+from app import cuaderno, familias, pensiones
 from app.db import get_db
 from app.deps import Sesion, puede, usuario_actual
 from app.fechas import LIMA, hoy_lima
 from app.models import (Alumno, AnioEscolar, Apoderado, AsistenciaAlumno, AsistenciaPersonal, ColaAviso,
                         DestinoCuaderno, EntradaCuaderno, EntregaAviso, Grado, LicenciaPersonal, Marcacion, Matricula,
-                        MensajeCuaderno, Nivel, Seccion, SuscripcionPush, Turno, Usuario)
+                        MensajeCuaderno, Nivel, Pago, Seccion, SuscripcionPush, Turno, Usuario)
 from app.routers.estructura import es_dia_lectivo
 
 router = APIRouter(prefix="/panel", tags=["panel"])
@@ -273,6 +273,13 @@ def resumen(s: Sesion = Depends(usuario_actual), db: Session = Depends(get_db)) 
         salida["cuaderno"] = _cuaderno(db, s)
     if puede(s, "familias", "ver"):
         salida["familias"] = _familias(db, cid)
+    if puede(s, "pensiones", "ver"):  # solo con el módulo encendido
+        hoy = hoy_lima()
+        cobrado = db.scalar(select(func.coalesce(func.sum(Pago.total), 0)).where(
+            Pago.colegio_id == cid, Pago.anulado_en.is_(None), Pago.fecha >= hoy.replace(day=1), Pago.fecha <= hoy))
+        vencida, morosos = pensiones.deuda_vencida(db, cid, hoy)
+        salida["pensiones"] = {"cobrado_mes": str(pensiones.soles(cobrado)), "deuda_vencida": str(vencida),
+                               "morosos": morosos}
     if u.rol.es_director:
         salida["personal_activo"] = db.scalar(select(func.count()).select_from(Usuario).where(
             Usuario.colegio_id == cid, Usuario.activo))

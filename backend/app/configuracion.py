@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.fechas import LIMA
-from app.models import CategoriaIncidencia, Colegio, RegistroActividad, Usuario
+from app.models import CategoriaGasto, CategoriaIncidencia, Colegio, RegistroActividad, Usuario
 
 # Las que recibe todo colegio nuevo (y las que la migración dio a los que ya existían). Editables.
 CATEGORIAS_POR_DEFECTO = (
@@ -14,15 +14,19 @@ CATEGORIAS_POR_DEFECTO = (
     ("Puntualidad", "mejora"), ("Conducta", "mejora"), ("Tareas y materiales", "mejora"),
 )
 
+CATEGORIAS_GASTO_POR_DEFECTO = ("Servicios", "Materiales", "Mantenimiento", "Planilla", "Otros")
+
 # Tipo de la cola de avisos -> interruptor del director y módulo del que depende.
 AVISO_DE_COLA = {"ingreso": ("ingreso", "asistencia"), "tarde": ("tardanza", "asistencia"),
                  "falta": ("falta", "asistencia"), "salida": ("salida", "asistencia"),
-                 "cuaderno": ("cuaderno", "cuaderno")}
+                 "cuaderno": ("cuaderno", "cuaderno"), "cobro": ("cobro", "pensiones")}
 
 
 def crear_categorias_por_defecto(db: Session, colegio_id: int) -> None:
     db.add_all([CategoriaIncidencia(colegio_id=colegio_id, nombre=n, tipo=t, orden=i)
                 for i, (n, t) in enumerate(CATEGORIAS_POR_DEFECTO, 1)])
+    db.add_all([CategoriaGasto(colegio_id=colegio_id, nombre=n, orden=i)
+                for i, n in enumerate(CATEGORIAS_GASTO_POR_DEFECTO, 1)])
 
 
 def aviso_permitido(colegio: Colegio, tipo_cola: str) -> bool:

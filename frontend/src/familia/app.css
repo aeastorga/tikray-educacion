@@ -113,7 +113,7 @@
 
 /* Barra inferior */
 .barra-inferior {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: grid; grid-template-columns: repeat(4, 1fr);
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
   background: var(--superficie); border-top: 1px solid var(--borde); padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
 }
 .barra-inferior a {
@@ -134,3 +134,15 @@
 @media (prefers-color-scheme: dark) {
   [data-tema="auto"] .barra-inferior a.active, [data-tema="auto"] .chip-estado.a-tiempo, [data-tema="auto"] .caja-estado.a-tiempo, [data-tema="auto"] .por-firmar-icono { color: var(--acento-luz); }
 }
+
+/* Pagos */
+.resumen-pagos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.resumen-pagos > div { display: grid; gap: 2px; padding: 12px; border-radius: 14px; background: var(--fondo); }
+.resumen-pagos b { font-family: var(--letra-titulo); font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+.resumen-pagos .vencido { background: var(--falta-fondo); }
+.resumen-pagos .vencido b, .resumen-pagos .vencido span { color: var(--falta-texto); }
+.cuotas-familia li, .recibos-familia li { grid-template-columns: minmax(0, 1fr) auto auto; }
+.cuotas-familia li > span:first-child, .recibos-familia li > span:first-child { display: grid; gap: 2px; min-width: 0; }
+.cuotas-familia .numero, .recibos-familia .numero { display: grid; justify-items: end; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pagos-hijo h3 { margin: 16px 0 4px; font-size: 1rem; }
+.nota-pagos { margin: 12px 0 0; font-size: .85rem; }

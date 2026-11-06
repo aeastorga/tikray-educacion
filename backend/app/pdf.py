@@ -1,6 +1,7 @@
-"""PDF de carnets (con QR) y de cartas de acceso del personal."""
+"""PDF de carnets (con QR), cartas de acceso del personal, fichas de la reunión y recibos de caja."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from io import BytesIO
 
 from reportlab.graphics import renderPDF
@@ -353,3 +354,98 @@ def _recortar(texto: str, fuente: str, tamano: float, ancho: float) -> str:
     while texto and stringWidth(texto, fuente, tamano) > ancho:
         texto = texto[:-2] + "…"
     return texto
+
+
+@dataclass
+class Recibo:
+    numero: str
+    fecha: datetime  # UTC; se muestra en hora de Lima
+    alumno: str
+    documento: str
+    medio: str
+    operacion: str | None
+    cajero: str
+    lineas: list[tuple[str, str]]  # (detalle, monto con dos decimales)
+    total: str
+    anulado: str | None = None  # motivo, si se anuló
+
+
+def recibo(imagen: Imagen, r: Recibo) -> bytes:
+    """Recibo interno del colegio (no es comprobante de SUNAT): media hoja A4 con logo y colores del colegio."""
+    from app.fechas import LIMA
+
+    salida = BytesIO()
+    c = Canvas(salida, pagesize=A4)
+    c.setTitle(f"Recibo {r.numero} · {imagen.nombre}")
+    ancho, alto = A4
+    color = HexColor(imagen.color_primario)
+    logo = _logo(imagen)
+    izq, util = 20 * mm, ancho - 40 * mm
+    y = alto - 20 * mm
+    if logo:
+        c.drawImage(logo, izq, y - 16 * mm, 16 * mm, 16 * mm, preserveAspectRatio=True, mask="auto")
+    x = izq + (20 * mm if logo else 0)
+    c.setFillColor(color)
+    c.setFont("Helvetica-Bold", _ajustar(imagen.nombre, "Helvetica-Bold", 15, util - 75 * mm))
+    c.drawString(x, y - 7 * mm, imagen.nombre)
+    c.setFillColorRGB(0.35, 0.35, 0.35)
+    c.setFont("Helvetica", 9)
+    c.drawString(x, y - 13 * mm, "Recibo interno de caja (no es comprobante de pago electrónico)")
+    # Recuadro con el número.
+    c.setStrokeColor(color)
+    c.setLineWidth(1.2)
+    c.roundRect(ancho - izq - 55 * mm, y - 17 * mm, 55 * mm, 17 * mm, 2.5 * mm)
+    c.setFillColor(color)
+    c.setFont("Helvetica-Bold", 10)
+    c.drawCentredString(ancho - izq - 27.5 * mm, y - 6.5 * mm, "RECIBO")
+    c.setFont("Courier-Bold", 13)
+    c.drawCentredString(ancho - izq - 27.5 * mm, y - 13 * mm, r.numero)
+
+    y -= 28 * mm
+    c.setFillColorRGB(0.1, 0.1, 0.1)
+    local = r.fecha.astimezone(LIMA)
+    datos = [("Fecha", local.strftime("%d/%m/%Y %H:%M")), ("Alumno(a)", r.alumno), ("Documento", r.documento),
+             ("Medio de pago", r.medio + (f" · Operación {r.operacion}" if r.operacion else "")),
+             ("Cajero(a)", r.cajero)]
+    for etiqueta, valor in datos:
+        c.setFont("Helvetica", 9.5)
+        c.setFillColorRGB(0.4, 0.4, 0.4)
+        c.drawString(izq, y, etiqueta)
+        c.setFont("Helvetica-Bold", 10)
+        c.setFillColorRGB(0.1, 0.1, 0.1)
+        c.drawString(izq + 32 * mm, y, _recortar(valor, "Helvetica-Bold", 10, util - 32 * mm))
+        y -= 6 * mm
+
+    y -= 4 * mm
+    c.setFillColor(color)
+    c.rect(izq, y - 2 * mm, util, 7 * mm, stroke=0, fill=1)
+    c.setFillColor(white)
+    c.setFont("Helvetica-Bold", 9.5)
+    c.drawString(izq + 2 * mm, y, "Concepto")
+    c.drawRightString(ancho - izq - 2 * mm, y, "Importe (S/)")
+    y -= 8 * mm
+    c.setFillColorRGB(0.1, 0.1, 0.1)
+    c.setStrokeColorRGB(0.85, 0.85, 0.85)
+    c.setLineWidth(0.5)
+    for detalle, monto in r.lineas:
+        c.setFont("Helvetica", 10)
+        c.drawString(izq + 2 * mm, y, _recortar(detalle, "Helvetica", 10, util - 35 * mm))
+        c.drawRightString(ancho - izq - 2 * mm, y, f"{float(monto):,.2f}")
+        c.line(izq, y - 2.5 * mm, ancho - izq, y - 2.5 * mm)
+        y -= 7 * mm
+    c.setFont("Helvetica-Bold", 11.5)
+    c.drawString(izq + 2 * mm, y - 1 * mm, "Total")
+    c.drawRightString(ancho - izq - 2 * mm, y - 1 * mm, f"S/ {float(r.total):,.2f}")
+
+    if r.anulado:
+        c.saveState()
+        c.setFillColorRGB(0.8, 0.1, 0.1)
+        c.setFont("Helvetica-Bold", 44)
+        c.translate(ancho / 2, alto - 95 * mm)
+        c.rotate(18)
+        c.drawCentredString(0, 0, "ANULADO")
+        c.setFont("Helvetica", 10)
+        c.drawCentredString(0, -8 * mm, _recortar(f"Motivo: {r.anulado}", "Helvetica", 10, util))
+        c.restoreState()
+    c.save()
+    return salida.getvalue()

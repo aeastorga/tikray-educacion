@@ -196,9 +196,14 @@ class AlumnoApoderado(ConColegio, Base):
     __table_args__ = (
         _fk("alumno_id", "alumno", "CASCADE"),
         _fk("apoderado_id", "apoderado", "CASCADE"),
+        # Un solo responsable de pago por alumno (si nadie está marcado, vale el primero: ver pensiones).
+        Index("uq_alumno_apoderado_responsable", "colegio_id", "alumno_id", unique=True,
+              postgresql_where=text("responsable_pago")),
     )
 
     alumno_id: Mapped[int] = mapped_column(primary_key=True)
     apoderado_id: Mapped[int] = mapped_column(primary_key=True)
     parentesco: Mapped[str] = mapped_column(String(30))
     recibe_avisos: Mapped[bool] = mapped_column(default=True)
+    # Ve la deuda del alumno y recibe los avisos de cobro.
+    responsable_pago: Mapped[bool] = mapped_column(default=False, server_default="false")
