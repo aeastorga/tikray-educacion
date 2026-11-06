@@ -1,0 +1,75 @@
+/* Pensiones y caja. Solo variables de estilos.css: así sirve en tema claro y oscuro. */
+
+.pensiones h3 { margin: 24px 0 8px; }
+.pensiones .tarjeta-panel h3 { margin-top: 0; }
+.pensiones .tarjeta-panel { margin-bottom: 16px; }
+
+tr.atenuada td, li.atenuada { opacity: 0.6; }
+.sin-borde { border: 0; padding: 0; margin: 0; min-width: 0; }
+
+.form-pensiones { display: grid; gap: 12px; }
+.form-pensiones label { display: grid; gap: 4px; }
+.form-pensiones .acciones { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+
+/* Conceptos: cabecera con menú y dos columnas (montos | cronograma). */
+.concepto-cabeza { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.concepto-cabeza h3 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.concepto-cuerpo { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 12px; }
+.concepto-cuerpo h4 { margin: 0 0 8px; font-size: 0.95rem; }
+.concepto .form-pensiones { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--borde); }
+
+.lista-montos { list-style: none; margin: 0; padding: 0; }
+.lista-montos li {
+  display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid var(--borde);
+}
+.lista-montos li:last-child { border-bottom: 0; }
+.lista-montos li > span:first-child { flex: 1 1 140px; }
+.lista-montos b { font-variant-numeric: tabular-nums; }
+.enlace-chico { font-size: 0.875rem; min-height: var(--toque); padding: 0 6px; }
+
+.montos-nivel, .montos-cobro {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px;
+  border: 1px solid var(--borde); border-radius: var(--radio-chico); padding: 12px 16px; margin: 0;
+}
+.montos-nivel legend, .montos-cobro legend { font-weight: 600; padding: 0 6px; }
+.montos-cobro { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+
+/* Caja */
+.caja-resumen .cifras { margin-bottom: 12px; }
+.lista-alumnos { list-style: none; margin: 8px 0 0; padding: 0; }
+.fila-alumno {
+  width: 100%; min-height: var(--toque); text-align: left; background: none; color: inherit; font: inherit;
+  border: 0; border-bottom: 1px solid var(--borde); padding: 10px 4px; cursor: pointer;
+}
+.fila-alumno:hover, .fila-alumno:focus-visible { background: var(--acento-suave); }
+.cobrar h3 { margin-top: 12px; }
+.cobrar-total {
+  display: flex; justify-content: space-between; align-items: baseline; padding: 12px 16px;
+  border-radius: var(--radio-chico); background: var(--acento-suave);
+}
+.cobrar-total b { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.recibo-listo { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center;
+  border-left: 4px solid var(--bien); }
+.recibo-listo .acciones { display: flex; gap: 12px; align-items: center; }
+
+.reporte-cabeza { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; margin-top: 24px; }
+.reporte-cabeza h3 { margin: 0; }
+.reporte-cabeza .acciones { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+
+@media (max-width: 760px) {
+  .concepto-cuerpo { grid-template-columns: 1fr; }
+}
+
+.cuota-texto { display: inline-grid; gap: 2px; }
+.tabla .cuota-elegir, .cuota-elegir { display: flex; flex-direction: row; color: var(--texto); font-size: inherit; font-weight: inherit; gap: 12px; align-items: center; cursor: pointer; min-height: var(--toque); }
+.cuota-elegir input { width: 22px; height: 22px; flex: none; margin: 0; }
+
+/* Fechas dentro de los filtros: ocupan su caja y, en celular, van de a dos por fila. */
+.pensiones .selector input { width: 100%; }
+.pensiones .filtros .selector:has(input[type="date"]) { flex: 0 1 170px; }
+.reporte-cabeza .selector { flex: 0 0 200px; }
+@media (max-width: 760px) {
+  .pensiones .filtros .selector:has(input[type="date"]) { flex: 1 1 140px; }
+  .reporte-cabeza .selector { flex: 1 1 160px; }
+}

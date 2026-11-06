@@ -8,11 +8,15 @@ from app.models.familias import (CambioApoderado, ConfigFamilias, Consentimiento
                                  EntregaAviso, InvitacionFamilia, PasskeyFamilia, RetoUsado, SuscripcionPush)
 from app.models.padron import (AlumnoApoderado, Alumno, AnioEscolar, Apoderado, DiaNoLectivo, Grado,
                                Matricula, Nivel, Seccion, Turno)
+from app.models.pensiones import (CajaSesion, CategoriaGasto, ConceptoCobro, ConfigPensiones, CuotaAlumno,
+                                  CuotaProgramada, DescuentoAlumno, Gasto, MontoConcepto, Pago, PagoDetalle)
 from app.models.personal import PermisoRol, Rol, Usuario
 from app.models.plataforma import AdminPlataforma, IntentoFallido
 from app.models.reunion import FichaReunion, ReunionPadres
 
 __all__ = [
+    "CajaSesion", "CategoriaGasto", "ConceptoCobro", "ConfigPensiones", "CuotaAlumno", "CuotaProgramada",
+    "DescuentoAlumno", "Gasto", "MontoConcepto", "Pago", "PagoDetalle",
     "CategoriaIncidencia", "PlantillaComunicado", "RegistroActividad",
     "FichaReunion", "ReunionPadres",
     "AdjuntoCuaderno", "DestinoCuaderno", "EntradaCuaderno", "MensajeCuaderno", "SeccionDocente",

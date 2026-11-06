@@ -10,9 +10,11 @@
     python -m app.cli demo [subdominio] [--alumnos-por-seccion N]
 """
 
+import calendar
 import random
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
+from decimal import Decimal
 
 from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert
@@ -27,6 +29,7 @@ from app.models import (AdjuntoCuaderno, Alumno, AlumnoApoderado, AnioEscolar, A
                         DestinoCuaderno, DiaNoLectivo, EntradaCuaderno, Grado, LicenciaPersonal, Matricula,
                         MensajeCuaderno, Nivel, PermisoRol, PlantillaComunicado, Rol, Seccion, SeccionDocente, Turno,
                         Usuario)
+from app.models.pensiones import MEDIOS
 from app.modulos import MODULOS
 from app.seguridad import hashear_clave
 
@@ -153,7 +156,7 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
     permisos = {
         "Subdirección": {m: "ver" for m in MODULOS} | {"cuaderno": "editar", "asistencia": "editar"},
         "Secretaría": {"padron": "editar", "familias": "editar", "cuaderno": "editar", "asistencia": "ver", "reuniones": "ver",
-                       "personal": "ver"},
+                       "personal": "ver", "pensiones": "ver", "caja": "editar"},
         "Portería": {"asistencia": "editar"},
         "Docente": {"cuaderno": "editar", "asistencia": "ver", "reuniones": "editar"},
     }
@@ -171,7 +174,7 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
 
     director = persona(DIRECTOR, "Carmen", "Salazar Ríos", "Director", None)
     persona("90000002", "Raúl", "Medina Paz", "Subdirección")
-    persona("90000003", "Gladys", "Torres Vega", "Secretaría")
+    secretaria = persona("90000003", "Gladys", "Torres Vega", "Secretaría")
     portero = persona("90000004", "Hugo", "Ramos Ccama", "Portería")
     docentes = [persona(f"9100{i:04d}", rnd.choice(ADULTOS), f"{rnd.choice(APELLIDOS)} {rnd.choice(APELLIDOS)}",
                         "Docente", turno) for i, (_, _, turno) in enumerate(secciones, start=1)]
@@ -184,6 +187,7 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
         "porteria": {"usuario": portero.usuario, "clave": CLAVE},
         "docente": {"usuario": docentes[3].usuario, "clave": CLAVE,
                     "seccion": secciones[3][1]},
+        "caja": {"usuario": secretaria.usuario, "clave": CLAVE},
         "familia": {"documento": None, "pin": PIN},
     }
 
@@ -283,6 +287,8 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
 
     # --- Cuaderno ---
     _cuaderno(db, rnd, cid, director, docentes, secciones, alumnos, dias, hoy)
+    # --- Pensiones y caja ---
+    _pensiones(db, rnd, cid, anio, secretaria, director, hoy)
     return res
 
 
@@ -408,6 +414,131 @@ def _cuaderno(db, rnd, cid, director, docentes, secciones, alumnos, dias, hoy) -
                                                                DestinoCuaderno.entrada_id == ultima.id).limit(1))
     db.add(MensajeCuaderno(colegio_id=cid, entrada_id=ultima.id, apoderado_id=apo, de_familia=True,
                            cuerpo="Gracias por avisar. Esta semana la revisamos juntos en casa."))
+
+
+MONTOS_DEMO = {"Inicial": ("250.00", "280.00"), "Primaria": ("250.00", "320.50"), "Secundaria": ("300.00", "360.75")}
+MEDIOS_DEMO = ("efectivo", "efectivo", "yape", "yape", "plin", "transferencia", "tarjeta")
+GASTOS_DEMO = [("Servicios", "Recibo de luz", 380), ("Servicios", "Internet", 189.9), ("Materiales", "Papel bond y tóner", 245.5),
+               ("Mantenimiento", "Pintura de aulas", 640), ("Planilla", "Pago de auxiliar de limpieza", 1130),
+               ("Otros", "Movilidad para trámite en la UGEL", 35.5), ("Materiales", "Plumones y mota", 96.4),
+               ("Servicios", "Recibo de agua", 142.3)]
+
+
+def _pensiones(db: Session, rnd: random.Random, cid: int, anio: AnioEscolar, cajera: Usuario, director: Usuario,
+               hoy: date) -> None:
+    """Matrícula y diez pensiones (marzo a diciembre) por nivel, cuotas generadas y pagos ficticios variados:
+    la mayoría al día, algunos con pagos parciales y algunos morosos, con medios mezclados. Cada día con
+    cobros tiene su caja cerrada. Sin comprobantes electrónicos."""
+    from app import pensiones
+    from app.models import (CajaSesion, CategoriaGasto, ConceptoCobro, CuotaAlumno, CuotaProgramada,
+                            DescuentoAlumno, Gasto, MontoConcepto, Pago, PagoDetalle)
+    from app.routers.pensiones import MESES
+
+    matricula = ConceptoCobro(colegio_id=cid, anio_id=anio.id, nombre="Matrícula", tipo="matricula", igv="inafecto")
+    pension = ConceptoCobro(colegio_id=cid, anio_id=anio.id, nombre="Pensión", tipo="pension", igv="inafecto")
+    db.add_all([matricula, pension])
+    db.flush()
+    niveles = {n.nombre: n.id for n in db.scalars(select(Nivel).where(Nivel.colegio_id == cid))}
+    for nivel, (m_mat, m_pen) in MONTOS_DEMO.items():
+        db.add_all([MontoConcepto(colegio_id=cid, concepto_id=matricula.id, nivel_id=niveles[nivel], monto=m_mat),
+                    MontoConcepto(colegio_id=cid, concepto_id=pension.id, nivel_id=niveles[nivel], monto=m_pen)])
+    db.add(CuotaProgramada(colegio_id=cid, concepto_id=matricula.id, numero=1, mes="Febrero",
+                           vence=date(anio.anio, 2, 28)))
+    for i, mes in enumerate(range(3, 13), start=1):
+        db.add(CuotaProgramada(colegio_id=cid, concepto_id=pension.id, numero=i, mes=MESES[mes - 1],
+                               vence=date(anio.anio, mes, calendar.monthrange(anio.anio, mes)[1])))
+    db.flush()
+    # Becas: unos pocos con descuento en la pensión (antes de generar, para que las cuotas ya lo traigan).
+    alumnos_ids = list(db.scalars(select(Alumno.id).where(Alumno.colegio_id == cid).order_by(Alumno.id)))
+    for alumno_id, (valor, motivo) in zip(rnd.sample(alumnos_ids, 6), [("10", "Hermanos en el colegio")] * 4
+                                          + [("50", "Beca por rendimiento"), ("100", "Beca integral")]):
+        db.add(DescuentoAlumno(colegio_id=cid, anio_id=anio.id, alumno_id=alumno_id, concepto_id=pension.id,
+                               tipo="porcentaje", valor=valor, motivo=motivo, dado_por_id=director.id,
+                               dado_por=f"{director.nombres} {director.apellidos}"))
+    db.flush()
+    pensiones.generar_cuotas(db, cid, anio.id)
+
+    # Qué pagó cada alumno: 70 % al día, 15 % con un pago parcial, 15 % moroso (debe una a tres cuotas).
+    cuotas = db.execute(select(CuotaAlumno, CuotaProgramada.vence).join(
+        CuotaProgramada, (CuotaProgramada.colegio_id == CuotaAlumno.colegio_id)
+        & (CuotaProgramada.id == CuotaAlumno.cuota_programada_id))
+        .where(CuotaAlumno.colegio_id == cid).order_by(CuotaAlumno.alumno_id, CuotaProgramada.vence)).all()
+    por_alumno: dict[int, list] = {}
+    for c, vence in cuotas:
+        por_alumno.setdefault(c.alumno_id, []).append((c, vence))
+    cobros: list[tuple[date, int, list[tuple[CuotaAlumno, Decimal]]]] = []
+    for alumno_id, lista in por_alumno.items():
+        vencidas = [(c, v) for c, v in lista if v < hoy and c.monto - c.descuento > 0]
+        perfil = rnd.random()
+        deja = rnd.randint(1, 3) if perfil > 0.85 else 0
+        pagables = vencidas[:len(vencidas) - deja] if deja else vencidas
+        for i, (c, vence) in enumerate(pagables):
+            neto = c.monto - c.descuento
+            parcial = 0.70 < perfil <= 0.85 and i == len(pagables) - 1
+            monto = pensiones.soles(neto * Decimal(rnd.choice(("0.3", "0.5", "0.6")))) if parcial else neto
+            dia = min(hoy - timedelta(days=1), vence - timedelta(days=rnd.randint(0, 12)))
+            cobros.append((dia, alumno_id, [(c, monto)]))
+        # Algunas familias pagan la siguiente por adelantado.
+        futuras = [(c, v) for c, v in lista if v >= hoy and c.monto - c.descuento > 0]
+        if futuras and perfil < 0.15:
+            c, _ = futuras[0]
+            cobros.append((hoy - timedelta(days=rnd.randint(1, 5)), alumno_id, [(c, c.monto - c.descuento)]))
+    cobros.sort(key=lambda x: x[0])
+
+    cajero = f"{cajera.nombres} {cajera.apellidos}"
+    cfg = pensiones.config(db, cid)
+    cajas: dict[date, CajaSesion] = {}
+    totales: dict[date, dict[str, Decimal]] = {}
+    filas_pago, detalles = [], []
+    for dia, alumno_id, lineas in cobros:
+        if dia not in totales:
+            totales[dia] = {m: Decimal(0) for m in MEDIOS}
+        medio = rnd.choice(MEDIOS_DEMO)
+        total = sum((m for _, m in lineas), Decimal(0))
+        totales[dia][medio] += total
+        cfg.correlativo_recibo += 1
+        filas_pago.append({"colegio_id": cid, "alumno_id": alumno_id, "cajero_id": cajera.id, "cajero": cajero,
+                           "fecha": dia, "momento": hora_escolar(rnd, dia, datetime.now(UTC)), "medio": medio,
+                           "numero_operacion": None if medio == "efectivo" else f"{rnd.randint(10**7, 10**8 - 1)}"
+                                                                              f"{cfg.correlativo_recibo}",
+                           "total": total, "serie": cfg.serie_recibo, "correlativo": cfg.correlativo_recibo,
+                           "_dia": dia})
+        detalles.append(lineas)
+    for dia, suma in totales.items():  # cada día, su caja ya cerrada (a veces con S/ 10 de diferencia)
+        efectivo = suma["efectivo"]
+        cajas[dia] = CajaSesion(colegio_id=cid, usuario_id=cajera.id, cajero=cajero, fecha=dia,
+                                abierta_en=datetime.combine(dia, time(7, 30), LIMA),
+                                cerrada_en=datetime.combine(dia, time(17, 0), LIMA),
+                                totales={m: str(v) for m, v in suma.items()},
+                                contado=efectivo - (Decimal("10.00") if rnd.random() < 0.05 and efectivo >= 10 else 0))
+    db.add_all(cajas.values())
+    db.flush()
+    for f in filas_pago:
+        f["caja_id"] = cajas[f.pop("_dia")].id
+    if filas_pago:
+        ids = db.scalars(insert(Pago).returning(Pago.id, sort_by_parameter_order=True), filas_pago).all()
+        filas_det = []
+        for pago_id, lineas in zip(ids, detalles):
+            for c, monto in lineas:
+                c.pagado += monto
+                filas_det.append({"colegio_id": cid, "pago_id": pago_id, "cuota_id": c.id, "monto": monto})
+        db.execute(insert(PagoDetalle), filas_det)
+    # Un pago anulado por error de digitación (queda visible como anulado).
+    if filas_pago:
+        p = db.get(Pago, ids[-1])
+        for d in db.scalars(select(PagoDetalle).where(PagoDetalle.colegio_id == cid, PagoDetalle.pago_id == p.id)):
+            db.get(CuotaAlumno, d.cuota_id).pagado -= d.monto
+        p.anulado_en, p.anulado_motivo = datetime.combine(p.fecha, time(17, 30), LIMA), "Se registró al alumno equivocado"
+        p.anulado_por = f"{director.nombres} {director.apellidos}"
+
+    # Gastos del último mes y medio.
+    categorias = {c.nombre: c.id for c in db.scalars(select(CategoriaGasto).where(CategoriaGasto.colegio_id == cid))}
+    for i, (cat, desc, monto) in enumerate(GASTOS_DEMO):
+        db.add(Gasto(colegio_id=cid, fecha=hoy - timedelta(days=3 + i * 5), categoria_id=categorias[cat],
+                     descripcion=desc, monto=pensiones.soles(monto), medio=rnd.choice(("efectivo", "transferencia")),
+                     comprobante_tipo=rnd.choice(("Boleta", "Factura", "Recibo")),
+                     comprobante_numero=f"00{rnd.randint(1, 9)}-{rnd.randint(1000, 99999)}",
+                     registrado_por_id=director.id, registrado_por=f"{director.nombres} {director.apellidos}"))
 
 
 def crear_o_reiniciar(db: Session, subdominio: str = "demo", nombre: str = "Colegio Demo Tikray",

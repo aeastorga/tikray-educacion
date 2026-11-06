@@ -7,12 +7,13 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import asistencia as reglas_asistencia
-from app import avisos
+from app import avisos, pensiones
 from app.config import get_settings
 from app.deps import colegio_del_host, familia_sesion, usuario_actual, usuario_sesion
 from app.proteccion import ip_cliente
-from app.routers import (alumnos, asistencia, auth, colegio, configuracion, cuaderno, estructura, familia, familia_cuaderno, familias,
-                         importacion, panel, personal, plataforma, reunion, roles)
+from app.routers import (alumnos, asistencia, auth, caja, colegio, configuracion, cuaderno, estructura, familia,
+                         familia_cuaderno, familia_pagos, familias, importacion, panel, pensiones as rutas_pensiones,
+                         personal, plataforma, reunion, roles)
 
 
 def crear_app() -> FastAPI:
@@ -25,6 +26,7 @@ def crear_app() -> FastAPI:
             threading.Thread(target=reglas_asistencia.bucle_faltas, args=(parar,), daemon=True,
                              name="faltas").start()
             threading.Thread(target=avisos.bucle_avisos, args=(parar,), daemon=True, name="avisos").start()
+            threading.Thread(target=pensiones.bucle_cobros, args=(parar,), daemon=True, name="cobros").start()
         yield
         parar.set()
 
@@ -46,12 +48,13 @@ def crear_app() -> FastAPI:
     api_familia = APIRouter(dependencies=[Depends(familia_sesion)])
     api_familia.include_router(familia.privado)
     api_familia.include_router(familia_cuaderno.privado)
+    api_familia.include_router(familia_pagos.privado)
 
     # Sesión completa: token del mismo colegio del Host y clave ya cambiada.
     api_privada = APIRouter(dependencies=[Depends(usuario_actual)])
     for r in (colegio.privado, roles.router, personal.router, estructura.router, alumnos.router,
               importacion.router, asistencia.router, familias.router, cuaderno.router, panel.router,
-              reunion.router, configuracion.router):
+              reunion.router, configuracion.router, rutas_pensiones.router, caja.router):
         api_privada.include_router(r)
 
     for r in (api_publica, api_sesion, api_familia, api_privada):

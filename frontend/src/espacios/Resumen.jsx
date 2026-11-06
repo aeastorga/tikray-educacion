@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api.js'
 import { hora12, LIMA, saludo } from '../tema.js'
-import { plural } from './comun/index.js'
+import { plural, soles } from './comun/index.js'
 import './inicio.css'
 
 const TIPOS = { justificacion: 'Justificaciones', permiso_salida: 'Permisos de salida', citacion: 'Citaciones',
@@ -60,7 +60,7 @@ export default function Resumen({ yo, puede }) {
 
 function Tablero({ d, puede }) {
   const a = d.asistencia, c = d.cuaderno, f = d.familias
-  if (!a && !c && !f) return <p className="tenue">Elija un módulo en el menú.</p>
+  if (!a && !c && !f && !d.pensiones) return <p className="tenue">Elija un módulo en el menú.</p>
   return (
     <>
       {(a || f) && (
@@ -78,6 +78,7 @@ function Tablero({ d, puede }) {
       <div className="fila fila-3">
         {d.personal && <Personal p={d.personal} />}
         {c && <CuadernoHoy c={c} />}
+        {d.pensiones && <PensionesMes p={d.pensiones} />}
         <Accesos puede={puede} />
       </div>
     </>
@@ -338,6 +339,25 @@ function CuadernoHoy({ c }) {
           ))}
         </ul>
       )}
+    </section>
+  )
+}
+
+// La deuda no bloquea nada (Ley 29947): esta tarjeta solo informa.
+function PensionesMes({ p }) {
+  return (
+    <section className="caja" aria-labelledby="t-pensiones">
+      <div className="caja-cabeza">
+        <h2 id="t-pensiones">Pensiones</h2>
+        <Link to="/panel/pensiones/morosidad" className="enlace-chico">Morosidad</Link>
+      </div>
+      <p className="cifra-grande cifra-soles"><b>{soles(p.cobrado_mes)}</b> <span>cobrado este mes</span></p>
+      <Link to="/panel/pensiones/morosidad" className="fila-enlace">
+        <span>Deuda vencida</span><b className={Number(p.deuda_vencida) ? 'contador tarde' : 'contador'}>{soles(p.deuda_vencida)}</b>
+      </Link>
+      <Link to="/panel/pensiones/morosidad" className="fila-enlace">
+        <span>Alumnos con deuda vencida</span><b className="contador">{p.morosos}</b>
+      </Link>
     </section>
   )
 }

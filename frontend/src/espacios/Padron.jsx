@@ -446,7 +446,8 @@ function FichaAlumno({ id, editar, secciones, cerrar }) {
   if (!a) return <MensajeError texto={error} />
   if (editando) return <FormAlumno alumno={a} secciones={secciones} cerrar={() => { setEditando(false); cargar() }} />
 
-  const apoVacio = { tipo_documento: 'DNI', numero_documento: '', nombres: '', apellidos: '', celular: '', correo: '', parentesco: 'Madre', recibe_avisos: true }
+  const apoVacio = { tipo_documento: 'DNI', numero_documento: '', nombres: '', apellidos: '', celular: '', correo: '', parentesco: 'Madre', recibe_avisos: true,
+    responsable_pago: false }
 
   async function guardarApo(e) {
     e.preventDefault()
@@ -454,6 +455,18 @@ function FichaAlumno({ id, editar, secciones, cerrar }) {
     try {
       await api(`/api/padron/alumnos/${id}/apoderados`, { metodo: 'POST', datos: { ...apo, celular: apo.celular || null, correo: apo.correo || null } })
       setApo(null)
+      cargar()
+    } catch (err) { setError(err.message) }
+  }
+
+  // Ve la deuda en la app y recibe los avisos de cobro. Marcar a uno desmarca a los demás.
+  async function marcarResponsable(p) {
+    setError(null)
+    try {
+      await api(`/api/padron/alumnos/${id}/apoderados`, { metodo: 'POST', datos: {
+        tipo_documento: p.tipo_documento, numero_documento: p.numero_documento, nombres: p.nombres,
+        apellidos: p.apellidos, celular: p.celular || null, correo: p.correo || null, parentesco: p.parentesco,
+        recibe_avisos: p.recibe_avisos, responsable_pago: true } })
       cargar()
     } catch (err) { setError(err.message) }
   }
@@ -493,6 +506,9 @@ function FichaAlumno({ id, editar, secciones, cerrar }) {
           <li key={p.id}>
             <b>{p.apellidos}, {p.nombres}</b> · {p.parentesco} · {p.tipo_documento} {p.numero_documento}
             {p.celular && <> · {p.celular}</>}
+            {p.responsable_pago && <> <Insignia tono="info" titulo="Ve la deuda en la app y recibe los avisos de cobro">Responsable de pago</Insignia></>}
+            {editar && !p.responsable_pago && a.apoderados.length > 1 && (
+              <button className="enlace" onClick={() => marcarResponsable(p)}>Hacer responsable de pago</button>)}
             {editar && <button className="enlace" onClick={() => quitarApo(p)}>Quitar</button>}
           </li>
         ))}
@@ -507,6 +523,10 @@ function FichaAlumno({ id, editar, secciones, cerrar }) {
             <input placeholder="Celular" inputMode="tel" value={apo.celular} onChange={(e) => setApo({ ...apo, celular: e.target.value })} />
             <input placeholder="Correo" type="email" value={apo.correo} onChange={(e) => setApo({ ...apo, correo: e.target.value })} />
           </div>
+          <label className="check">
+            <input type="checkbox" checked={apo.responsable_pago} onChange={(e) => setApo({ ...apo, responsable_pago: e.target.checked })} />
+            Responsable de pago (ve la deuda y recibe los avisos de cobro)
+          </label>
           <div className="acciones">
             <button className="boton">Guardar</button>
             <button type="button" className="enlace" onClick={() => setApo(null)}>Cancelar</button>

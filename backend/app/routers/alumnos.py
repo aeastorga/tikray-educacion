@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app import codigos, familias, validacion
+from app import codigos, familias, pensiones, validacion
 from app.comun import guardar, obtener
 from app.configuracion import anotar
 from app.db import get_db
@@ -52,19 +52,23 @@ class DatosApoderado(ConDocumento):
 class Vinculo(DatosApoderado):
     parentesco: str = Field(min_length=1, max_length=30)
     recibe_avisos: bool = True
+    # Ve la deuda y recibe los avisos de cobro. Marcar a uno desmarca a los demás.
+    responsable_pago: bool = False
 
 
 def matricular(db: Session, colegio_id: int, alumno_id: int, seccion: Seccion) -> bool:
-    """Matricula en la sección (o cambia de sección dentro del mismo año). True si cambió algo."""
+    """Matricula en la sección (o cambia de sección dentro del mismo año). True si cambió algo.
+    Si el año ya tiene cronograma de pagos, genera las cuotas que falten y recalcula las que no tienen pagos."""
     m = db.scalar(select(Matricula).where(Matricula.colegio_id == colegio_id, Matricula.anio_id == seccion.anio_id,
                                           Matricula.alumno_id == alumno_id))
     if m is None:
         db.add(Matricula(colegio_id=colegio_id, anio_id=seccion.anio_id, alumno_id=alumno_id, seccion_id=seccion.id))
-        return True
-    if m.seccion_id != seccion.id:
+    elif m.seccion_id != seccion.id:
         m.seccion_id = seccion.id
-        return True
-    return False
+    else:
+        return False
+    pensiones.al_matricular(db, colegio_id, alumno_id, seccion.anio_id)
+    return True
 
 
 def _etiquetas_seccion(db: Session, colegio_id: int, ids: set[int]) -> dict[int, str]:
@@ -86,11 +90,13 @@ def _alumno(a: Alumno, seccion_id: int | None = None, seccion: str | None = None
             "codigo": a.codigo, "activo": a.activo, "seccion_id": seccion_id, "seccion": seccion}
 
 
-def _apoderado(ap: Apoderado, v: AlumnoApoderado | None = None) -> dict:
+def _apoderado(ap: Apoderado, v: AlumnoApoderado | None = None, responsable: bool | None = None) -> dict:
     d = {"id": ap.id, "tipo_documento": ap.tipo_documento, "numero_documento": ap.numero_documento,
          "nombres": ap.nombres, "apellidos": ap.apellidos, "celular": ap.celular, "correo": ap.correo}
     if v is not None:
-        d |= {"parentesco": v.parentesco, "recibe_avisos": v.recibe_avisos}
+        # responsable_pago: el marcado o, si nadie lo está, el primero (el que ve la deuda).
+        d |= {"parentesco": v.parentesco, "recibe_avisos": v.recibe_avisos,
+              "responsable_pago": v.responsable_pago if responsable is None else responsable}
     return d
 
 
@@ -163,11 +169,12 @@ def detalle(alumno_id: int, s: Sesion = Depends(ver), db: Session = Depends(get_
         .where(AlumnoApoderado.colegio_id == cid, AlumnoApoderado.alumno_id == a.id)
         .order_by(Apoderado.apellidos)
     ).all()
+    responsable = pensiones.responsables(db, cid, [a.id]).get(a.id)
     return {
         **_alumno(a, actual.seccion_id if actual else None, etiquetas.get(actual.seccion_id) if actual else None),
         "matriculas": [{"anio": anio, "seccion_id": m.seccion_id, "seccion": etiquetas.get(m.seccion_id)}
                        for m, anio in matriculas],
-        "apoderados": [_apoderado(ap, v) for ap, v in apoderados],
+        "apoderados": [_apoderado(ap, v, ap.id == responsable) for ap, v in apoderados],
     }
 
 
@@ -176,14 +183,18 @@ def editar_alumno(alumno_id: int, datos: DatosAlumno, s: Sesion = Depends(editar
                   db: Session = Depends(get_db)) -> dict:
     cid = s.colegio.id
     a = obtener(db, Alumno, cid, alumno_id, "Alumno")
+    retiro = a.activo and not datos.activo
     for campo, valor in datos.model_dump(exclude={"seccion_id"}).items():
         setattr(a, campo, valor)
     # Antes de cualquier otra consulta: el autoflush haría saltar el documento repetido fuera de guardar().
     guardar(db, "Ya existe un alumno con ese documento", solo_flush=True)
     if datos.seccion_id:
         matricular(db, cid, a.id, obtener(db, Seccion, cid, datos.seccion_id, "Sección"))
-    anotar(db, s, "editar", "padron", "alumno", a, f"Alumno {a.apellidos}, {a.nombres}",
-           "Ya existe un alumno con ese documento")
+    resumen = f"Alumno {a.apellidos}, {a.nombres}"
+    if retiro:  # sus cuotas futuras sin pagos se anulan; lo vencido sigue como deuda
+        anuladas = pensiones.al_retirar(db, cid, a.id, f"{s.usuario.nombres} {s.usuario.apellidos}")
+        resumen += f" (retiro{f': {anuladas} cuotas futuras anuladas' if anuladas else ''})"
+    anotar(db, s, "editar", "padron", "alumno", a, resumen, "Ya existe un alumno con ese documento")
     return detalle(a.id, s, db)
 
 
@@ -222,9 +233,14 @@ def vincular(alumno_id: int, datos: Vinculo, s: Sesion = Depends(editar), db: Se
         v = AlumnoApoderado(colegio_id=cid, alumno_id=a.id, apoderado_id=ap.id)
         db.add(v)
     v.parentesco, v.recibe_avisos = datos.parentesco.strip(), datos.recibe_avisos
+    if datos.responsable_pago:
+        pensiones.marcar_responsable(db, cid, a.id, ap.id)
+    elif v.responsable_pago:
+        v.responsable_pago = False
     anotar(db, s, "editar", "padron", "apoderado", ap,
-           f"Apoderado {ap.apellidos}, {ap.nombres} ({v.parentesco}) de {a.apellidos}, {a.nombres}")
-    return _apoderado(ap, v)
+           f"Apoderado {ap.apellidos}, {ap.nombres} ({v.parentesco}) de {a.apellidos}, {a.nombres}"
+           + (", responsable de pago" if datos.responsable_pago else ""))
+    return _apoderado(ap, v, pensiones.es_responsable(db, cid, a.id, ap.id))
 
 
 @router.delete("/alumnos/{alumno_id}/apoderados/{apoderado_id}", status_code=204)
