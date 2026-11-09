@@ -42,7 +42,7 @@ def _dinero() -> Mapped[Decimal]:
 
 
 class ConfigPensiones(Base):
-    """Lo que decide el director para cobrar. Si no hay fila, valen los valores por defecto."""
+    """Lo que decide el administrador para cobrar. Si no hay fila, valen los valores por defecto."""
 
     __tablename__ = "config_pensiones"
     __table_args__ = (

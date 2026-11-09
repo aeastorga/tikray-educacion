@@ -40,7 +40,7 @@ def test_demo_con_el_nombre_del_servicio_y_su_ingreso(client, db, render):
     r = demo.crear_o_reiniciar(db, "tikray-demo", alumnos_por_seccion=1)
     h = {"Host": "tikray-demo.onrender.com"}
     ingreso = client.post("/api/auth/ingreso", headers=h,
-                          json={"usuario": r.credenciales["director"]["usuario"], "clave": demo.CLAVE})
+                          json={"usuario": r.credenciales["administrador"]["usuario"], "clave": demo.CLAVE})
     assert ingreso.status_code == 200, ingreso.text
     yo = client.get("/api/auth/yo", headers=h | {"Authorization": f"Bearer {ingreso.json()['token']}"})
     assert yo.status_code == 200

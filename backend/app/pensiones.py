@@ -383,7 +383,7 @@ def bucle_cobros(parar: threading.Event, cada: float = 600) -> None:
             return
 
 
-# --- Para el Inicio del director ---------------------------------------------------------------
+# --- Para el Inicio del administrador ---------------------------------------------------------------
 
 def deuda_vencida(db: Session, colegio_id: int, hoy: date | None = None) -> tuple[Decimal, int]:
     """Saldo de todas las cuotas vencidas (de cualquier año) y cuántos alumnos las deben."""

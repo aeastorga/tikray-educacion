@@ -39,7 +39,7 @@ def _fk(columna: str, tabla: str, ondelete: str = "RESTRICT") -> ForeignKeyConst
 
 
 class ConfigAsistencia(Base):
-    """Reglas de asistencia que decide el director. Si no hay fila, valen los valores por defecto."""
+    """Reglas de asistencia que decide el administrador. Si no hay fila, valen los valores por defecto."""
 
     __tablename__ = "config_asistencia"
     __table_args__ = (

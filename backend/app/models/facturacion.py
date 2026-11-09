@@ -1,7 +1,7 @@
 """Comprobantes electrónicos SUNAT (boleta o factura) de los pagos de caja, listos para conectar a un
 proveedor. Sin proveedor (FacturadorNinguno) el colegio sigue solo con el recibo interno.
 
-- La configuración la editan solo el director y Tikray Labs. El token del proveedor se guarda cifrado
+- La configuración la editan solo el administrador y Tikray Labs. El token del proveedor se guarda cifrado
   (FACTURACION_CLAVE) y nunca vuelve al navegador ni al historial.
 - Nada se borra: un comprobante solo se anula ante el proveedor. Llaves RESTRICT.
 - El número es correlativo por serie y colegio, sin saltos (bloqueo de la fila de la serie).

@@ -3,16 +3,16 @@ import { readFileSync } from 'node:fs'
 
 const semilla = () => JSON.parse(readFileSync(new URL('./.semilla.json', import.meta.url)))
 
-async function director(page, volver) {
-  const { director: d } = semilla()
+async function administrador(page, volver) {
+  const { administrador: d } = semilla()
   await page.goto(`/personal?volver=${volver}`)
   await page.getByLabel('Usuario (DNI)').fill(d.usuario)
   await page.getByLabel('Clave').fill(d.clave)
   await page.getByRole('button', { name: 'Ingresar' }).click()
 }
 
-test('comprobantes electrónicos: el director configura sin ver el token y Caja lista los que tienen error', async ({ page }) => {
-  await director(page, '/panel/configuracion/comprobantes')
+test('comprobantes electrónicos: el administrador configura sin ver el token y Caja lista los que tienen error', async ({ page }) => {
+  await administrador(page, '/panel/configuracion/comprobantes')
   await expect(page.getByRole('heading', { name: 'Comprobantes electrónicos SUNAT' })).toBeVisible()
   await expect(page.getByText('Token: sin configurar.')).toBeVisible()
 

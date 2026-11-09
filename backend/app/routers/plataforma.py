@@ -40,7 +40,7 @@ class Ingreso(BaseModel):
     clave: str = Field(max_length=200)
 
 
-class Director(DocumentoPersonal):
+class Administrador(DocumentoPersonal):
     pass
 
 
@@ -59,7 +59,7 @@ class NuevoColegio(BaseModel):
     dominio_propio: str | None = Field(default=None, max_length=253)
     estado: Estado = "activo"
     vence_en: date | None = None
-    director: Director
+    administrador: Administrador
 
     @model_validator(mode="after")
     def _estado(self):
@@ -83,6 +83,8 @@ class CambioColegio(BaseModel):
     vence_en: date | None = None
     perfil: Perfil | None = None
     modulos_contratados: list[Literal[CONTRATABLES]] | None = None
+    # Usuarios del personal activos que permite el plan; null = sin límite.
+    max_usuarios: int | None = Field(default=None, ge=1, le=100000)
 
     _norm_dominio = field_validator("dominio_propio")(classmethod(lambda cls, v: _dominio(v)))
 
@@ -98,18 +100,19 @@ class ColegioOut(BaseModel):
     es_demo: bool
     perfil: dict
     modulos: list[dict]
+    max_usuarios: int | None
 
 
 class ColegioCreado(BaseModel):
     colegio: ColegioOut
-    director_usuario: str
-    director_clave_temporal: str  # se muestra una sola vez
+    administrador_usuario: str
+    administrador_clave_temporal: str  # se muestra una sola vez
 
 
 def _salida(c: Colegio) -> ColegioOut:
     return ColegioOut(id=c.id, nombre=c.nombre, subdominio=c.subdominio, dominio_propio=c.dominio_propio,
                       estado=c.estado, vence_en=c.vence_en, disponible=c.disponible(hoy_lima()), es_demo=c.es_demo,
-                      perfil=perfil_de(c), modulos=modulos_de(c))
+                      perfil=perfil_de(c), modulos=modulos_de(c), max_usuarios=c.max_usuarios)
 
 
 def _conflicto() -> HTTPException:
@@ -146,18 +149,20 @@ def crear(datos: NuevoColegio, db: Session = Depends(get_db)) -> ColegioCreado:
     except IntegrityError:
         db.rollback()
         raise _conflicto()
-    rol = Rol(colegio_id=colegio.id, nombre="Director", es_director=True)
+    # El usuario principal: por encima de todos, siempre existe y su rol no se modifica ni se borra.
+    rol = Rol(colegio_id=colegio.id, nombre="Administrador", es_administrador=True)
     db.add(rol)
     configuracion.crear_categorias_por_defecto(db, colegio.id)
     db.flush()
     clave = generar_clave_temporal()
-    d = datos.director
+    d = datos.administrador
     db.add(Usuario(
         colegio_id=colegio.id, tipo_documento=d.tipo_documento, numero_documento=d.numero_documento,
         usuario=d.numero_documento, nombres=d.nombres, apellidos=d.apellidos, rol_id=rol.id, clave_hash=hashear_clave(clave),
     ))
     db.commit()
-    return ColegioCreado(colegio=_salida(colegio), director_usuario=d.numero_documento, director_clave_temporal=clave)
+    return ColegioCreado(colegio=_salida(colegio), administrador_usuario=d.numero_documento,
+                         administrador_clave_temporal=clave)
 
 
 @router.patch("/colegios/{colegio_id}")
@@ -167,6 +172,13 @@ def editar(colegio_id: int, datos: CambioColegio, db: Session = Depends(get_db))
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Colegio no encontrado")
     cambios = datos.model_dump(exclude_unset=True)
     perfil, contratados = cambios.pop("perfil", None), cambios.pop("modulos_contratados", None)
+    if "max_usuarios" in cambios:
+        maximo = cambios.pop("max_usuarios")
+        if maximo != colegio.max_usuarios:
+            # Bajarlo por debajo de los activos no desactiva a nadie: solo impide agregar más.
+            colegio.max_usuarios = maximo
+            configuracion.registrar(db, colegio.id, QUIEN, "editar", "configuracion", "plan", colegio.id,
+                                    f"Límite de usuarios: {maximo if maximo is not None else 'sin límite'}")
     if perfil is not None:
         if campos := aplicar_perfil(colegio, datos.perfil):
             configuracion.registrar(db, colegio.id, QUIEN, "editar", "configuracion", "perfil", colegio.id,
@@ -175,7 +187,7 @@ def editar(colegio_id: int, datos: CambioColegio, db: Session = Depends(get_db))
         nuevos = [m for m in CONTRATABLES if m in set(contratados)]
         if nuevos != [m for m in CONTRATABLES if m in (colegio.modulos_contratados or [])]:
             colegio.modulos_contratados = nuevos
-            # Lo que se deja de contratar ya no figura como "apagado por el director".
+            # Lo que se deja de contratar ya no figura como "apagado por el administrador".
             colegio.modulos_apagados = [m for m in (colegio.modulos_apagados or []) if m in nuevos]
             configuracion.registrar(db, colegio.id, QUIEN, "editar", "configuracion", "modulos", colegio.id,
                                     "Módulos contratados: " + (", ".join(MODULOS[m] for m in nuevos) or "ninguno"))

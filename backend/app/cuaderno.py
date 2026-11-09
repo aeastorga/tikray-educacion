@@ -61,7 +61,7 @@ def seccion_de(db: Session, colegio_id: int, alumno_id: int) -> int | None:
 
 def secciones_permitidas(db: Session, usuario: Usuario) -> set[int] | None:
     """None: ve todo el colegio. Un conjunto: solo esas secciones (puede estar vacío)."""
-    if usuario.rol.es_director or not usuario.rol.solo_sus_secciones:
+    if usuario.rol.es_administrador or not usuario.rol.solo_sus_secciones:
         return None
     return set(db.scalars(select(SeccionDocente.seccion_id).where(
         SeccionDocente.colegio_id == usuario.colegio_id, SeccionDocente.usuario_id == usuario.id)))

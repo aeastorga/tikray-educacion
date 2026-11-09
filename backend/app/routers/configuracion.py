@@ -1,8 +1,8 @@
-"""Configuración del director: perfil del colegio, módulos, avisos a los padres, plantillas de comunicados,
+"""Configuración del administrador: perfil del colegio, módulos, avisos a los padres, plantillas de comunicados,
 categorías de incidencias, comprobantes electrónicos e historial de actividad.
 
 Todo con el colegio del token. Ver: permiso "configuracion" ver; cambiar: "configuracion" editar. El
-historial y los comprobantes electrónicos son solo del director (y de Tikray Labs en su panel).
+historial y los comprobantes electrónicos son solo del administrador (y de Tikray Labs en su panel).
 """
 
 from datetime import date, datetime, time, timedelta
@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app import configuracion, facturacion
 from app.comun import guardar, obtener
 from app.db import get_db
-from app.deps import Sesion, puede, requerir_permiso, solo_director, usuario_actual
+from app.deps import Sesion, puede, requerir_permiso, solo_administrador, usuario_actual
 from app.fechas import LIMA
 from app.paginacion import Pagina, contar, pagina, recortar
 from app.models import CategoriaIncidencia, Colegio, EntradaCuaderno, PlantillaComunicado, RegistroActividad, Usuario
@@ -104,7 +104,7 @@ def ver_modulos(s: Sesion = Depends(ver)) -> list[dict]:
 
 @router.put("/modulos")
 def cambiar_modulos(d: ModulosIn, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> list[dict]:
-    """El director prende o apaga solo dentro de lo contratado."""
+    """El administrador prende o apaga solo dentro de lo contratado."""
     c = s.colegio
     activos = set(d.activos)
     if activos - set(CONTRATABLES):
@@ -281,7 +281,7 @@ def borrar_categoria(categoria_id: int, s: Sesion = Depends(editar), db: Session
     guardar(db)
 
 
-# --- Comprobantes electrónicos (solo el director; lo usa también el panel de Tikray Labs) ----------
+# --- Comprobantes electrónicos (solo el administrador; lo usa también el panel de Tikray Labs) ----------
 
 class FacturacionIn(BaseModel):
     emite: bool = False
@@ -343,16 +343,16 @@ def aplicar_facturacion(db: Session, colegio_id: int, d: FacturacionIn, quien) -
 
 
 @router.get("/facturacion")
-def ver_facturacion(s: Sesion = Depends(solo_director), db: Session = Depends(get_db)) -> dict:
+def ver_facturacion(s: Sesion = Depends(solo_administrador), db: Session = Depends(get_db)) -> dict:
     return facturacion.config_de(facturacion.config(db, s.colegio.id))
 
 
 @router.put("/facturacion")
-def cambiar_facturacion(d: FacturacionIn, s: Sesion = Depends(solo_director), db: Session = Depends(get_db)) -> dict:
+def cambiar_facturacion(d: FacturacionIn, s: Sesion = Depends(solo_administrador), db: Session = Depends(get_db)) -> dict:
     return aplicar_facturacion(db, s.colegio.id, d, s.usuario)
 
 
-# --- Historial de actividad (solo el director) --------------------------------------------
+# --- Historial de actividad (solo el administrador) --------------------------------------------
 
 NOMBRE_MODULO = {**MODULOS, "configuracion": "Configuración"}
 
@@ -360,7 +360,7 @@ NOMBRE_MODULO = {**MODULOS, "configuracion": "Configuración"}
 @router.get("/historial")
 def historial(usuario_id: int | None = None, modulo: str | None = None, desde: date | None = None,
               hasta: date | None = None, p: Pagina = Depends(pagina),
-              s: Sesion = Depends(solo_director), db: Session = Depends(get_db)) -> dict:
+              s: Sesion = Depends(solo_administrador), db: Session = Depends(get_db)) -> dict:
     """Lo último primero, por páginas. Las fechas del filtro son días de Lima."""
     cid = s.colegio.id
     q = select(RegistroActividad).where(RegistroActividad.colegio_id == cid)

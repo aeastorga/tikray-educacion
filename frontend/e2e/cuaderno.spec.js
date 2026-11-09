@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs'
 
 const semilla = () => JSON.parse(readFileSync(new URL('./.semilla.json', import.meta.url)))
 
-async function director(page) {
-  const { director: d } = semilla()
+async function administrador(page) {
+  const { administrador: d } = semilla()
   await page.goto('/personal?volver=/panel/cuaderno')
   await page.getByLabel('Usuario (DNI)').fill(d.usuario)
   await page.getByLabel('Clave').fill(d.clave)
@@ -25,7 +25,7 @@ async function familia(page) {
 
 test('comunicado con firma: la familia firma y responde, el colegio ve quién firmó', async ({ browser }) => {
   const colegio = await (await browser.newContext()).newPage()
-  await director(colegio)
+  await administrador(colegio)
   await colegio.getByRole('link', { name: 'Escribir' }).click()
   await colegio.getByLabel('Para').selectOption('colegio')
   await colegio.getByLabel('Asunto').fill('Paseo al museo')
@@ -65,7 +65,7 @@ test('permiso de salida pedido por la familia y aprobado por el colegio', async 
   await expect(casa.getByText(/Por aprobar/)).toBeVisible()
 
   const colegio = await (await browser.newContext()).newPage()
-  await director(colegio)
+  await administrador(colegio)
   await colegio.getByLabel('Solo lo que espera al colegio').click()
   await expect(colegio.getByLabel('Solo lo que espera al colegio')).toBeChecked()
   await colegio.getByRole('row', { name: /Cita con el dentista/ }).click()

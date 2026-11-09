@@ -17,11 +17,11 @@ class Rol(ConColegio, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(80))
-    # El rol del director se crea con el colegio, tiene todos los permisos y no se borra.
-    es_director: Mapped[bool] = mapped_column(default=False)
+    # El rol del administrador se crea con el colegio, tiene todos los permisos y no se borra.
+    es_administrador: Mapped[bool] = mapped_column(default=False)
     # Cuaderno de control: solo ve y escribe lo de las secciones a su cargo (docente, tutor).
     solo_sus_secciones: Mapped[bool] = mapped_column(default=False, server_default="false")
-    # Caja: anula pagos de una caja ya cerrada (o de otro cajero) y gastos de días anteriores. El director
+    # Caja: anula pagos de una caja ya cerrada (o de otro cajero) y gastos de días anteriores. El administrador
     # siempre puede.
     puede_anular_caja: Mapped[bool] = mapped_column(default=False, server_default="false")
     creado_en: Mapped[datetime] = creado_en()
@@ -49,7 +49,7 @@ class PermisoRol(ConColegio, Base):
 
 
 class Usuario(ConColegio, Base):
-    """Personal del colegio (director, docentes, portería, secretaría...)."""
+    """Personal del colegio (administrador, docentes, portería, secretaría...)."""
 
     __tablename__ = "usuario"
     __table_args__ = (

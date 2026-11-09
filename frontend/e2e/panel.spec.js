@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs'
 
 const semilla = () => JSON.parse(readFileSync(new URL('./.semilla.json', import.meta.url)))
 
-test('el director ve el resumen del colegio al entrar', async ({ page }) => {
-  const { director: d } = semilla()
+test('el administrador ve el resumen del colegio al entrar', async ({ page }) => {
+  const { administrador: d } = semilla()
   await page.goto('/personal')
   await page.getByLabel('Usuario (DNI)').fill(d.usuario)
   await page.getByLabel('Clave').fill(d.clave)
@@ -19,8 +19,19 @@ test('el director ve el resumen del colegio al entrar', async ({ page }) => {
   await expect(page).toHaveURL(/\/panel\/cuaderno/)
 })
 
+test('el administrador ve cuántos usuarios usa en Personal', async ({ page }) => {
+  const { administrador: d } = semilla()
+  await page.goto('/personal')
+  await page.getByLabel('Usuario (DNI)').fill(d.usuario)
+  await page.getByLabel('Clave').fill(d.clave)
+  await page.getByRole('button', { name: 'Ingresar' }).click()
+  await expect(page.getByRole('heading', { name: /^Buen(os|as) (días|tardes|noches)/ })).toBeVisible()
+  await page.goto('/panel/personal')
+  await expect(page.getByTestId('cupo-usuarios')).toHaveText(/^Usuarios: \d+, sin límite$/)
+})
+
 test('el menú lateral se abre en el celular y no hay scroll horizontal', async ({ page }) => {
-  const { director: d } = semilla()
+  const { administrador: d } = semilla()
   await page.goto('/personal')
   await page.getByLabel('Usuario (DNI)').fill(d.usuario)
   await page.getByLabel('Clave').fill(d.clave)
@@ -68,7 +79,7 @@ test.describe('apariencia', () => {
   test('abre en claro aunque el equipo esté en oscuro; Oscuro se aplica y se recuerda', async ({ page }) => {
     const fondo = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor)
     const barra = () => page.locator('meta[name="theme-color"]').getAttribute('content')
-    const { director: d } = semilla()
+    const { administrador: d } = semilla()
     await page.goto('/personal')
     await expect(page.locator('html')).toHaveAttribute('data-tema', 'claro')
     expect(await fondo()).toBe('rgb(243, 245, 249)')

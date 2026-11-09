@@ -9,7 +9,7 @@ from tests.conftest import auth, crear_admin, host, token_plataforma
 NUEVO = {
     "nombre": "IE San Martín",
     "subdominio": "sanmartin",
-    "director": {"numero_documento": "12345678", "nombres": "Rosa", "apellidos": "Quispe"},
+    "administrador": {"numero_documento": "12345678", "nombres": "Rosa", "apellidos": "Quispe"},
 }
 
 
@@ -18,16 +18,16 @@ def _h(client, db) -> dict:
     return {"Authorization": f"Bearer {token_plataforma(client)}"}
 
 
-def test_crear_colegio_y_director_ingresa(client, db):
+def test_crear_colegio_y_administrador_ingresa(client, db):
     h = _h(client, db)
     r = client.post("/plataforma/colegios", headers=h, json=NUEVO)
     assert r.status_code == 201, r.text
-    clave = r.json()["director_clave_temporal"]
+    clave = r.json()["administrador_clave_temporal"]
 
     r = client.post("/api/auth/ingreso", json={"usuario": "12345678", "clave": clave}, headers=host("sanmartin"))
     assert r.status_code == 200 and r.json()["debe_cambiar_clave"] is True
     yo = client.get("/api/auth/yo", headers=auth("sanmartin", r.json()["token"])).json()
-    assert yo["rol"] == "Director"
+    assert yo["rol"] == "Administrador"
 
 
 def test_subdominio_repetido_o_reservado(client, db):
@@ -84,12 +84,12 @@ def test_base_exige_vencimiento_en_prueba(db):
         db.commit()
 
 
-def test_director_con_carne_de_extranjeria(client, db):
+def test_administrador_con_carne_de_extranjeria(client, db):
     h = _h(client, db)
     r = client.post("/plataforma/colegios", headers=h, json={
-        **NUEVO, "director": {"tipo_documento": "CE", "numero_documento": "ab1234567", "nombres": "Ana",
+        **NUEVO, "administrador": {"tipo_documento": "CE", "numero_documento": "ab1234567", "nombres": "Ana",
                               "apellidos": "Pérez"}})
-    assert r.status_code == 201 and r.json()["director_usuario"] == "AB1234567"
+    assert r.status_code == 201 and r.json()["administrador_usuario"] == "AB1234567"
 
 
 def test_dominio_propio_se_normaliza(client, db):

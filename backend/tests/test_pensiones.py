@@ -451,7 +451,7 @@ def test_anular_devuelve_el_saldo_y_no_borra(client, db, e, h):
     assert estados == {"R001-000001": True, "R001-000002": False}
 
 
-def test_caja_cerrada_no_deja_anular_al_cajero_pero_si_al_director(client, db, e, h):
+def test_caja_cerrada_no_deja_anular_al_cajero_pero_si_al_administrador(client, db, e, h):
     armar(client, h, e)
     crear_personal(db, e.colegio, "50000001", {"caja": "editar"})
     crear_personal(db, e.colegio, "50000002", {"caja": "editar"})
@@ -470,7 +470,7 @@ def test_caja_cerrada_no_deja_anular_al_cajero_pero_si_al_director(client, db, e
     assert (cierre["total"], cierre["contado"], cierre["diferencia"]) == ("50.00", "15.50", "-4.50")
     # Caja cerrada: el cajero ya no anula ni cobra con ella.
     r = client.post(f"/api/caja/pagos/{p1['id']}/anular", headers=hc, json={"motivo": "xxx"})
-    assert r.status_code == 403 and "director" in r.json()["detail"]
+    assert r.status_code == 403 and "administrador" in r.json()["detail"]
     assert cobrar(client, hc, e.a1.id, [(c[0]["id"], "1")]).status_code == 409
     assert client.post(f"/api/caja/pagos/{p2['id']}/anular", headers=h, json={"motivo": "Revisión"}).status_code == 200
     # El cierre guardado no cambia; los reportes sí cuentan solo lo válido.
@@ -554,7 +554,7 @@ def test_paginacion_en_servidor(client, e, h):
 
 @pytest.mark.parametrize("modulo,ruta", [("pensiones", "/api/pensiones/conceptos"), ("caja", "/api/caja/mi-caja"),
                                          ("caja", "/api/caja/pagos"), ("pensiones", "/api/pensiones/morosidad")])
-def test_modulo_apagado_da_403_aun_al_director(client, db, e, h, modulo, ruta):
+def test_modulo_apagado_da_403_aun_al_administrador(client, db, e, h, modulo, ruta):
     assert client.get(ruta, headers=h).status_code == 200
     e.colegio.modulos_apagados = [modulo]
     db.commit()
@@ -603,7 +603,7 @@ def test_solo_el_responsable_de_pago_ve_la_deuda_y_sus_recibos(client, db, e, h)
     hijo = r["hijos"][0]
     assert len(hijo["cuotas"]) == 4 and hijo["pagos"][0]["recibo"] == "R001-000001"
     assert client.get(f"/api/familia/pagos/{p['id']}/recibo.pdf", headers=hf).content.startswith(b"%PDF")
-    # El director marca al padre como responsable de a1: la madre deja de ver esa deuda.
+    # El administrador marca al padre como responsable de a1: la madre deja de ver esa deuda.
     r = client.post(f"/api/padron/alumnos/{e.a1.id}/apoderados", headers=h, json={
         "numero_documento": e.padre.numero_documento, "nombres": "Juan", "apellidos": "Quispe", "parentesco": "Padre",
         "responsable_pago": True})
@@ -661,7 +661,7 @@ def test_aviso_de_cobro_uno_por_apoderado_y_dia_sin_repetir(client, db, e, h):
     assert all(c.apoderado_id != e.padre.id for c in cola)
 
 
-def test_aviso_de_cobro_no_sale_si_ya_pago_o_si_el_director_lo_apago(client, db, e, h):
+def test_aviso_de_cobro_no_sale_si_ya_pago_o_si_el_administrador_lo_apago(client, db, e, h):
     armar(client, h, e, vences=(-10, 0, 3, 30))
     abrir(client, h)
     for a in (e.a1, e.a2):
@@ -670,7 +670,7 @@ def test_aviso_de_cobro_no_sale_si_ya_pago_o_si_el_director_lo_apago(client, db,
     assert pensiones.revisar_cobros(db, HOY) == 0  # a1 y a2 pagaron: no hay a quién recordar
 
 
-def test_aviso_de_cobro_apagado_por_el_director(client, db, e, h):
+def test_aviso_de_cobro_apagado_por_el_administrador(client, db, e, h):
     armar(client, h, e, vences=(-10, 0, 3, 30))
     r = client.put("/api/configuracion/avisos", headers=h, json={
         "tipos": {"cobro": False}, "silencio_desde": "21:00", "silencio_hasta": "06:00"})
@@ -823,7 +823,7 @@ def test_casilla_del_rol_para_anular_pagos(client, db, e, h):
     assert anular(solo_ver, p1).status_code == 403
     assert anular(autorizado, p1).status_code == 200
     assert client.post("/api/caja/cerrar", headers=cajero, json={"contado": "36"}).status_code == 200
-    # Caja cerrada: el cajero 403; un rol con la casilla y el director, 200.
+    # Caja cerrada: el cajero 403; un rol con la casilla y el administrador, 200.
     r = anular(cajero, p2)
     assert r.status_code == 403 and "La caja ya se cerró" in r.json()["detail"]
     assert anular(solo_ver, p2).status_code == 403
@@ -840,8 +840,8 @@ def test_casilla_se_ve_y_se_edita_en_roles(client, db, e, h):
     assert rol["puede_anular_caja"] is True
     r = client.put(f"/api/roles/{rol['id']}", headers=h, json={"nombre": "Tesorería", "permisos": {"caja": "editar"}})
     assert r.status_code == 200 and r.json()["puede_anular_caja"] is False
-    director = next(x for x in client.get("/api/roles", headers=h).json() if x["es_director"])
-    assert director["puede_anular_caja"] is False  # no la necesita: siempre puede
+    administrador = next(x for x in client.get("/api/roles", headers=h).json() if x["es_administrador"])
+    assert administrador["puede_anular_caja"] is False  # no la necesita: siempre puede
 
 
 def test_anular_gastos_con_la_misma_regla(client, db, e, h):
@@ -870,7 +870,7 @@ def test_anular_gastos_con_la_misma_regla(client, db, e, h):
     assert r.status_code == 403 and "día anterior" in r.json()["detail"]
     assert anular(autorizado, ayer).status_code == 200
     antes = _gasto(client, quien, servicios, fecha=(HOY - timedelta(days=3)).isoformat()).json()
-    assert anular(h, antes).status_code == 200  # el director siempre
+    assert anular(h, antes).status_code == 200  # el administrador siempre
 
 
 def test_excel_sin_si_deja_al_apoderado_1_aunque_el_2_ya_exista_por_un_hermano(client, db, e, h):
@@ -950,8 +950,8 @@ def test_colegio_nuevo_sin_pensiones_ni_caja_y_la_demo_con_ambos(client, db):
     res = demo.crear_o_reiniciar(db, "demo", alumnos_por_seccion=2)
     d = db.get(Colegio, res.colegio_id)
     assert d.modulo_activo("pensiones") and d.modulo_activo("caja")
-    hd = auth("demo", token(client, "demo", res.credenciales["director"]["usuario"],
-                            res.credenciales["director"]["clave"]))
+    hd = auth("demo", token(client, "demo", res.credenciales["administrador"]["usuario"],
+                            res.credenciales["administrador"]["clave"]))
     assert client.get("/api/pensiones/config", headers=hd).status_code == 200
     assert client.get("/api/caja/mi-caja", headers=hd).status_code == 200
 

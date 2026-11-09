@@ -1,4 +1,4 @@
-"""Configuración del director: plantillas de comunicados, categorías de incidencias e historial de actividad."""
+"""Configuración del administrador: plantillas de comunicados, categorías de incidencias e historial de actividad."""
 
 from datetime import datetime
 

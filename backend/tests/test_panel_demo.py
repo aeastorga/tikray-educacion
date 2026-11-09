@@ -1,4 +1,4 @@
-"""Etapa 5: panel del director, colegio demo reiniciable y sus endpoints en la plataforma."""
+"""Etapa 5: panel del administrador, colegio demo reiniciable y sus endpoints en la plataforma."""
 
 import pytest
 from sqlalchemy import func, select
@@ -58,7 +58,7 @@ def test_demo_no_toca_un_colegio_real_ni_a_otros(db):
 def test_credenciales_de_la_demo_funcionan(db, client):
     r = demo.crear_o_reiniciar(db, "demo", alumnos_por_seccion=2)
     c = r.credenciales
-    token(client, "demo", c["director"]["usuario"], c["director"]["clave"])
+    token(client, "demo", c["administrador"]["usuario"], c["administrador"]["clave"])
     token(client, "demo", c["porteria"]["usuario"], c["porteria"]["clave"])
     tok = token(client, "demo", c["docente"]["usuario"], c["docente"]["clave"])
     # El docente solo ve su sección en el cuaderno.
@@ -79,7 +79,7 @@ def test_plataforma_crea_y_reinicia_la_demo(db, client):
     assert r.status_code == 201, r.text
     cid = r.json()["colegio"]["id"]
     assert r.json()["colegio"]["es_demo"] is True
-    assert r.json()["credenciales"]["director"]["usuario"]
+    assert r.json()["credenciales"]["administrador"]["usuario"]
 
     r = client.post(f"/plataforma/colegios/{cid}/reiniciar-demo", headers=h)
     assert r.status_code == 200, r.text
@@ -90,17 +90,17 @@ def test_plataforma_crea_y_reinicia_la_demo(db, client):
     assert client.post("/plataforma/demo", json={"subdominio": "real"}, headers=h).status_code == 409
     assert client.post("/plataforma/colegios/999999/reiniciar-demo", headers=h).status_code == 404
     assert _contar(db, Usuario, real.id) == 1
-    # Un director de colegio no puede usar la plataforma.
+    # Un administrador de colegio no puede usar la plataforma.
     tok = token(client, "real")
     assert client.post(f"/plataforma/colegios/{cid}/reiniciar-demo",
                        headers={"Authorization": f"Bearer {tok}"}).status_code == 401
 
 
-# --- Panel del director ----------------------------------------------------------------------
+# --- Panel del administrador ----------------------------------------------------------------------
 
-def test_panel_del_director_con_la_demo(db, client):
+def test_panel_del_administrador_con_la_demo(db, client):
     r = demo.crear_o_reiniciar(db, "demo", alumnos_por_seccion=4)
-    tok = token(client, "demo", r.credenciales["director"]["usuario"], r.credenciales["director"]["clave"])
+    tok = token(client, "demo", r.credenciales["administrador"]["usuario"], r.credenciales["administrador"]["clave"])
     p = client.get("/api/panel/resumen", headers=auth("demo", tok))
     assert p.status_code == 200, p.text
     d = p.json()

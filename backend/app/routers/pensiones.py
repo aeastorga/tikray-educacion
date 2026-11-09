@@ -1,4 +1,4 @@
-"""Pensiones: configuración del director (mora, avisos, conceptos, montos y cronograma), generación de
+"""Pensiones: configuración del administrador (mora, avisos, conceptos, montos y cronograma), generación de
 cuotas, cuotas por alumno, descuentos y becas, y el reporte de morosidad.
 
 Ver: permiso "pensiones" ver. Configurar, generar y dar descuentos: "pensiones" editar. Con el módulo

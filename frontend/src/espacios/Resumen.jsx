@@ -1,4 +1,4 @@
-// Inicio del director: cómo va el colegio hoy, en una pantalla. Cada bloque sale solo con su permiso.
+// Inicio del administrador: cómo va el colegio hoy, en una pantalla. Cada bloque sale solo con su permiso.
 import {
   Bell, BellOff, CircleCheck, ClipboardCheck, ClipboardList, FileSpreadsheet, MessageCircle, Plus, QrCode, ScanLine, Search,
   Send, UserCheck,

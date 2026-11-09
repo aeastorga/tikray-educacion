@@ -1,4 +1,4 @@
-"""Lo que decide el director: módulos activos, qué avisos salen y cuándo, categorías por defecto,
+"""Lo que decide el administrador: módulos activos, qué avisos salen y cuándo, categorías por defecto,
 y el historial de actividad."""
 
 from datetime import UTC, datetime, timedelta
@@ -16,7 +16,7 @@ CATEGORIAS_POR_DEFECTO = (
 
 CATEGORIAS_GASTO_POR_DEFECTO = ("Servicios", "Materiales", "Mantenimiento", "Planilla", "Otros")
 
-# Tipo de la cola de avisos -> interruptor del director y módulo del que depende.
+# Tipo de la cola de avisos -> interruptor del administrador y módulo del que depende.
 AVISO_DE_COLA = {"ingreso": ("ingreso", "asistencia"), "tarde": ("tardanza", "asistencia"),
                  "falta": ("falta", "asistencia"), "salida": ("salida", "asistencia"),
                  "cuaderno": ("cuaderno", "cuaderno"), "cobro": ("cobro", "pensiones")}

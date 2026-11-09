@@ -283,7 +283,7 @@ def test_revision_completa_de_cada_noche():
 
 
 def test_revision_nocturna_cubre_un_corte_adelantado_durante_el_dia(db):
-    """A las 09:30 el director adelanta el corte de 09:15 a 09:00 (o la entrada): la ventana de cada
+    """A las 09:30 el administrador adelanta el corte de 09:15 a 09:00 (o la entrada): la ventana de cada
     minuto ya no lo alcanza; la revisión de la noche sí, sin avisar a las familias a esa hora."""
     a = preparar(db, "alfa")
     otro = preparar(db, "beta")
@@ -552,7 +552,7 @@ def test_motivo_de_licencia_solo_con_permiso_de_personal(client, db):
 def test_nadie_marca_su_propia_asistencia(client, db):
     e = preparar(db, "alfa")
     portero = crear_personal(db, e.colegio, "20000000", {"asistencia": "editar"})
-    director = db.scalar(select(Usuario).where(Usuario.colegio_id == e.colegio.id, Usuario.usuario == "10000000"))
+    administrador = db.scalar(select(Usuario).where(Usuario.colegio_id == e.colegio.id, Usuario.usuario == "10000000"))
     url = "/api/asistencia/marcaciones"
     hp = auth("alfa", token(client, "alfa", "20000000"))
     r = client.post(url, headers=hp, json={"marcaciones": [
@@ -566,7 +566,7 @@ def test_nadie_marca_su_propia_asistencia(client, db):
     hd = auth("alfa", token(client, "alfa"))
     assert client.post(url, headers=hd, json={"marcaciones": [_marca(usuario_id=portero.id)]}).json()[
         "resultados"][0]["estado"] == "ok"
-    assert client.post(url, headers=hp, json={"marcaciones": [_marca(contenido_qr(director.codigo, True))]}).json()[
+    assert client.post(url, headers=hp, json={"marcaciones": [_marca(contenido_qr(administrador.codigo, True))]}).json()[
         "resultados"][0]["estado"] == "ok"
 
 

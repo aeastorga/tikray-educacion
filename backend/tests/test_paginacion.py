@@ -95,8 +95,8 @@ def test_padron_filtra_por_estado_y_cuenta_apoderados(client, db, h, dos):
 
 def test_cuaderno_por_paginas_y_aislado(client, db, h, hb, dos):
     a, b = dos
-    director = db.scalar(select(Usuario).where(Usuario.colegio_id == a.colegio.id))
-    db.add_all([EntradaCuaderno(colegio_id=a.colegio.id, creado_por_id=director.id, tipo="comunicado",
+    administrador = db.scalar(select(Usuario).where(Usuario.colegio_id == a.colegio.id))
+    db.add_all([EntradaCuaderno(colegio_id=a.colegio.id, creado_por_id=administrador.id, tipo="comunicado",
                                 alcance="colegio", titulo=f"Aviso {i}") for i in range(30)])
     db.commit()
     p1 = client.get("/api/cuaderno/entradas?por_pagina=25", headers=h).json()
@@ -171,15 +171,15 @@ def test_bandeja_por_fecha_no_por_id(client, db, h, dos):
     from datetime import UTC, datetime, timedelta
 
     a, _ = dos
-    director = db.scalar(select(Usuario).where(Usuario.colegio_id == a.colegio.id))
+    administrador = db.scalar(select(Usuario).where(Usuario.colegio_id == a.colegio.id))
     ahora = datetime.now(UTC)
-    nueva = EntradaCuaderno(colegio_id=a.colegio.id, creado_por_id=director.id, tipo="comunicado", alcance="colegio",
+    nueva = EntradaCuaderno(colegio_id=a.colegio.id, creado_por_id=administrador.id, tipo="comunicado", alcance="colegio",
                             titulo="Primera creada, fecha de ayer", creado_en=ahora - timedelta(days=1))
     db.add(nueva)
     db.flush()
-    vieja = EntradaCuaderno(colegio_id=a.colegio.id, creado_por_id=director.id, tipo="comunicado", alcance="colegio",
+    vieja = EntradaCuaderno(colegio_id=a.colegio.id, creado_por_id=administrador.id, tipo="comunicado", alcance="colegio",
                             titulo="Segunda creada, fecha de hace tres días", creado_en=ahora - timedelta(days=3))
-    programada = EntradaCuaderno(colegio_id=a.colegio.id, creado_por_id=director.id, tipo="comunicado",
+    programada = EntradaCuaderno(colegio_id=a.colegio.id, creado_por_id=administrador.id, tipo="comunicado",
                                  alcance="colegio", titulo="Sale mañana", creado_en=ahora - timedelta(days=5),
                                  programado_para=ahora + timedelta(days=1))
     db.add_all([vieja, programada])

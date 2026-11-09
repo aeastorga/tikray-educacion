@@ -70,13 +70,13 @@ def host(sub: str) -> dict:
 
 
 def crear_colegio(db, sub: str, **extra) -> Colegio:
-    """Colegio con su rol Director y un director (usuario = DNI) que ya cambió la clave. Sin horario sin
+    """Colegio con su rol Administrador y su administrador (usuario = DNI) que ya cambió la clave. Sin horario sin
     molestar (desde = hasta), para que los avisos no dependan de la hora en que corren las pruebas."""
     extra = {"silencio_desde": time(0), "silencio_hasta": time(0), **extra}
     c = Colegio(nombre=f"Colegio {sub}", subdominio=sub, **extra)
     db.add(c)
     db.flush()
-    rol = Rol(colegio_id=c.id, nombre="Director", es_director=True)
+    rol = Rol(colegio_id=c.id, nombre="Administrador", es_administrador=True)
     db.add(rol)
     db.flush()
     db.add(Usuario(colegio_id=c.id, numero_documento="10000000", usuario="10000000", nombres="Dir", apellidos=sub,

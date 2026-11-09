@@ -1,4 +1,4 @@
-/* Inicio del director */
+/* Inicio del administrador */
 
 .inicio { display: flex; flex-direction: column; gap: 20px; }
 .inicio-cabecera { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }

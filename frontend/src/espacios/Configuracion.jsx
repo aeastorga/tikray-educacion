@@ -1,6 +1,6 @@
-// Configuración del colegio (director o quien tenga el permiso): imagen, perfil, módulos, avisos a los
+// Configuración del colegio (administrador o quien tenga el permiso): imagen, perfil, módulos, avisos a los
 // padres, plantillas de comunicados y categorías de incidencias. Más el historial de actividad y los
-// comprobantes electrónicos (solo director; Tikray Labs usa el mismo formulario en su panel).
+// comprobantes electrónicos (solo administrador; Tikray Labs usa el mismo formulario en su panel).
 import { Award, History, Pencil, Plus, Trash2, TrendingUp } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
@@ -19,7 +19,7 @@ const TIPOS_AVISO = [
   ['cobro', 'Recordatorio de pago', 'Días antes del vencimiento y el día que vence, solo al responsable de pago.'],
 ]
 
-export default function Configuracion({ editar, director, colegio, setColegio, recargarYo }) {
+export default function Configuracion({ editar, administrador, colegio, setColegio, recargarYo }) {
   return (
     <section className="configuracion">
       <h2>Configuración</h2>
@@ -30,7 +30,7 @@ export default function Configuracion({ editar, director, colegio, setColegio, r
         <NavLink to="/panel/configuracion/avisos">Avisos</NavLink>
         <NavLink to="/panel/configuracion/plantillas">Plantillas</NavLink>
         <NavLink to="/panel/configuracion/categorias">Categorías</NavLink>
-        {director && <NavLink to="/panel/configuracion/comprobantes">Comprobantes</NavLink>}
+        {administrador && <NavLink to="/panel/configuracion/comprobantes">Comprobantes</NavLink>}
       </nav>
       <Routes>
         <Route index element={<Imagen editar={editar} colegio={colegio} setColegio={setColegio} />} />
@@ -39,7 +39,7 @@ export default function Configuracion({ editar, director, colegio, setColegio, r
         <Route path="avisos" element={<Avisos editar={editar} />} />
         <Route path="plantillas" element={<Plantillas editar={editar} />} />
         <Route path="categorias" element={<Categorias editar={editar} />} />
-        {director && <Route path="comprobantes" element={(
+        {administrador && <Route path="comprobantes" element={(
           <div className="tarjeta-panel"><FormFacturacion url="/api/configuracion/facturacion" /></div>)} />}
       </Routes>
     </section>
@@ -184,7 +184,7 @@ function Perfil({ editar }) {
   )
 }
 
-// --- Comprobantes electrónicos (director y Tikray Labs) --------------------------------------------
+// --- Comprobantes electrónicos (administrador y Tikray Labs) --------------------------------------------
 
 export function FormFacturacion({ url, alGuardar }) {
   const [cfg, setCfg] = useState(null)
@@ -505,7 +505,7 @@ function Categorias({ editar }) {
   )
 }
 
-// --- Historial (solo el director) ------------------------------------------------------------
+// --- Historial (solo el administrador) ------------------------------------------------------------
 
 const ACCION = { crear: 'Creó', editar: 'Editó', anular: 'Anuló' }
 

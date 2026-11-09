@@ -1,4 +1,4 @@
-// Color de acento del colegio: el principal que eligió el director. Para botones y fondos con texto
+// Color de acento del colegio: el principal que eligió el administrador. Para botones y fondos con texto
 // blanco se oscurece hasta llegar a contraste 4.5:1 (WCAG AA); la versión suave es el mismo color al 9 %.
 
 const POR_DEFECTO = '#1F4E79'

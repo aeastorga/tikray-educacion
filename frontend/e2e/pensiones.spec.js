@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs'
 
 const semilla = () => JSON.parse(readFileSync(new URL('./.semilla.json', import.meta.url)))
 
-async function director(page) {
-  const { director: d } = semilla()
+async function administrador(page) {
+  const { administrador: d } = semilla()
   await page.goto('/personal?volver=/panel/pensiones/configuracion')
   await page.getByLabel('Usuario (DNI)').fill(d.usuario)
   await page.getByLabel('Clave').fill(d.clave)
@@ -14,7 +14,7 @@ async function director(page) {
 
 test('pensión: concepto, cronograma, cuotas, cobro con recibo y la familia lo ve', async ({ browser }) => {
   const colegio = await (await browser.newContext()).newPage()
-  await director(colegio)
+  await administrador(colegio)
 
   // Concepto con monto por nivel y cronograma de marzo a diciembre.
   await colegio.getByRole('button', { name: 'Concepto' }).click()

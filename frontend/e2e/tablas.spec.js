@@ -4,8 +4,8 @@ import { readFileSync } from 'node:fs'
 // Tablas, menús de acciones, paginación y campana: el mismo diseño en todo el panel.
 const semilla = () => JSON.parse(readFileSync(new URL('./.semilla.json', import.meta.url)))
 
-async function director(page, volver = '/panel') {
-  const { director: d } = semilla()
+async function administrador(page, volver = '/panel') {
+  const { administrador: d } = semilla()
   await page.goto(`/personal?volver=${volver}`)
   await page.getByLabel('Usuario (DNI)').fill(d.usuario)
   await page.getByLabel('Clave').fill(d.clave)
@@ -17,7 +17,7 @@ test.describe('en pantalla ancha', () => {
   test.use({ viewport: { width: 1440, height: 900 }, isMobile: false, hasTouch: false })
 
   test('Cuentas de padres pagina de 25 en 25', async ({ page }) => {
-    await director(page, '/panel/familias')
+    await administrador(page, '/panel/familias')
     await expect(page.getByRole('heading', { name: 'Cuentas de padres' })).toBeVisible()
     const pag = page.getByRole('navigation', { name: 'Páginas' })
     await expect(pag).toContainText(/1–25 de 3\d/)  // 31 de la semilla y los que crean las otras pruebas
@@ -29,7 +29,7 @@ test.describe('en pantalla ancha', () => {
   })
 
   test('el menú de acciones se abre, se cierra con Escape y Bloquear pide confirmación', async ({ page }) => {
-    await director(page, '/panel/familias')
+    await administrador(page, '/panel/familias')
     const fila = page.getByRole('row', { name: /Zeta 00/ })
     await expect(fila.getByRole('button', { name: 'Enviar enlace' })).toBeVisible()
     const mas = fila.getByRole('button', { name: /^Más acciones/ })
@@ -56,7 +56,7 @@ test.describe('en pantalla ancha', () => {
   test('la campana dice "1 respuesta" en singular', async ({ browser }) => {
     const { familia: f } = semilla()
     const colegio = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
-    await director(colegio, '/panel/cuaderno/escribir')
+    await administrador(colegio, '/panel/cuaderno/escribir')
     await colegio.getByLabel('Asunto').fill('Feria de ciencias')
     await colegio.getByRole('button', { name: 'Enviar' }).click()
     await expect(colegio.getByRole('heading', { name: 'Feria de ciencias' })).toBeVisible()
@@ -91,7 +91,7 @@ test.describe('en pantalla ancha', () => {
   })
 
   test('Reunión agrupa por nivel y las recientes llevan el nivel', async ({ page }) => {
-    await director(page, '/panel/reunion')
+    await administrador(page, '/panel/reunion')
     await expect(page.getByRole('heading', { name: 'Reunión de padres' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Primaria', level: 3 })).toBeVisible()
     const abrir = page.getByRole('button', { name: 'Abrir reunión' })
@@ -108,7 +108,7 @@ test.describe('en pantalla ancha', () => {
 
 test('a 390 px cada fila es una tarjeta y la página no se desliza', async ({ browser }) => {
   const page = await (await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })).newPage()
-  await director(page, '/panel/familias')
+  await administrador(page, '/panel/familias')
   const fila = page.getByRole('table', { name: 'Apoderados' }).locator('tbody tr').first()
   await expect(fila).toBeVisible()
   expect(await fila.evaluate((tr) => getComputedStyle(tr).display)).not.toBe('table-row')

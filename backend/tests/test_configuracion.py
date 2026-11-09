@@ -1,4 +1,4 @@
-"""Configuración del director: perfil del colegio, módulos contratados, avisos a los padres (tipos y horario
+"""Configuración del administrador: perfil del colegio, módulos contratados, avisos a los padres (tipos y horario
 sin molestar), comunicados programados, plantillas, categorías de incidencias, historial de actividad y el
 paso de prueba a activo. Todo con aislamiento entre colegios."""
 
@@ -63,7 +63,7 @@ def _categoria(db, colegio: Colegio, nombre: str = "Participación", tipo: str =
 
 # --- Perfil del colegio --------------------------------------------------------------------
 
-def test_perfil_lo_edita_el_director_y_lo_ve_solo_su_colegio(client, e, b, h, hb):
+def test_perfil_lo_edita_el_administrador_y_lo_ve_solo_su_colegio(client, e, b, h, hb):
     r = client.get("/api/configuracion/perfil", headers=h)
     assert r.status_code == 200 and r.json()["tipo_gestion"] == "particular"
     nuevo = {"tipo_gestion": "estatal", "ugel": "UGEL 03", "codigo_modular": "0123456", "direccion": "Av. Lima 123",
@@ -112,11 +112,11 @@ def test_modulo_apagado_sale_del_menu_y_su_api_da_403_aunque_el_rol_tenga_permis
     assert r.status_code == 200, r.text
     assert {m["clave"]: m["activo"] for m in r.json()}["cuaderno"] is False
 
-    # Menú: el permiso ya no aparece (ni para el docente ni para el director).
+    # Menú: el permiso ya no aparece (ni para el docente ni para el administrador).
     assert "cuaderno" not in client.get("/api/auth/yo", headers=hd).json()["permisos"]
     assert "cuaderno" not in client.get("/api/auth/yo", headers=h).json()["permisos"]
     assert "asistencia" in client.get("/api/auth/yo", headers=hd).json()["permisos"]
-    # API: 403 para el docente con permiso, para el director y para la familia.
+    # API: 403 para el docente con permiso, para el administrador y para la familia.
     for hh in (hd, h):
         assert client.get("/api/cuaderno/entradas", headers=hh).status_code == 403
         assert escribir(client, hh, tipo="comunicado", alcance="colegio").status_code == 403
@@ -148,7 +148,7 @@ def test_asistencia_apagada_no_marca_ni_pone_faltas(client, db, e, b, h):
                      .where(AsistenciaAlumno.colegio_id == b.colegio.id)) == 3
 
 
-def test_el_director_solo_prende_lo_contratado(client, db, e, h, hp):
+def test_el_administrador_solo_prende_lo_contratado(client, db, e, h, hp):
     r = client.patch(f"/plataforma/colegios/{e.colegio.id}", json={"modulos_contratados": ["asistencia"]}, headers=hp)
     assert r.status_code == 200, r.text
     modulos = {m["clave"]: m for m in client.get("/api/configuracion/modulos", headers=h).json()}
@@ -157,10 +157,10 @@ def test_el_director_solo_prende_lo_contratado(client, db, e, h, hp):
     assert client.put("/api/configuracion/modulos", json={"activos": ["asistencia", "cuaderno"]},
                       headers=h).status_code == 403
     assert client.put("/api/configuracion/modulos", json={"activos": ["notas"]}, headers=h).status_code == 422
-    # No contratado: fuera del menú y 403 en la API, aunque sea el director.
+    # No contratado: fuera del menú y 403 en la API, aunque sea el administrador.
     assert "cuaderno" not in client.get("/api/auth/yo", headers=h).json()["permisos"]
     assert client.get("/api/cuaderno/entradas", headers=h).status_code == 403
-    # Apagar lo contratado sí puede, y al recontratar vuelve a quedar como el director lo dejó.
+    # Apagar lo contratado sí puede, y al recontratar vuelve a quedar como el administrador lo dejó.
     assert client.put("/api/configuracion/modulos", json={"activos": []}, headers=h).status_code == 200
     client.patch(f"/plataforma/colegios/{e.colegio.id}", headers=hp,
                  json={"modulos_contratados": ["asistencia", "cuaderno"]})
@@ -178,7 +178,7 @@ def _aviso(db, colegio, alumno, tipo: str) -> ColaAviso:
     return a
 
 
-def test_el_director_elige_que_avisos_salen(client, db, e, b, h):
+def test_el_administrador_elige_que_avisos_salen(client, db, e, b, h):
     tipos = {"ingreso": False, "tardanza": True, "falta": True, "salida": True, "cuaderno": False}
     r = client.put("/api/configuracion/avisos", headers=h,
                    json={"tipos": tipos, "silencio_desde": "00:00", "silencio_hasta": "00:00"})
@@ -328,7 +328,7 @@ def test_plantillas_crud_permisos_y_aislamiento(client, db, e, b, h, hb):
 def test_colegio_nuevo_trae_categorias_por_defecto(client, db, hp):
     r = client.post("/plataforma/colegios", headers=hp, json={
         "nombre": "Colegio Gamma", "subdominio": "gamma",
-        "director": {"numero_documento": "40000001", "nombres": "Ana", "apellidos": "Ramos"}})
+        "administrador": {"numero_documento": "40000001", "nombres": "Ana", "apellidos": "Ramos"}})
     assert r.status_code == 201, r.text
     cats = db.scalars(select(CategoriaIncidencia).where(CategoriaIncidencia.colegio_id == r.json()["colegio"]["id"])).all()
     assert {c.tipo for c in cats} == {"merito", "mejora"}
@@ -378,7 +378,7 @@ def test_categorias_aislamiento_y_permisos(client, db, e, b, h, hb):
 
 # --- Historial de actividad ------------------------------------------------------------------
 
-def test_historial_solo_el_director_y_sin_datos_sensibles(client, db, e, b, h, hb, hf):
+def test_historial_solo_el_administrador_y_sin_datos_sensibles(client, db, e, b, h, hb, hf):
     # Personal nuevo y clave reiniciada: la clave temporal nunca va al historial.
     rol = client.post("/api/roles", headers=h, json={"nombre": "Docente", "permisos": {"cuaderno": "editar"}}).json()
     r = client.post("/api/personal", headers=h, json={"numero_documento": "30000001", "nombres": "Rosa",
@@ -414,7 +414,7 @@ def test_historial_solo_el_director_y_sin_datos_sensibles(client, db, e, b, h, h
     assert any(i["modulo"] == "cuaderno" and i["accion"] == "editar" for i in items)  # justificación aprobada
     assert all(i["quien"] == "Dir alfa" for i in items)
 
-    # Solo el director: ni con todos los permisos.
+    # Solo el administrador: ni con todos los permisos.
     crear_personal(db, e.colegio, "20000006", {m: "editar" for m in ("configuracion", "roles", "personal")})
     hx = auth("alfa", token(client, "alfa", "20000006"))
     assert client.get("/api/configuracion/historial", headers=hx).status_code == 403
@@ -423,10 +423,10 @@ def test_historial_solo_el_director_y_sin_datos_sensibles(client, db, e, b, h, h
 
 
 def test_historial_filtros_y_paginas(client, db, e, h):
-    director = db.scalar(select(Usuario).where(Usuario.colegio_id == e.colegio.id, Usuario.usuario == "10000000"))
+    administrador = db.scalar(select(Usuario).where(Usuario.colegio_id == e.colegio.id, Usuario.usuario == "10000000"))
     otro = crear_personal(db, e.colegio, "20000007")
     for i in range(55):
-        configuracion.registrar(db, e.colegio.id, director, "crear", "padron", "alumno", i, f"Alumno {i}")
+        configuracion.registrar(db, e.colegio.id, administrador, "crear", "padron", "alumno", i, f"Alumno {i}")
     configuracion.registrar(db, e.colegio.id, otro, "editar", "cuaderno", "comunicado", 1, "Comunicado «Hola»")
     viejo = RegistroActividad(colegio_id=e.colegio.id, quien="Sistema", accion="editar", modulo="configuracion",
                               que="perfil", resumen="Viejo", creado_en=datetime.now(UTC) - timedelta(days=40))
@@ -439,7 +439,7 @@ def test_historial_filtros_y_paginas(client, db, e, h):
     assert len(client.get("/api/configuracion/historial?pagina=3", headers=h).json()["items"]) == 7
     assert len(client.get("/api/configuracion/historial?por_pagina=50&pagina=2", headers=h).json()["items"]) == 7
     assert client.get("/api/configuracion/historial?por_pagina=101", headers=h).status_code == 422
-    assert {p["id"] for p in r["personas"]} == {director.id, otro.id}
+    assert {p["id"] for p in r["personas"]} == {administrador.id, otro.id}
     assert {m["clave"] for m in r["modulos"]} == {"padron", "cuaderno", "configuracion"}
     assert client.get(f"/api/configuracion/historial?usuario_id={otro.id}", headers=h).json()["total"] == 1
     assert client.get("/api/configuracion/historial?modulo=padron", headers=h).json()["total"] == 55
@@ -512,7 +512,7 @@ def test_activar_borra_solo_los_datos_de_ejemplo_de_ese_colegio(client, db, e, b
     # Beta, intacto (y sigue en prueba).
     assert {m: _conteo(db, m, b.colegio) for m in antes_beta} == antes_beta
     assert db.get(Colegio, b.colegio.id).estado == "prueba"
-    # El director sigue entrando.
+    # El administrador sigue entrando.
     assert client.get("/api/configuracion/perfil", headers=h).status_code == 200
 
 

@@ -18,9 +18,9 @@ function almacen(page) {
 }
 
 async function ingresar(page) {
-  const { director } = semilla()
-  await page.getByLabel('Usuario (DNI)').fill(director.usuario)
-  await page.getByLabel('Clave').fill(director.clave)
+  const { administrador } = semilla()
+  await page.getByLabel('Usuario (DNI)').fill(administrador.usuario)
+  await page.getByLabel('Clave').fill(administrador.clave)
   await page.getByRole('button', { name: 'Ingresar' }).click()
 }
 
@@ -74,7 +74,7 @@ test('marca sin internet y envía al volver la conexión', async ({ page, contex
 test('sesión vencida: avisa, conserva las pendientes y las envía al reingresar', async ({ page }) => {
   const [, , ana] = semilla().alumnos
   await abrirPorteria(page)
-  // Otra persona cierra todas las sesiones del director: el token deja de servir.
+  // Otra persona cierra todas las sesiones del administrador: el token deja de servir.
   await page.evaluate(() => fetch('/api/auth/cerrar-sesiones', {
     method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('tikray.token')}` } }))
   await marcar(page, ana)

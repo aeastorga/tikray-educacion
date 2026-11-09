@@ -265,7 +265,7 @@ def test_tarjeta_del_personal_solo_con_permiso(client, db):
     assert "asistencia" in sin and "personal" not in sin
     con = _panel_de(client, "30000002")
     assert con["personal"]["total"] == 0
-    assert "personal" in _panel(client)  # el director ve todo
+    assert "personal" in _panel(client)  # el administrador ve todo
 
 
 def test_docente_con_solo_sus_secciones_ve_solo_lo_suyo(client, db):
