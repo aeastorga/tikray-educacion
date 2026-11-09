@@ -148,7 +148,7 @@ def test_plataforma_exige_token(client, metodo, ruta):
     assert client.request(metodo, ruta).status_code == 401
 
 
-def test_director_no_entra_por_ingreso_de_plataforma(client, dos):
+def test_administrador_no_entra_por_ingreso_de_plataforma(client, dos):
     r = client.post("/plataforma/auth/ingreso", json={"correo": "10000000", "clave": "ClaveBuena123"})
     assert r.status_code == 401
 
@@ -162,7 +162,7 @@ def test_listados_solo_del_propio_colegio(client, db, dos):
     personal = client.get("/api/personal", headers=h).json()
     assert [p["numero_documento"] for p in personal] == ["10000000"]
     roles = client.get("/api/roles", headers=h).json()
-    assert [r["nombre"] for r in roles] == ["Director"]
+    assert [r["nombre"] for r in roles] == ["Administrador"]
 
 
 def test_no_toca_recursos_de_otro_colegio_por_id(client, db, dos):

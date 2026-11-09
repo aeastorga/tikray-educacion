@@ -1,4 +1,4 @@
-"""Catálogo de módulos sobre los que el director da permisos a cada rol."""
+"""Catálogo de módulos sobre los que el administrador da permisos a cada rol."""
 
 MODULOS: dict[str, str] = {
     "configuracion": "Configuración e imagen del colegio",

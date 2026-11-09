@@ -1,6 +1,6 @@
 // Caja: cobrar con la caja del día abierta, pagos y recibos, cierre de cajas, gastos y reportes de ingresos.
 // Ver: "caja" ver. Abrir caja, cobrar, anular y registrar gastos: "caja" editar. Anular con la caja cerrada
-// o un gasto de otro día: director o rol con "puede anular" (el backend decide).
+// o un gasto de otro día: administrador o rol con "puede anular" (el backend decide).
 // Comprobantes electrónicos (si el colegio emite): boleta al responsable de pago o factura con RUC; salen en
 // segundo plano. "Comprobantes" lista los rechazados y los que fallaron 5 veces ("Reintentar": caja editar).
 import { ArrowLeft, FileSpreadsheet, FileWarning, Lock, Paperclip, Plus, Receipt, RotateCw, Search, Wallet } from 'lucide-react'
@@ -150,7 +150,7 @@ function ResumenCaja({ caja, alCerrar }) {
                 : `${diferencia > 0 ? 'Sobran' : 'Faltan'} ${soles(aSoles(Math.abs(diferencia)))} frente al efectivo cobrado.`}
             </p>
           )}
-          <p className="tenue">Cerrada, ya no admite cobros ni anulaciones tuyas: solo el director o un rol con permiso para anular podrán anular.</p>
+          <p className="tenue">Cerrada, ya no admite cobros ni anulaciones tuyas: solo el administrador o un rol con permiso para anular podrán anular.</p>
           <div className="acciones">
             <button className="boton">Cerrar caja</button>
             <button type="button" className="enlace" onClick={() => setCierre(null)}>Cancelar</button>
@@ -365,7 +365,7 @@ function Pagos({ editar }) {
   ]
   return (
     <>
-      <Encabezado titulo="Pagos" descripcion="Nada se borra: un pago anulado queda visible con su motivo. Con la caja abierta lo anula quien cobró; con la caja cerrada, el director o un rol con permiso para anular." />
+      <Encabezado titulo="Pagos" descripcion="Nada se borra: un pago anulado queda visible con su motivo. Con la caja abierta lo anula quien cobró; con la caja cerrada, el administrador o un rol con permiso para anular." />
       {datos && <Cifras items={[{ etiqueta: 'Cobrado (válidos)', valor: soles(datos.suma), tono: 'bien' }]} />}
       <Filtros total={datos && plural(datos.total, 'pago', 'pagos')}>
         <Buscador valor={filtros.q} cambiar={cambiar('q')} placeholder="Alumno, documento u operación" />
@@ -509,7 +509,7 @@ function Gastos({ editar }) {
   ]
   return (
     <>
-      <Encabezado titulo="Gastos" descripcion="Salidas de dinero del colegio con su comprobante. Nada se borra: se anula con motivo. El mismo día lo anula quien lo registró; después, el director o un rol con permiso para anular."
+      <Encabezado titulo="Gastos" descripcion="Salidas de dinero del colegio con su comprobante. Nada se borra: se anula con motivo. El mismo día lo anula quien lo registró; después, el administrador o un rol con permiso para anular."
                   acciones={editar && (
                     <>
                       <button className="boton secundario" onClick={() => setVerCategorias(!verCategorias)}>Categorías</button>

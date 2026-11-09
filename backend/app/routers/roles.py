@@ -18,7 +18,7 @@ class DatosRol(BaseModel):
     permisos: dict[str, str] = {}
     # Cuaderno: solo ve y escribe lo de las secciones a su cargo (docente, tutor).
     solo_sus_secciones: bool = False
-    # Caja: anular pagos de caja cerrada y gastos de días anteriores (el director siempre puede).
+    # Caja: anular pagos de caja cerrada y gastos de días anteriores (el administrador siempre puede).
     puede_anular_caja: bool = False
 
     @field_validator("permisos")
@@ -35,17 +35,17 @@ class DatosRol(BaseModel):
 class RolOut(BaseModel):
     id: int
     nombre: str
-    es_director: bool
+    es_administrador: bool
     permisos: dict[str, str]
     solo_sus_secciones: bool
     puede_anular_caja: bool
 
 
 def _salida(r: Rol) -> RolOut:
-    permisos = {m: "editar" for m in MODULOS} if r.es_director else {p.modulo: p.nivel for p in r.permisos}
-    return RolOut(id=r.id, nombre=r.nombre, es_director=r.es_director, permisos=permisos,
-                  solo_sus_secciones=r.solo_sus_secciones and not r.es_director,
-                  puede_anular_caja=r.puede_anular_caja and not r.es_director)
+    permisos = {m: "editar" for m in MODULOS} if r.es_administrador else {p.modulo: p.nivel for p in r.permisos}
+    return RolOut(id=r.id, nombre=r.nombre, es_administrador=r.es_administrador, permisos=permisos,
+                  solo_sus_secciones=r.solo_sus_secciones and not r.es_administrador,
+                  puede_anular_caja=r.puede_anular_caja and not r.es_administrador)
 
 
 def _rol(db: Session, colegio_id: int, rol_id: int) -> Rol:
@@ -98,8 +98,8 @@ def editar(
     s: Sesion = Depends(requerir_permiso("roles", "editar")), db: Session = Depends(get_db),
 ) -> RolOut:
     rol = _rol(db, s.colegio.id, rol_id)
-    if rol.es_director:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El rol del director no se modifica")
+    if rol.es_administrador:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El rol del administrador no se modifica")
     rol.nombre, rol.solo_sus_secciones = datos.nombre.strip(), datos.solo_sus_secciones
     rol.puede_anular_caja = datos.puede_anular_caja
     rol.permisos = [PermisoRol(colegio_id=s.colegio.id, modulo=m, nivel=n) for m, n in datos.permisos.items()]
@@ -112,8 +112,8 @@ def borrar(
     rol_id: int, s: Sesion = Depends(requerir_permiso("roles", "editar")), db: Session = Depends(get_db),
 ) -> None:
     rol = _rol(db, s.colegio.id, rol_id)
-    if rol.es_director:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El rol del director no se borra")
+    if rol.es_administrador:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El rol del administrador no se borra")
     if db.scalar(select(Usuario.id).where(Usuario.colegio_id == s.colegio.id, Usuario.rol_id == rol.id).limit(1)):
         raise HTTPException(status.HTTP_409_CONFLICT, "Hay personal con este rol")
     configuracion.registrar(db, s.colegio.id, s.usuario, "anular", "roles", "rol", rol.id, f"Borró el rol «{rol.nombre}»")

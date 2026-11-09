@@ -60,7 +60,7 @@ def _analizar(archivo: UploadFile, anio_id: int | None, s: Sesion, db: Session) 
     try:
         return importacion.analizar(db, s.colegio.id, anio, contenido,
                                     puede_personal=tiene_permiso(s.usuario, "personal", "editar"),
-                                    es_director=s.usuario.rol.es_director)
+                                    es_administrador=s.usuario.rol.es_administrador)
     except importacion.ArchivoInvalido as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from None
 

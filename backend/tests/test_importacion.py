@@ -211,7 +211,7 @@ def test_personal_errores(client, db):
     r = subir(client, h, excel(personal=[
         ["PAS", "AB123456", "X", "Y", "Docente", None, None],      # tipo no permitido para personal
         ["DNI", "45678901", "X", "Y", "Inexistente", None, None],  # rol no existe
-        ["DNI", "10000000", "Dir", "alfa", "Director", None, None],  # el director ya existe, ok
+        ["DNI", "10000000", "Dir", "alfa", "Administrador", None, None],  # el administrador ya existe, ok
     ])).json()
     columnas = {(e["fila"], e["columna"]) for e in r["errores"]}
     assert (2, "tipo doc") in columnas and (3, "Rol") in columnas and r["total_errores"] == 2
@@ -222,16 +222,16 @@ def test_personal_requiere_permiso_de_personal(client, db):
     armar(client)
     crear_personal(db, c, "20000000", {"padron": "editar"})
     h = auth("alfa", token(client, "alfa", "20000000"))
-    r = subir(client, h, excel(personal=[["DNI", "45678901", "X", "Y", "Director", None, None]])).json()
+    r = subir(client, h, excel(personal=[["DNI", "45678901", "X", "Y", "Administrador", None, None]])).json()
     assert "permiso" in r["errores"][0]["mensaje"]
 
 
-def test_no_director_no_asigna_director_por_excel(client, db):
+def test_no_administrador_no_asigna_administrador_por_excel(client, db):
     c = crear_colegio(db, "alfa")
     armar(client)
     crear_personal(db, c, "20000000", {"padron": "editar", "personal": "editar"})
     h = auth("alfa", token(client, "alfa", "20000000"))
-    r = subir(client, h, excel(personal=[["DNI", "45678901", "X", "Y", "Director", None, None]])).json()
+    r = subir(client, h, excel(personal=[["DNI", "45678901", "X", "Y", "Administrador", None, None]])).json()
     assert r["errores"][0]["columna"] == "Rol"
 
 

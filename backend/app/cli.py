@@ -84,7 +84,7 @@ def demo(argumentos: list[str]) -> None:
             sys.exit(str(e))
     c = r.credenciales
     print(f"Demo lista en {a.subdominio}: {r.alumnos} alumnos, {r.apoderados} apoderados, {r.personal} del personal")
-    print(f"  Director:  {c['director']['usuario']} / {c['director']['clave']}")
+    print(f"  Administrador: {c['administrador']['usuario']} / {c['administrador']['clave']}")
     print(f"  Portería:  {c['porteria']['usuario']} / {c['porteria']['clave']}")
     print(f"  Docente:   {c['docente']['usuario']} / {c['docente']['clave']}  ({c['docente']['seccion']})")
     print(f"  Familia:   {c['familia']['documento']} / PIN {c['familia']['pin']}  ({c['familia']['hijo']})")

@@ -1,6 +1,6 @@
-"""Panel del director: cómo va el colegio hoy, en una sola pantalla.
+"""Panel del administrador: cómo va el colegio hoy, en una sola pantalla.
 
-Cada bloque sale solo si la persona tiene permiso de ver ese módulo (el director los ve
+Cada bloque sale solo si la persona tiene permiso de ver ese módulo (el administrador los ve
 todos). El cuaderno respeta "solo sus secciones".
 """
 
@@ -280,7 +280,7 @@ def resumen(s: Sesion = Depends(usuario_actual), db: Session = Depends(get_db)) 
         vencida, morosos = pensiones.deuda_vencida(db, cid, hoy)
         salida["pensiones"] = {"cobrado_mes": str(pensiones.soles(cobrado)), "deuda_vencida": str(vencida),
                                "morosos": morosos}
-    if u.rol.es_director:
+    if u.rol.es_administrador:
         salida["personal_activo"] = db.scalar(select(func.count()).select_from(Usuario).where(
             Usuario.colegio_id == cid, Usuario.activo))
     return salida

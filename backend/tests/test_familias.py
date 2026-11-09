@@ -539,9 +539,9 @@ def test_recarga_de_excel_que_cambia_el_celular(client, db):
     db.expire_all()
     assert db.get(Apoderado, ap.id).celular == "912345678"
     cambio = db.scalar(select(CambioApoderado))
-    director = db.scalar(select(Usuario).where(Usuario.colegio_id == c.id))
+    administrador = db.scalar(select(Usuario).where(Usuario.colegio_id == c.id))
     assert (cambio.campo, cambio.antes, cambio.despues, cambio.origen, cambio.cambiado_por_id) == (
-        "celular", "987654321", "912345678", "excel", director.id)
+        "celular", "987654321", "912345678", "excel", administrador.id)
     inv = db.scalar(select(InvitacionFamilia))
     assert inv.anulada_en is not None and inv.motivo_anulacion == "Cambió el celular del apoderado"
     aviso = db.scalar(select(ColaAviso).where(ColaAviso.tipo == "cuenta"))

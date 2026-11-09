@@ -4,9 +4,9 @@ import { readFileSync } from 'node:fs'
 const semilla = () => JSON.parse(readFileSync(new URL('./.semilla.json', import.meta.url)))
 
 test('reunión de padres: el padre llena su ficha, el tutor la aprueba y el padre crea su PIN', async ({ browser }) => {
-  // El tutor (aquí la directora) abre la reunión de 1° A.
+  // El tutor (aquí la administradora) abre la reunión de 1° A.
   const tutor = await (await browser.newContext()).newPage()
-  const { director: d } = semilla()
+  const { administrador: d } = semilla()
   await tutor.goto('/personal?volver=/panel/reunion')
   await tutor.getByLabel('Usuario (DNI)').fill(d.usuario)
   await tutor.getByLabel('Clave').fill(d.clave)

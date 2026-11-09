@@ -404,7 +404,7 @@ def test_marca_del_rol_desde_el_panel(client, e, h):
                                                     "solo_sus_secciones": True})
     assert r.status_code == 201 and r.json()["solo_sus_secciones"] is True
     roles = {x["nombre"]: x["solo_sus_secciones"] for x in client.get("/api/roles", headers=h).json()}
-    assert roles == {"Director": False, "Tutor": True}
+    assert roles == {"Administrador": False, "Tutor": True}
 
 
 def test_permisos_del_modulo(client, db, e, h):

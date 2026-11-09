@@ -29,7 +29,7 @@ def test_editar_incluye_ver(client, db):
     assert client.get("/api/roles", headers=h).status_code == 200
 
 
-def test_director_crea_rol_y_personal(client, db):
+def test_administrador_crea_rol_y_personal(client, db):
     crear_colegio(db, "alfa")
     h = auth("alfa", token(client, "alfa"))
     r = client.post("/api/roles", headers=h, json={"nombre": "Portería", "permisos": {"asistencia": "editar"}})
@@ -75,22 +75,22 @@ def test_rol_con_modulo_o_nivel_invalido(client, db):
     assert client.post("/api/roles", headers=h, json={"nombre": "X", "permisos": {"roles": "todo"}}).status_code == 422
 
 
-def test_rol_director_protegido(client, db):
+def test_rol_administrador_protegido(client, db):
     crear_colegio(db, "alfa")
     h = auth("alfa", token(client, "alfa"))
-    director = client.get("/api/roles", headers=h).json()[0]
-    assert director["permisos"] == {m: "editar" for m in MODULOS}
-    assert client.put(f"/api/roles/{director['id']}", headers=h, json={"nombre": "X"}).status_code == 400
-    assert client.delete(f"/api/roles/{director['id']}", headers=h).status_code == 400
+    administrador = client.get("/api/roles", headers=h).json()[0]
+    assert administrador["permisos"] == {m: "editar" for m in MODULOS}
+    assert client.put(f"/api/roles/{administrador['id']}", headers=h, json={"nombre": "X"}).status_code == 400
+    assert client.delete(f"/api/roles/{administrador['id']}", headers=h).status_code == 400
 
 
-def test_no_director_no_asigna_rol_director(client, db):
+def test_no_administrador_no_asigna_rol_administrador(client, db):
     c = crear_colegio(db, "alfa")
     crear_personal(db, c, "20000000", {"personal": "editar", "roles": "ver"})
     h = auth("alfa", token(client, "alfa", "20000000"))
-    director_id = next(r["id"] for r in client.get("/api/roles", headers=h).json() if r["es_director"])
+    administrador_id = next(r["id"] for r in client.get("/api/roles", headers=h).json() if r["es_administrador"])
     r = client.post("/api/personal", headers=h, json={"numero_documento": "30000000", "nombres": "N", "apellidos": "A",
-                                                      "rol_id": director_id})
+                                                      "rol_id": administrador_id})
     assert r.status_code == 403
 
 

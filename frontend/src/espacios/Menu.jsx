@@ -53,7 +53,7 @@ export default function Menu({ colegio, yo, puede, salir }) {
       puede('personal') && { a: '/panel/personal', texto: 'Personal', icono: IdCard },
       puede('roles') && { a: '/panel/roles', texto: 'Roles y permisos', icono: ShieldCheck },
       puede('configuracion') && { a: '/panel/configuracion', texto: 'Configuración', icono: Settings },
-      yo.es_director && { a: '/panel/historial', texto: 'Historial', icono: History },
+      yo.es_administrador && { a: '/panel/historial', texto: 'Historial', icono: History },
     ]],
   ].map(([titulo, items]) => [titulo, items.filter(Boolean)]).filter(([, items]) => items.length)
 

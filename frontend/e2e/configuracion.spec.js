@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs'
 
 const semilla = () => JSON.parse(readFileSync(new URL('./.semilla.json', import.meta.url)))
 
-async function director(page, volver = '/panel/configuracion') {
-  const { director: d } = semilla()
+async function administrador(page, volver = '/panel/configuracion') {
+  const { administrador: d } = semilla()
   await page.goto(`/personal?volver=${volver}`)
   await page.getByLabel('Usuario (DNI)').fill(d.usuario)
   await page.getByLabel('Clave').fill(d.clave)
@@ -27,7 +27,7 @@ async function enMenu(page, nombre) {
 }
 
 test('perfil, módulos y avisos del colegio', async ({ page }) => {
-  await director(page)
+  await administrador(page)
   await page.getByRole('link', { name: 'Perfil' }).click()
   await page.getByLabel('Estatal').check()
   await page.getByLabel('UGEL').fill('UGEL 03')
@@ -56,7 +56,7 @@ test('perfil, módulos y avisos del colegio', async ({ page }) => {
 })
 
 test('plantilla en "Escribir" y comunicado programado que se cancela', async ({ page }) => {
-  await director(page)
+  await administrador(page)
   await page.getByRole('link', { name: 'Plantillas' }).click()
   await page.getByRole('button', { name: 'Nueva plantilla' }).click()
   await page.getByLabel('Nombre de la plantilla').fill('Simulacro')
@@ -87,7 +87,7 @@ test('plantilla en "Escribir" y comunicado programado que se cancela', async ({ 
 test('incidencia con categoría de mérito: la familia la ve en verde', async ({ browser }) => {
   const { alumnos, familia: f } = semilla()
   const colegio = await (await browser.newContext()).newPage()
-  await director(colegio)
+  await administrador(colegio)
   await colegio.getByRole('link', { name: 'Categorías' }).click()
   await expect(colegio.getByRole('heading', { name: 'Méritos' })).toBeVisible()
   await colegio.getByLabel('Nueva categoría de méritos').fill('Deportes')
@@ -125,8 +125,8 @@ test('incidencia con categoría de mérito: la familia la ve en verde', async ({
   await expect(deportes).toContainText('Desactivada')
 })
 
-test('historial: solo el director, con filtros', async ({ page }) => {
-  await director(page, '/panel/historial')
+test('historial: solo el administrador, con filtros', async ({ page }) => {
+  await administrador(page, '/panel/historial')
   expect(await enMenu(page, 'Historial')).toBe(1)
   const tabla = page.getByRole('table', { name: 'Historial de actividad' })
   await expect(tabla.locator('tbody tr').first()).toBeVisible()

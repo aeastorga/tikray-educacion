@@ -17,7 +17,7 @@ const ENTORNO = {
 export default defineConfig({
   testDir: './e2e',
   globalSetup: './e2e/preparar.js',
-  workers: 1, // comparten la base y una prueba cierra las sesiones del director
+  workers: 1, // comparten la base y una prueba cierra las sesiones del administrador
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
   use: {

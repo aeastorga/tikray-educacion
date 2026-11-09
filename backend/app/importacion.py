@@ -18,7 +18,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import codigos, familias, pensiones, validacion
+from app import codigos, familias, pensiones, plan, validacion
 from app.models import (Alumno, AlumnoApoderado, AnioEscolar, Apoderado, Grado, Matricula, Nivel, Rol, Seccion,
                         Usuario)
 from app.proteccion import generar_clave_temporal
@@ -221,7 +221,7 @@ def _campo(fn, valor, hoja: str, n: int, columna: str, a: Analisis):
 
 
 def analizar(db: Session, colegio_id: int, anio: AnioEscolar, contenido: bytes,
-             puede_personal: bool, es_director: bool) -> Analisis:
+             puede_personal: bool, es_administrador: bool) -> Analisis:
     a = Analisis(anio=anio)
     if len(contenido) > MAX_BYTES:
         raise ArchivoInvalido("El archivo pesa más de 5 MB")
@@ -242,7 +242,7 @@ def analizar(db: Session, colegio_id: int, anio: AnioEscolar, contenido: bytes,
         if filas and not puede_personal:
             a.error("Personal", None, None, "No tienes permiso para cargar personal")
         else:
-            _analizar_personal(db, colegio_id, filas, es_director, a)
+            _analizar_personal(db, colegio_id, filas, es_administrador, a)
     libro.close()
     return a
 
@@ -361,7 +361,7 @@ def _analizar_alumnos(db: Session, cid: int, anio: AnioEscolar, filas: list[tupl
     a.resumen.update(r)
 
 
-def _analizar_personal(db: Session, cid: int, filas: list[tuple[int, dict]], es_director: bool,
+def _analizar_personal(db: Session, cid: int, filas: list[tuple[int, dict]], es_administrador: bool,
                        a: Analisis) -> None:
     H = "Personal"
     roles = {_cab(r.nombre): r for r in db.scalars(select(Rol).where(Rol.colegio_id == cid))}
@@ -388,12 +388,12 @@ def _analizar_personal(db: Session, cid: int, filas: list[tuple[int, dict]], es_
         if rol is None:
             a.error(H, n, "Rol", f"No existe el rol \"{_texto(d.get('rol'))}\"; créalo primero en Roles")
             ok = False
-        elif rol.es_director and not es_director:
-            a.error(H, n, "Rol", "Solo el director asigna el rol de director")
+        elif rol.es_administrador and not es_administrador:
+            a.error(H, n, "Rol", "Solo el administrador asigna el rol de administrador")
             ok = False
         existente = existentes.get(doc) if doc else None
-        if existente and rol and existente.rol.es_director and not rol.es_director:
-            a.error(H, n, "Rol", "El rol de un director no se cambia desde Excel")
+        if existente and rol and existente.rol.es_administrador and not rol.es_administrador:
+            a.error(H, n, "Rol", "El rol de un administrador no se cambia desde Excel")
             ok = False
         if doc and existente is None and doc[1] in usuarios:
             a.error(H, n, "N° documento", "Ya hay otra persona con ese usuario")
@@ -406,6 +406,10 @@ def _analizar_personal(db: Session, cid: int, filas: list[tuple[int, dict]], es_
         elif (existente.nombres, existente.apellidos, existente.rol_id, existente.celular, existente.correo) != (
                 nombres, apellidos, rol.id, cel or existente.celular, mail or existente.correo):
             actualizados += 1
+    # Las filas nuevas entran activas: no pueden pasar el límite de usuarios del plan.
+    if (maximo := plan.excede(db, cid, nuevos)) is not None:
+        a.error(H, None, None, f"{plan.mensaje(maximo)} (hay {plan.usuarios_activos(db, cid)} activos y la hoja "
+                               f"agrega {nuevos})")
     a.resumen.update(personal_nuevo=nuevos, personal_actualizado=actualizados)
 
 

@@ -1,4 +1,4 @@
-"""Comprobantes electrónicos SUNAT (listos para conectar, sin proveedor real): configuración solo del director
+"""Comprobantes electrónicos SUNAT (listos para conectar, sin proveedor real): configuración solo del administrador
 y de Tikray Labs con el token cifrado, boleta o factura al cobrar sin esperar al proveedor, cola con
 reintentos, correlativo sin saltos, anulación e IGV. El aislamiento entre colegios está en test_aislamiento.py."""
 
@@ -142,7 +142,7 @@ def test_token_nunca_aparece_en_respuestas_ni_historial(client, db, e, h, prueba
         assert "SECRETO" not in resumen
 
 
-def test_solo_el_director_y_tikray_labs(client, db, e, h, prueba):
+def test_solo_el_administrador_y_tikray_labs(client, db, e, h, prueba):
     crear_personal(db, e.colegio, "50000001", {"configuracion": "editar", "caja": "editar"})
     hp = auth("alfa", token(client, "alfa", "50000001"))
     assert client.get("/api/configuracion/facturacion", headers=hp).status_code == 403

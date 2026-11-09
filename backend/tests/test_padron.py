@@ -152,7 +152,7 @@ def test_es_dia_lectivo(client, db):
     assert es_dia_lectivo(db, c.id, date(2026, 6, 29)) is False  # feriado marcado
     assert es_dia_lectivo(db, c.id, date(2026, 7, 4)) is False   # sábado
     assert es_dia_lectivo(db, c.id, date(2026, 2, 2)) is False   # antes del inicio
-    # Colegio con clases los sábados: lo configura el director en el año.
+    # Colegio con clases los sábados: lo configura el administrador en el año.
     anio = e["anio"]
     client.put(f"/api/padron/anios/{anio['id']}", headers=h,
                json={"anio": 2026, "inicio": anio["inicio"], "fin": anio["fin"], "dias_semana": "123456"})

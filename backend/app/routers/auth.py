@@ -78,7 +78,7 @@ def cambiar_clave(
 @sesion.get("/yo")
 def yo(s: Sesion = Depends(usuario_sesion)) -> dict:
     u = s.usuario
-    if u.rol.es_director:
+    if u.rol.es_administrador:
         permisos = {m: "editar" for m in MODULOS}
     else:
         permisos = {p.modulo: p.nivel for p in u.rol.permisos}
@@ -90,7 +90,7 @@ def yo(s: Sesion = Depends(usuario_sesion)) -> dict:
         "nombres": u.nombres,
         "apellidos": u.apellidos,
         "rol": u.rol.nombre,
-        "es_director": u.rol.es_director,
+        "es_administrador": u.rol.es_administrador,
         "debe_cambiar_clave": u.debe_cambiar_clave,
         "permisos": permisos,
     }

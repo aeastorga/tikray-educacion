@@ -30,7 +30,7 @@ from app.models import (Alumno, AlumnoApoderado, AnioEscolar, Apoderado, Colegio
 from app.seguridad import hashear_clave  # noqa: E402
 
 SUBDOMINIO = "e2e"
-DIRECTOR = {"usuario": "40000001", "clave": "ClaveE2e2026"}
+ADMINISTRADOR = {"usuario": "40000001", "clave": "ClaveE2e2026"}
 FAMILIA = {"documento": "41234567", "pin": "481937"}  # madre de Lucía, con la cuenta ya activada
 ALUMNOS = [("QUISPE MAMANI", "Lucía", "LUCAAAAA"), ("HUAMAN TORRES", "Diego", "DGAAAAAA"),
            ("ROJAS PAREDES", "Ana", "ANAAAAAA")]
@@ -51,7 +51,7 @@ def main() -> None:
         c = Colegio(nombre="Colegio de Pruebas", subdominio=SUBDOMINIO, modulos_contratados=list(CONTRATABLES))
         db.add(c)
         db.flush()
-        rol = Rol(colegio_id=c.id, nombre="Director", es_director=True)
+        rol = Rol(colegio_id=c.id, nombre="Administrador", es_administrador=True)
         anio = AnioEscolar(colegio_id=c.id, anio=hoy.year, inicio=date(hoy.year, 1, 1), fin=date(hoy.year, 12, 31),
                            dias_semana="1234567", activo=True)
         nivel = Nivel(colegio_id=c.id, nombre="Primaria")
@@ -59,9 +59,9 @@ def main() -> None:
                       hora_salida=time(13, 0))
         db.add_all([rol, anio, nivel, turno])
         db.flush()
-        db.add(Usuario(colegio_id=c.id, numero_documento=DIRECTOR["usuario"], usuario=DIRECTOR["usuario"],
+        db.add(Usuario(colegio_id=c.id, numero_documento=ADMINISTRADOR["usuario"], usuario=ADMINISTRADOR["usuario"],
                        nombres="Directora", apellidos="Pruebas", rol_id=rol.id,
-                       clave_hash=hashear_clave(DIRECTOR["clave"]), debe_cambiar_clave=False))
+                       clave_hash=hashear_clave(ADMINISTRADOR["clave"]), debe_cambiar_clave=False))
         grado = Grado(colegio_id=c.id, nivel_id=nivel.id, nombre="1°")
         db.add(grado)
         db.flush()
@@ -89,7 +89,7 @@ def main() -> None:
         db.add_all([Apoderado(colegio_id=c.id, numero_documento=f"4800{i:04d}", nombres="Carmen", apellidos=f"Zeta {i:02d}")
                     for i in range(EXTRA_APODERADOS)])
         db.commit()
-    print(json.dumps({"subdominio": SUBDOMINIO, "director": DIRECTOR, "familia": FAMILIA,
+    print(json.dumps({"subdominio": SUBDOMINIO, "administrador": ADMINISTRADOR, "familia": FAMILIA,
                       "alumnos": [{"nombre": f"{ap}, {no}", "codigo": co} for ap, no, co in ALUMNOS]}))
 
 

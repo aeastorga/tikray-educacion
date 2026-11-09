@@ -76,7 +76,7 @@ function Colegios({ salir }) {
         datos: {
           nombre: nuevo.nombre, subdominio: nuevo.subdominio.toLowerCase(),
           estado: nuevo.estado, vence_en: nuevo.vence_en || null,
-          director: {
+          administrador: {
             tipo_documento: nuevo.tipo_documento, numero_documento: nuevo.numero_documento,
             nombres: nuevo.nombres, apellidos: nuevo.apellidos,
           },
@@ -118,8 +118,8 @@ function Colegios({ salir }) {
       <main className="contenido">
         {creado && (
           <div className="aviso">
-            Colegio <b>{creado.colegio.nombre}</b> creado. Director: usuario <code>{creado.director_usuario}</code>,
-            clave temporal <code>{creado.director_clave_temporal}</code>
+            Colegio <b>{creado.colegio.nombre}</b> creado. Administrador: usuario <code>{creado.administrador_usuario}</code>,
+            clave temporal <code>{creado.administrador_clave_temporal}</code>
             <br /><span className="tenue">Se muestra una sola vez.</span>
             <button className="enlace" onClick={() => setCreado(null)}>Cerrar</button>
           </div>
@@ -127,7 +127,7 @@ function Colegios({ salir }) {
         {demoLista && (
           <div className="aviso">
             Demo lista: {plural(demoLista.alumnos, 'alumno', 'alumnos')}, {plural(demoLista.apoderados, 'apoderado', 'apoderados')}, {demoLista.personal} del personal.
-            Clave del personal <code>{demoLista.credenciales.director.clave}</code>: director <code>{demoLista.credenciales.director.usuario}</code>,
+            Clave del personal <code>{demoLista.credenciales.administrador.clave}</code>: administrador <code>{demoLista.credenciales.administrador.usuario}</code>,
             portería <code>{demoLista.credenciales.porteria.usuario}</code>, docente <code>{demoLista.credenciales.docente.usuario}</code>.
             Familia <code>{demoLista.credenciales.familia.documento}</code> con PIN <code>{demoLista.credenciales.familia.pin}</code>.
             <button className="enlace" onClick={() => setDemoLista(null)}>Cerrar</button>
@@ -207,9 +207,9 @@ function Colegios({ salir }) {
             <option value="DNI">DNI</option>
             <option value="CE">Carné de extranjería</option>
           </select>
-          <input placeholder="Documento del director" required {...campo('numero_documento')} />
-          <input placeholder="Nombres del director" required {...campo('nombres')} />
-          <input placeholder="Apellidos del director" required {...campo('apellidos')} />
+          <input placeholder="Documento del administrador" required {...campo('numero_documento')} />
+          <input placeholder="Nombres del administrador" required {...campo('nombres')} />
+          <input placeholder="Apellidos del administrador" required {...campo('apellidos')} />
           <button className="boton">Crear</button>
           {error && <p className="error">{error}</p>}
         </form>
@@ -236,13 +236,14 @@ function Dialogo({ titulo, cerrar, children }) {
 function EditarColegio({ colegio, cerrar, alGuardar }) {
   const [perfil, setPerfil] = useState(colegio.perfil)
   const [contratados, setContratados] = useState(colegio.modulos.filter((m) => m.contratado).map((m) => m.clave))
+  const [maximo, setMaximo] = useState(colegio.max_usuarios ?? '')
   const [error, setError] = useState(null)
 
   async function guardar(e) {
     e.preventDefault()
     setError(null)
     try {
-      await api(`/plataforma/colegios/${colegio.id}`, { metodo: 'PATCH', datos: { perfil, modulos_contratados: contratados } })
+      await api(`/plataforma/colegios/${colegio.id}`, { metodo: 'PATCH', datos: { perfil, modulos_contratados: contratados, max_usuarios: maximo === '' ? null : Number(maximo) } })
       alGuardar()
       cerrar()
     } catch (err) { setError(err.message) }
@@ -263,7 +264,12 @@ function EditarColegio({ colegio, cerrar, alGuardar }) {
             </label>
           ))}
         </fieldset>
-        <p className="tenue sin-margen">El director prende o apaga solo lo contratado. Lo que se quita aquí se apaga para todo el colegio.</p>
+        <p className="tenue sin-margen">El administrador prende o apaga solo lo contratado. Lo que se quita aquí se apaga para todo el colegio.</p>
+        <label><span>Límite de usuarios del personal</span>
+          <input type="number" min="1" step="1" inputMode="numeric" placeholder="Sin límite" value={maximo}
+                 onChange={(e) => setMaximo(e.target.value)} />
+        </label>
+        <p className="tenue sin-margen">Cuentan los usuarios activos, incluido el administrador; los padres no. Vacío = sin límite. Si lo bajas de los activos, nadie se desactiva: solo no podrán agregar más.</p>
         {error && <p className="error">{error}</p>}
         <div className="acciones">
           <button className="boton">Guardar</button>

@@ -72,9 +72,9 @@ export default function PanelColegio({ colegio, setColegio }) {
           <Route path="reunion/*" element={<Reunion colegio={colegio} editar={puede(yo, 'reuniones', 'editar')} />} />
           <Route path="personal" element={<Personal yo={yo} />} />
           <Route path="roles" element={<Roles yo={yo} />} />
-          <Route path="configuracion/*" element={<Configuracion editar={puede(yo, 'configuracion', 'editar')} director={yo.es_director}
+          <Route path="configuracion/*" element={<Configuracion editar={puede(yo, 'configuracion', 'editar')} administrador={yo.es_administrador}
             colegio={colegio} setColegio={setColegio} recargarYo={cargar} />} />
-          {yo.es_director && <Route path="historial" element={<Historial />} />}
+          {yo.es_administrador && <Route path="historial" element={<Historial />} />}
           <Route path="imagen" element={<Navigate to="/panel/configuracion" replace />} />
           <Route path="clave" element={<CambiarClave alTerminar={() => navegar('/panel')} />} />
         </Routes>
@@ -91,9 +91,13 @@ function Personal({ yo }) {
   const [nuevo, setNuevo] = useState(vacio)
   const [clave, setClave] = useState(null)
   const [error, setError] = useState(null)
+  const [cupo, setCupo] = useState(null)
   const editar = puede(yo, 'personal', 'editar')
 
-  const cargar = useCallback(() => api('/api/personal').then(setLista), [])
+  const cargar = useCallback(() => {
+    api('/api/personal').then(setLista)
+    if (yo.es_administrador) api('/api/personal/cupo').then(setCupo).catch(() => {})
+  }, [yo.es_administrador])
   useEffect(() => {
     cargar()
     if (puede(yo, 'roles')) api('/api/roles').then(setRoles)
@@ -138,6 +142,11 @@ function Personal({ yo }) {
     <section>
       <Encabezado titulo="Personal" descripcion="Con el turno asignado, la portería calcula su tardanza y su falta automática."
                   acciones={editar && <button className="boton secundario" onClick={carnets}>Carnets del personal (PDF)</button>} />
+      {cupo && (
+        <p className="tenue" data-testid="cupo-usuarios">
+          Usuarios: {cupo.maximo == null ? `${cupo.activos}, sin límite` : `${cupo.activos} de ${cupo.maximo}`}
+        </p>
+      )}
       {clave && (
         <div className="aviso">
           Clave temporal de <b>{clave.quien}</b> (usuario {clave.usuario}): <code>{clave.clave}</code>
@@ -181,7 +190,7 @@ function Personal({ yo }) {
                  onChange={(e) => setNuevo({ ...nuevo, apellidos: e.target.value })} />
           <select value={nuevo.rol_id} required onChange={(e) => setNuevo({ ...nuevo, rol_id: e.target.value })}>
             <option value="">Rol…</option>
-            {roles.filter((r) => !r.es_director || yo.es_director).map((r) =>
+            {roles.filter((r) => !r.es_administrador || yo.es_administrador).map((r) =>
               <option key={r.id} value={r.id}>{r.nombre}</option>)}
           </select>
           <button className="boton">Agregar</button>
@@ -233,12 +242,12 @@ function Roles({ yo }) {
                { id: 'rol', titulo: 'Rol', ancho: '24%', celda: (r) => <b>{r.nombre}</b> },
                { id: 'permisos', titulo: 'Permisos', celda: (r) => (
                  <>
-                   {r.es_director ? 'Todos los permisos' : Object.keys(r.permisos).map((m) => modulos[m] || m).join(', ') || <span className="tenue">Sin permisos</span>}
+                   {r.es_administrador ? 'Todos los permisos' : Object.keys(r.permisos).map((m) => modulos[m] || m).join(', ') || <span className="tenue">Sin permisos</span>}
                    {r.solo_sus_secciones && <span className="segunda-linea">Solo sus secciones</span>}
                    {r.puede_anular_caja && <span className="segunda-linea">Puede anular pagos y gastos pasados</span>}
                  </>
                ) },
-               editar && { id: 'acciones', acciones: true, celda: (r) => (!r.es_director && (
+               editar && { id: 'acciones', acciones: true, celda: (r) => (!r.es_administrador && (
                  <MenuAcciones etiqueta={r.nombre} principal={{ texto: 'Editar', alHacer: () => setEditando({ ...r }) }}
                                opciones={[{ texto: 'Borrar', peligro: true, alHacer: () => borrar(r) }]} />
                )) },

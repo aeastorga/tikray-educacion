@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import codigos, configuracion, pdf, validacion
+from app import codigos, configuracion, pdf, plan, validacion
 from app.comun import guardar
 from app.db import get_db
 from app.deps import Sesion, requerir_permiso
@@ -84,6 +84,12 @@ def _persona(db: Session, colegio_id: int, usuario_id: int) -> Usuario:
     return u
 
 
+@router.get("/cupo")
+def cupo(s: Sesion = Depends(requerir_permiso("personal")), db: Session = Depends(get_db)) -> dict:
+    """Usuarios del personal activos y el máximo del plan (None = sin límite)."""
+    return {"activos": plan.usuarios_activos(db, s.colegio.id), "maximo": s.colegio.max_usuarios}
+
+
 @router.get("")
 def listar(s: Sesion = Depends(requerir_permiso("personal")), db: Session = Depends(get_db)) -> list[PersonalOut]:
     filas = db.scalars(
@@ -100,8 +106,9 @@ def crear(
     rol = db.scalar(select(Rol).where(Rol.id == datos.rol_id, Rol.colegio_id == s.colegio.id))
     if rol is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Rol no encontrado")
-    if rol.es_director and not s.usuario.rol.es_director:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el director asigna el rol de director")
+    if rol.es_administrador and not s.usuario.rol.es_administrador:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el administrador asigna el rol de administrador")
+    plan.verificar_cupo(db, s.colegio.id)
     clave = generar_clave_temporal()
     u = Usuario(
         colegio_id=s.colegio.id, tipo_documento=datos.tipo_documento,
@@ -128,8 +135,8 @@ def reiniciar_clave(
     s: Sesion = Depends(requerir_permiso("personal", "editar")), db: Session = Depends(get_db),
 ) -> ConClaveTemporal:
     u = _persona(db, s.colegio.id, usuario_id)
-    if u.rol.es_director and not s.usuario.rol.es_director:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el director reinicia la clave de un director")
+    if u.rol.es_administrador and not s.usuario.rol.es_administrador:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el administrador reinicia la clave de un administrador")
     clave = generar_clave_temporal()
     u.clave_hash = hashear_clave(clave)
     u.debe_cambiar_clave = True
@@ -150,13 +157,15 @@ def editar(
     rol = db.scalar(select(Rol).where(Rol.id == datos.rol_id, Rol.colegio_id == s.colegio.id))
     if rol is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Rol no encontrado")
-    if (u.rol.es_director or rol.es_director) and not s.usuario.rol.es_director:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el director cambia a un director")
+    if (u.rol.es_administrador or rol.es_administrador) and not s.usuario.rol.es_administrador:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el administrador cambia a un administrador")
     if u.id == s.usuario.id and (rol.id != u.rol_id or not datos.activo):
         raise HTTPException(status.HTTP_409_CONFLICT, "No puedes cambiar tu propio rol ni desactivarte")
     if datos.turno_id is not None and db.scalar(
             select(Turno.id).where(Turno.id == datos.turno_id, Turno.colegio_id == s.colegio.id)) is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Turno no encontrado")
+    if datos.activo and not u.activo:
+        plan.verificar_cupo(db, s.colegio.id)  # reactivar ocupa un cupo del plan
     u.nombres, u.apellidos, u.rol, u.turno_id = datos.nombres, datos.apellidos, rol, datos.turno_id
     if u.activo and not datos.activo:
         u.version_sesion += 1  # quien deja el colegio pierde la sesión al instante

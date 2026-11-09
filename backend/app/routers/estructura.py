@@ -1,5 +1,5 @@
 """Configuración del padrón: año escolar, niveles, grados, turnos, secciones
-y calendario de días no lectivos. Todo lo define el director por colegio."""
+y calendario de días no lectivos. Todo lo define el administrador por colegio."""
 
 from datetime import date, time, timedelta
 

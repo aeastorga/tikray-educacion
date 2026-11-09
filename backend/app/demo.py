@@ -36,7 +36,7 @@ from app.seguridad import hashear_clave
 
 CLAVE = "Demo2026Tikray"  # todo el personal de la demo
 PIN = "135790"  # todas las familias con cuenta
-DIRECTOR = "90000001"
+ADMINISTRADOR = "90000001"
 
 NOMBRES = ["Lucía", "Mateo", "Valentina", "Santiago", "Camila", "Sebastián", "Sofía", "Thiago", "Valeria", "Gael",
            "Mía", "Liam", "Ximena", "Leonardo", "Isabella", "Adrián", "Renata", "Diego", "Antonella", "Matías",
@@ -148,7 +148,7 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
     # --- Personal y roles ---
     clave_hash = hashear_clave(CLAVE)
     roles = {
-        "Director": Rol(colegio_id=cid, nombre="Director", es_director=True),
+        "Administrador": Rol(colegio_id=cid, nombre="Administrador", es_administrador=True),
         "Subdirección": Rol(colegio_id=cid, nombre="Subdirección"),
         "Secretaría": Rol(colegio_id=cid, nombre="Secretaría"),
         "Portería": Rol(colegio_id=cid, nombre="Portería"),
@@ -173,7 +173,7 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
         db.add(u)
         return u
 
-    director = persona(DIRECTOR, "Carmen", "Salazar Ríos", "Director", None)
+    administrador = persona(ADMINISTRADOR, "Carmen", "Salazar Ríos", "Administrador", None)
     persona("90000002", "Raúl", "Medina Paz", "Subdirección")
     secretaria = persona("90000003", "Gladys", "Torres Vega", "Secretaría")
     portero = persona("90000004", "Hugo", "Ramos Ccama", "Portería")
@@ -184,7 +184,7 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
                 for (s, _, _), d in zip(secciones, docentes)])
     res.personal = 4 + len(docentes)
     res.credenciales = {
-        "director": {"usuario": DIRECTOR, "clave": CLAVE},
+        "administrador": {"usuario": ADMINISTRADOR, "clave": CLAVE},
         "porteria": {"usuario": portero.usuario, "clave": CLAVE},
         "docente": {"usuario": docentes[3].usuario, "clave": CLAVE,
                     "seccion": secciones[3][1]},
@@ -270,7 +270,7 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
     con_licencia = docentes[7]
     db.add(LicenciaPersonal(colegio_id=cid, usuario_id=con_licencia.id, tipo="salud", desde=dias[-2],
                             hasta=hoy + timedelta(days=2), motivo="Descanso médico (demo)",
-                            registrado_por_id=director.id))
+                            registrado_por_id=administrador.id))
     filas_p = []
     for d in dias:
         for u in personal:
@@ -287,9 +287,9 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
     db.execute(insert(AsistenciaPersonal), filas_p)
 
     # --- Cuaderno ---
-    _cuaderno(db, rnd, cid, director, docentes, secciones, alumnos, dias, hoy)
+    _cuaderno(db, rnd, cid, administrador, docentes, secciones, alumnos, dias, hoy)
     # --- Pensiones y caja ---
-    _pensiones(db, rnd, cid, anio, secretaria, director, hoy)
+    _pensiones(db, rnd, cid, anio, secretaria, administrador, hoy)
     return res
 
 
@@ -319,7 +319,7 @@ def hora_familia(rnd: random.Random, desde: datetime, ahora: datetime) -> dateti
     return v.astimezone(UTC)
 
 
-def _cuaderno(db, rnd, cid, director, docentes, secciones, alumnos, dias, hoy) -> None:
+def _cuaderno(db, rnd, cid, administrador, docentes, secciones, alumnos, dias, hoy) -> None:
     from app import cuaderno
 
     ahora = datetime.now(UTC)
@@ -350,11 +350,11 @@ def _cuaderno(db, rnd, cid, director, docentes, secciones, alumnos, dias, hoy) -
     for a, s in alumnos:
         de_seccion.setdefault(s.id, []).append(a.id)
     sec_p1 = secciones[3][0]  # 1° A Primaria
-    entrada(director, todos, 0.7, tipo="comunicado", alcance="colegio", pide_firma=True, hace_dias=4,
+    entrada(administrador, todos, 0.7, tipo="comunicado", alcance="colegio", pide_firma=True, hace_dias=4,
             titulo="Reunión general de padres de familia",
             cuerpo="Los esperamos el viernes a las 6 p. m. en el patio principal. Se tratará el plan de "
                    "recuperación y el paseo de fin de año.")
-    entrada(director, todos, 0.4, tipo="comunicado", alcance="colegio", pide_firma=False, hace_dias=1,
+    entrada(administrador, todos, 0.4, tipo="comunicado", alcance="colegio", pide_firma=False, hace_dias=1,
             titulo="Simulacro de sismo este jueves", cuerpo="El simulacro será a las 10 a. m. No es necesario "
                                                             "recoger a los alumnos.")
     entrada(docentes[3], de_seccion[sec_p1.id], 0.5, tipo="comunicado", alcance="seccion", seccion_id=sec_p1.id,
@@ -395,7 +395,7 @@ def _cuaderno(db, rnd, cid, director, docentes, secciones, alumnos, dias, hoy) -
                     alumno_id=alumno_id, desde=fecha, hasta=fecha, estado=estado, titulo="Estuvo con fiebre",
                     cuerpo="Adjunto la receta del centro de salud.", hace_dias=(hoy - fecha).days)
         if estado == "aprobada":
-            e.resuelto_por_id, e.resuelto_en = director.id, min(e.creado_en + timedelta(hours=3), ahora)
+            e.resuelto_por_id, e.resuelto_en = administrador.id, min(e.creado_en + timedelta(hours=3), ahora)
             cuaderno.aplicar_justificacion(db, e)
     # Permisos de salida para hoy: uno aprobado y uno por aprobar (la portería los ve al marcar la salida).
     for (a, s), estado, hora in zip(rnd.sample(alumnos, 2), ("aprobada", "pendiente"), (time(10, 30), time(11, 0))):
@@ -406,7 +406,7 @@ def _cuaderno(db, rnd, cid, director, docentes, secciones, alumnos, dias, hoy) -
                     desde=hoy, hora_salida=hora, recoge=f"{ap.nombres} {ap.apellidos}", estado=estado,
                     titulo="Cita médica")
         if estado == "aprobada":
-            e.resuelto_por_id, e.resuelto_en = director.id, datetime.now(UTC)
+            e.resuelto_por_id, e.resuelto_en = administrador.id, datetime.now(UTC)
     # Un hilo con respuesta de la familia esperando al colegio.
     ultima = db.scalar(select(EntradaCuaderno).where(EntradaCuaderno.colegio_id == cid,
                                                      EntradaCuaderno.tipo == "incidencia")
@@ -425,7 +425,7 @@ GASTOS_DEMO = [("Servicios", "Recibo de luz", 380), ("Servicios", "Internet", 18
                ("Servicios", "Recibo de agua", 142.3)]
 
 
-def _pensiones(db: Session, rnd: random.Random, cid: int, anio: AnioEscolar, cajera: Usuario, director: Usuario,
+def _pensiones(db: Session, rnd: random.Random, cid: int, anio: AnioEscolar, cajera: Usuario, administrador: Usuario,
                hoy: date) -> None:
     """Matrícula y diez pensiones (marzo a diciembre) por nivel, cuotas generadas y pagos ficticios variados:
     la mayoría al día, algunos con pagos parciales y algunos morosos, con medios mezclados. Cada día con
@@ -454,8 +454,8 @@ def _pensiones(db: Session, rnd: random.Random, cid: int, anio: AnioEscolar, caj
     for alumno_id, (valor, motivo) in zip(rnd.sample(alumnos_ids, 6), [("10", "Hermanos en el colegio")] * 4
                                           + [("50", "Beca por rendimiento"), ("100", "Beca integral")]):
         db.add(DescuentoAlumno(colegio_id=cid, anio_id=anio.id, alumno_id=alumno_id, concepto_id=pension.id,
-                               tipo="porcentaje", valor=valor, motivo=motivo, dado_por_id=director.id,
-                               dado_por=f"{director.nombres} {director.apellidos}"))
+                               tipo="porcentaje", valor=valor, motivo=motivo, dado_por_id=administrador.id,
+                               dado_por=f"{administrador.nombres} {administrador.apellidos}"))
     db.flush()
     pensiones.generar_cuotas(db, cid, anio.id)
 
@@ -530,7 +530,7 @@ def _pensiones(db: Session, rnd: random.Random, cid: int, anio: AnioEscolar, caj
         for d in db.scalars(select(PagoDetalle).where(PagoDetalle.colegio_id == cid, PagoDetalle.pago_id == p.id)):
             db.get(CuotaAlumno, d.cuota_id).pagado -= d.monto
         p.anulado_en, p.anulado_motivo = datetime.combine(p.fecha, time(17, 30), LIMA), "Se registró al alumno equivocado"
-        p.anulado_por = f"{director.nombres} {director.apellidos}"
+        p.anulado_por = f"{administrador.nombres} {administrador.apellidos}"
 
     # Gastos del último mes y medio.
     categorias = {c.nombre: c.id for c in db.scalars(select(CategoriaGasto).where(CategoriaGasto.colegio_id == cid))}
@@ -539,7 +539,7 @@ def _pensiones(db: Session, rnd: random.Random, cid: int, anio: AnioEscolar, caj
                      descripcion=desc, monto=pensiones.soles(monto), medio=rnd.choice(("efectivo", "transferencia")),
                      comprobante_tipo=rnd.choice(("Boleta", "Factura", "Recibo")),
                      comprobante_numero=f"00{rnd.randint(1, 9)}-{rnd.randint(1000, 99999)}",
-                     registrado_por_id=director.id, registrado_por=f"{director.nombres} {director.apellidos}"))
+                     registrado_por_id=administrador.id, registrado_por=f"{administrador.nombres} {administrador.apellidos}"))
 
 
 def crear_o_reiniciar(db: Session, subdominio: str = "demo", nombre: str = "Colegio Demo Tikray",
