@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, guardarToken, leerToken } from '../api.js'
 import { School } from 'lucide-react'
 import { Encabezado, Insignia, MenuAcciones, plural, Tabla } from './comun/index.js'
-import { CamposPerfil } from './Configuracion.jsx'
+import { CamposPerfil, FormFacturacion } from './Configuracion.jsx'
 import './configuracion.css'
 
 // Panel de Tikray Labs (plataforma.<dominio>). Usa su propio token: el de un
@@ -59,6 +59,7 @@ function Colegios({ salir }) {
   const [error, setError] = useState(null)
   const [editando, setEditando] = useState(null)
   const [activando, setActivando] = useState(null)
+  const [facturando, setFacturando] = useState(null)
   const [activado, setActivado] = useState(null)
 
   const cargar = useCallback(() => api('/plataforma/colegios').then(setLista).catch(() => {}), [])
@@ -170,12 +171,23 @@ function Colegios({ salir }) {
                  { id: 'acciones', acciones: true, celda: (c) => (
                    <MenuAcciones etiqueta={c.nombre} principal={{ texto: 'Perfil y módulos', alHacer: () => setEditando(c) }}
                                  opciones={[
+                                   { texto: 'Comprobantes electrónicos', alHacer: () => setFacturando(c) },
                                    c.estado === 'prueba' && !c.es_demo && { texto: 'Activar colegio', alHacer: () => setActivando(c) },
                                    c.es_demo && { texto: 'Reiniciar demo', alHacer: () => demo(c) },
                                  ].filter(Boolean)} />
                  ) },
                ]} />
         {editando && <EditarColegio colegio={editando} cerrar={() => setEditando(null)} alGuardar={cargar} />}
+        {facturando && (
+          <Dialogo titulo={`Comprobantes electrónicos de ${facturando.nombre}`} cerrar={() => setFacturando(null)}>
+            <div className="configuracion">
+              <FormFacturacion url={`/plataforma/colegios/${facturando.id}/facturacion`} />
+              <div className="acciones">
+                <button type="button" className="boton secundario" onClick={() => setFacturando(null)}>Cerrar</button>
+              </div>
+            </div>
+          </Dialogo>
+        )}
         {activando && <ActivarColegio colegio={activando} cerrar={() => setActivando(null)}
                                       alActivar={(r) => { setActivando(null); setActivado(r); cargar() }} />}
         {!lista.some((c) => c.es_demo) && (

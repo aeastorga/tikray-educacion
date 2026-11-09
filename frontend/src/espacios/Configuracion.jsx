@@ -1,5 +1,6 @@
 // Configuración del colegio (director o quien tenga el permiso): imagen, perfil, módulos, avisos a los
-// padres, plantillas de comunicados y categorías de incidencias. Más el historial de actividad (solo director).
+// padres, plantillas de comunicados y categorías de incidencias. Más el historial de actividad y los
+// comprobantes electrónicos (solo director; Tikray Labs usa el mismo formulario en su panel).
 import { Award, History, Pencil, Plus, Trash2, TrendingUp } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
@@ -18,7 +19,7 @@ const TIPOS_AVISO = [
   ['cobro', 'Recordatorio de pago', 'Días antes del vencimiento y el día que vence, solo al responsable de pago.'],
 ]
 
-export default function Configuracion({ editar, colegio, setColegio, recargarYo }) {
+export default function Configuracion({ editar, director, colegio, setColegio, recargarYo }) {
   return (
     <section className="configuracion">
       <h2>Configuración</h2>
@@ -29,6 +30,7 @@ export default function Configuracion({ editar, colegio, setColegio, recargarYo 
         <NavLink to="/panel/configuracion/avisos">Avisos</NavLink>
         <NavLink to="/panel/configuracion/plantillas">Plantillas</NavLink>
         <NavLink to="/panel/configuracion/categorias">Categorías</NavLink>
+        {director && <NavLink to="/panel/configuracion/comprobantes">Comprobantes</NavLink>}
       </nav>
       <Routes>
         <Route index element={<Imagen editar={editar} colegio={colegio} setColegio={setColegio} />} />
@@ -37,6 +39,8 @@ export default function Configuracion({ editar, colegio, setColegio, recargarYo 
         <Route path="avisos" element={<Avisos editar={editar} />} />
         <Route path="plantillas" element={<Plantillas editar={editar} />} />
         <Route path="categorias" element={<Categorias editar={editar} />} />
+        {director && <Route path="comprobantes" element={(
+          <div className="tarjeta-panel"><FormFacturacion url="/api/configuracion/facturacion" /></div>)} />}
       </Routes>
     </section>
   )
@@ -175,6 +179,60 @@ function Perfil({ editar }) {
       <p className="tenue">Datos oficiales del colegio. El tipo de gestión define, más adelante, cómo se llevan la caja y los gastos.</p>
       <CamposPerfil perfil={perfil} cambiar={setPerfil} deshabilitado={!editar} />
       {editar && <div className="acciones"><button className="boton">Guardar perfil</button></div>}
+      <Estado mensaje={mensaje} />
+    </form>
+  )
+}
+
+// --- Comprobantes electrónicos (director y Tikray Labs) --------------------------------------------
+
+export function FormFacturacion({ url, alGuardar }) {
+  const [cfg, setCfg] = useState(null)
+  const [token, setToken] = useState('')
+  const [mensaje, guardar] = useGuardar()
+  useEffect(() => { api(url).then(setCfg).catch(() => setCfg(false)) }, [url])
+  if (cfg === false) return <p className="error">No se pudo cargar la configuración.</p>
+  if (!cfg) return <p className="tenue">Cargando…</p>
+  const campo = (k) => ({ value: cfg[k] ?? '', onChange: (e) => setCfg({ ...cfg, [k]: e.target.value }) })
+
+  async function enviar(e) {
+    e.preventDefault()
+    const datos = { emite: cfg.emite, ruc: cfg.ruc, razon_social: cfg.razon_social, serie_boleta: cfg.serie_boleta,
+      serie_factura: cfg.serie_factura, proveedor: cfg.proveedor, token: token.trim() || null }
+    const r = await guardar(() => api(url, { metodo: 'PUT', datos }), 'Comprobantes guardados')
+    if (r) { setCfg(r); setToken(''); alGuardar?.() }
+  }
+
+  return (
+    <form onSubmit={enviar} className="form-facturacion">
+      <h2>Comprobantes electrónicos SUNAT</h2>
+      <p className="tenue">Con la emisión apagada, o sin proveedor, el colegio sigue solo con el recibo interno.
+        Al cobrar sale una boleta a nombre del responsable de pago, o una factura si el cajero la pide con RUC.</p>
+      {!cfg.clave_configurada && (
+        <p className="aviso" role="alert">Falta la clave de facturación en el servidor (FACTURACION_CLAVE): la emisión no se puede activar ni se puede guardar el token. Pídela a Tikray Labs.</p>
+      )}
+      <label className="check">
+        <input type="checkbox" checked={cfg.emite} onChange={(e) => setCfg({ ...cfg, emite: e.target.checked })} />
+        Emite comprobantes electrónicos
+      </label>
+      <div className="rejilla-perfil">
+        <label>RUC<input {...campo('ruc')} inputMode="numeric" pattern="\d{11}" maxLength={11} title="11 dígitos" /></label>
+        <label className="ancho">Razón social<input {...campo('razon_social')} maxLength={200} /></label>
+        <label>Serie de boleta<input {...campo('serie_boleta')} required pattern="[Bb][0-9A-Za-z]{3}" maxLength={4} title="B y tres letras o dígitos, por ejemplo B001" /></label>
+        <label>Serie de factura<input {...campo('serie_factura')} required pattern="[Ff][0-9A-Za-z]{3}" maxLength={4} title="F y tres letras o dígitos, por ejemplo F001" /></label>
+        <label>Proveedor
+          <select {...campo('proveedor')}>
+            {cfg.proveedores.map((p) => <option key={p.clave} value={p.clave}>{p.nombre}</option>)}
+          </select>
+        </label>
+        <label>Token del proveedor
+          <input type="password" autoComplete="new-password" maxLength={2000} value={token}
+                 placeholder={cfg.token_configurado ? 'Configurado (escribe otro para cambiarlo)' : 'Sin configurar'}
+                 onChange={(e) => setToken(e.target.value)} />
+        </label>
+      </div>
+      <p className="tenue sin-margen">{cfg.token_configurado ? 'Token: configurado.' : 'Token: sin configurar.'} Se guarda cifrado y nunca se vuelve a mostrar.</p>
+      <div className="acciones"><button className="boton">Guardar</button></div>
       <Estado mensaje={mensaje} />
     </form>
   )

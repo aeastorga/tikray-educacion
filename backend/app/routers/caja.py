@@ -8,6 +8,10 @@ Ver: permiso "caja" ver. Abrir, cobrar, cerrar y registrar gastos: "caja" editar
 - un gasto del día (Lima): quien lo registró, el director o un rol con "puede anular";
 - un gasto de un día anterior: solo el director o un rol con "puede anular".
 Con el módulo apagado todo responde 403. Nada de dinero se borra: solo se anula.
+
+Comprobantes electrónicos (si el colegio emite con un proveedor): el cobro crea la boleta (al responsable
+de pago) o la factura (si el cajero la pide con RUC y razón social) en "pendiente" y responde sin esperar
+al proveedor. Anular el pago encola la anulación del comprobante. El recibo interno se entrega siempre.
 """
 
 import uuid
@@ -21,15 +25,15 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from app import excel, pdf, pensiones
+from app import excel, facturacion, pdf, pensiones
 from app.almacenamiento import get_almacenamiento_privado
 from app.comun import guardar, obtener
 from app.configuracion import anotar
 from app.db import get_db
 from app.deps import Sesion, requerir_permiso
 from app.fechas import hoy_lima
-from app.models import (Alumno, AnioEscolar, CajaSesion, CategoriaGasto, ConceptoCobro, CuotaAlumno,
-                        CuotaProgramada, Gasto, Matricula, Pago, PagoDetalle)
+from app.models import (Alumno, AnioEscolar, CajaSesion, CategoriaGasto, ColaComprobante, Comprobante,
+                        ConceptoCobro, CuotaAlumno, CuotaProgramada, Gasto, Matricula, Pago, PagoDetalle)
 from app.models.pensiones import MEDIOS
 from app.paginacion import Pagina, contar, pagina, recortar
 from app.routers.alumnos import _etiquetas_seccion
@@ -92,7 +96,8 @@ def _caja_abierta(db: Session, s: Sesion, bloquear: bool = False) -> CajaSesion 
 @router.get("/mi-caja")
 def mi_caja(s: Sesion = Depends(ver), db: Session = Depends(get_db)) -> dict:
     c = _caja_abierta(db, s)
-    return {"caja": _caja(db, c) if c else None, "hoy": hoy_lima().isoformat()}
+    return {"caja": _caja(db, c) if c else None, "hoy": hoy_lima().isoformat(),
+            "comprobantes": facturacion.activa(db, s.colegio.id) is not None}
 
 
 @router.post("/abrir", status_code=201)
@@ -177,11 +182,23 @@ class DetalleIn(BaseModel):
     monto: Annotated[Decimal, Field(gt=0, max_digits=10, decimal_places=2)]
 
 
+class FacturaIn(BaseModel):
+    """E1: factura solo si el cajero la elige y escribe RUC y razón social."""
+
+    ruc: str = Field(max_length=20)
+    razon_social: str = Field(min_length=1, max_length=200)
+
+    _ruc = field_validator("ruc")(classmethod(lambda cls, v: v.strip()))
+
+    _razon = field_validator("razon_social")(classmethod(lambda cls, v: " ".join(v.split())))
+
+
 class PagoIn(BaseModel):
     alumno_id: int
     medio: Medio
     numero_operacion: str | None = Field(default=None, max_length=40)
     detalles: list[DetalleIn] = Field(min_length=1, max_length=60)
+    factura: FacturaIn | None = None
 
     @model_validator(mode="after")
     def _validar(self):
@@ -210,7 +227,9 @@ def _pago(db: Session, p: Pago) -> dict:
         .where(PagoDetalle.colegio_id == p.colegio_id, PagoDetalle.pago_id == p.id)
         .order_by(CuotaProgramada.vence, PagoDetalle.id)).all()
     caja = db.get(CajaSesion, p.caja_id)
-    return {"id": p.id, "recibo": numero_recibo(p), "alumno_id": a.id, "alumno": f"{a.apellidos}, {a.nombres}",
+    comprobante = db.scalar(select(Comprobante).where(Comprobante.colegio_id == p.colegio_id,
+                                                      Comprobante.pago_id == p.id))
+    return {"id": p.id, "recibo": numero_recibo(p), "comprobante": facturacion.comprobante_de(comprobante), "alumno_id": a.id, "alumno": f"{a.apellidos}, {a.nombres}",
             "fecha": p.fecha.isoformat(), "momento": p.momento.isoformat(), "medio": p.medio,
             "numero_operacion": p.numero_operacion, "total": s2(p.total), "cajero": p.cajero,
             "cajero_id": p.cajero_id, "caja_id": p.caja_id, "caja_abierta": caja.cerrada_en is None,
@@ -234,6 +253,11 @@ def cobrar(d: PagoIn, s: Sesion = Depends(editar), db: Session = Depends(get_db)
         raise HTTPException(status.HTTP_409_CONFLICT,
                             f"Tu caja abierta es del {caja.fecha:%d/%m/%Y}: ciérrala y abre la de hoy")
     a = obtener(db, Alumno, cid, d.alumno_id, "Alumno")
+    emisor = facturacion.activa(db, cid)
+    if d.factura and emisor is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "El colegio no emite comprobantes electrónicos")
+    if d.factura and not facturacion.ruc_valido(d.factura.ruc):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, facturacion.RUC_INVALIDO)
     filas = {c.id: (c, vence) for c, vence in db.execute(
         select(CuotaAlumno, CuotaProgramada.vence)
         .join(CuotaProgramada, and_(CuotaProgramada.colegio_id == CuotaAlumno.colegio_id,
@@ -262,9 +286,18 @@ def cobrar(d: PagoIn, s: Sesion = Depends(editar), db: Session = Depends(get_db)
     repetido = "Ese número de operación ya se registró para este medio de pago"
     guardar(db, repetido, solo_flush=True)
     db.add_all([PagoDetalle(colegio_id=cid, pago_id=p.id, cuota_id=x.cuota_id, monto=x.monto) for x in d.detalles])
+    comprobante = ""
+    if emisor is not None:  # en "pendiente": lo emite la cola, el cobro no espera al proveedor
+        db.flush()
+        if d.factura:
+            c = facturacion.crear(db, emisor, p, facturacion.Cliente("RUC", d.factura.ruc, d.factura.razon_social),
+                                  "factura")
+        else:
+            c = facturacion.crear(db, emisor, p, facturacion.cliente_boleta(db, cid, a), "boleta")
+        comprobante = f" · {c.tipo} {facturacion.numero(c)}"
     anotar(db, s, "crear", "caja", "pago", p,
            f"Recibo {numero_recibo(p)}: {pensiones.texto_soles(p.total)} de {a.apellidos}, {a.nombres} "
-           f"({NOMBRE_MEDIO[p.medio]}, {len(d.detalles)} cuotas)", repetido)
+           f"({NOMBRE_MEDIO[p.medio]}, {len(d.detalles)} cuotas){comprobante}", repetido)
     return _pago(db, p)
 
 
@@ -301,12 +334,15 @@ def pagos(desde: date | None = None, hasta: date | None = None, medio: Medio | N
     filas = db.execute(recortar(consulta.order_by(Pago.momento.desc(), Pago.id.desc()), p)).all()
     cajeros = db.execute(select(Pago.cajero_id, Pago.cajero).where(Pago.colegio_id == cid).distinct()
                          .order_by(Pago.cajero)).all()
+    comprobantes = {c.pago_id: c for c in db.scalars(select(Comprobante).where(
+        Comprobante.colegio_id == cid, Comprobante.pago_id.in_([x.id for x, _ in filas])))} if filas else {}
     return {**p.datos(total), "suma": s2(suma or 0),
             "cajeros": [{"id": i, "nombre": n} for i, n in cajeros],
             "items": [{"id": x.id, "recibo": numero_recibo(x), "alumno_id": a.id, "alumno": f"{a.apellidos}, {a.nombres}",
                        "fecha": x.fecha.isoformat(), "momento": x.momento.isoformat(), "medio": x.medio,
                        "numero_operacion": x.numero_operacion, "total": s2(x.total), "cajero": x.cajero,
-                       "anulado": x.anulado_en is not None} for x, a in filas]}
+                       "anulado": x.anulado_en is not None,
+                       "comprobante": facturacion.comprobante_de(comprobantes.get(x.id))} for x, a in filas]}
 
 
 @router.get("/pagos/{pago_id}")
@@ -355,10 +391,51 @@ def anular_pago(pago_id: int, d: AnularIn, s: Sesion = Depends(editar), db: Sess
     for x in detalles:
         cuotas[x.cuota_id].pagado -= x.monto
     p.anulado_en, p.anulado_motivo, p.anulado_por = datetime.now(UTC), d.motivo, quien(s)
+    c = facturacion.encolar_anulacion(db, p, d.motivo)
     a = db.get(Alumno, p.alumno_id)
     anotar(db, s, "anular", "caja", "pago", p, f"Anuló el recibo {numero_recibo(p)} "
-                                              f"({pensiones.texto_soles(p.total)}) de {a.apellidos}, {a.nombres}")
+                                              f"({pensiones.texto_soles(p.total)}) de {a.apellidos}, {a.nombres}"
+                                              + (f"; se pide anular la {c.tipo} {facturacion.numero(c)}" if c else ""))
     return _pago(db, p)
+
+
+# --- Comprobantes con error -----------------------------------------------------------------
+
+@router.get("/comprobantes/errores")
+def comprobantes_con_error(p: Pagina = Depends(pagina), s: Sesion = Depends(ver), db: Session = Depends(get_db)) -> dict:
+    """Los que el proveedor rechazó y las órdenes (emitir o anular) que fallaron 5 veces (E2)."""
+    cid = s.colegio.id
+    q = (select(Comprobante, ColaComprobante, Pago, Alumno)
+         .join(Pago, and_(Pago.colegio_id == Comprobante.colegio_id, Pago.id == Comprobante.pago_id))
+         .join(Alumno, and_(Alumno.colegio_id == Pago.colegio_id, Alumno.id == Pago.alumno_id))
+         .outerjoin(ColaComprobante, and_(ColaComprobante.colegio_id == Comprobante.colegio_id,
+                                          ColaComprobante.comprobante_id == Comprobante.id,
+                                          ColaComprobante.estado == "error"))
+         .where(Comprobante.colegio_id == cid,
+                or_(ColaComprobante.id.is_not(None), Comprobante.estado == "rechazado")))
+    total = contar(db, q)
+    filas = db.execute(recortar(q.order_by(Comprobante.id.desc(), ColaComprobante.id), p)).all()
+    return {**p.datos(total), "items": [
+        {**facturacion.comprobante_de(c), "pago_id": x.id, "recibo": numero_recibo(x),
+         "alumno": f"{a.apellidos}, {a.nombres}", "fecha": x.fecha.isoformat(),
+         "tarea_id": t.id if t else None, "accion": t.accion if t else None, "intentos": t.intentos if t else c.intentos,
+         "error": t.error if t else c.respuesta} for c, t, x, a in filas]}
+
+
+@router.post("/comprobantes/tareas/{tarea_id}/reintentar")
+def reintentar_comprobante(tarea_id: int, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> dict:
+    """E2: vuelve a poner en la cola una orden que falló 5 veces."""
+    t = db.scalar(select(ColaComprobante).where(ColaComprobante.colegio_id == s.colegio.id,
+                                                ColaComprobante.id == tarea_id).with_for_update())
+    if t is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Comprobante no encontrado")
+    if t.estado != "error":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ese comprobante no está en error")
+    facturacion.reintentar(t)
+    c = db.get(Comprobante, t.comprobante_id)
+    anotar(db, s, "editar", "caja", "comprobante", c,
+           f"Reintentó {'emitir' if t.accion == 'emitir' else 'anular'} la {c.tipo} {facturacion.numero(c)}")
+    return facturacion.comprobante_de(c)
 
 
 # --- Gastos ---------------------------------------------------------------------------------

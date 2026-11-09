@@ -72,7 +72,7 @@ export default function PanelColegio({ colegio, setColegio }) {
           <Route path="reunion/*" element={<Reunion colegio={colegio} editar={puede(yo, 'reuniones', 'editar')} />} />
           <Route path="personal" element={<Personal yo={yo} />} />
           <Route path="roles" element={<Roles yo={yo} />} />
-          <Route path="configuracion/*" element={<Configuracion editar={puede(yo, 'configuracion', 'editar')}
+          <Route path="configuracion/*" element={<Configuracion editar={puede(yo, 'configuracion', 'editar')} director={yo.es_director}
             colegio={colegio} setColegio={setColegio} recargarYo={cargar} />} />
           {yo.es_director && <Route path="historial" element={<Historial />} />}
           <Route path="imagen" element={<Navigate to="/panel/configuracion" replace />} />

@@ -11,6 +11,7 @@ const ENTORNO = {
   DOMINIO_BASE: 'localhost',
   TAREAS_EN_FONDO: 'false',
   CARPETA_ARCHIVOS: 'archivos-e2e',
+  FACTURACION_CLAVE: 'clave-de-facturacion-e2e-' + 'x'.repeat(16),
 }
 
 export default defineConfig({

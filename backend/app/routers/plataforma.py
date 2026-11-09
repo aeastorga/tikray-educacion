@@ -21,7 +21,8 @@ from app.fechas import hoy_lima
 from app.models import AdminPlataforma, Colegio, Rol, Usuario
 from app.models.colegio import CONTRATABLES
 from app.modulos import MODULOS
-from app.routers.configuracion import NOMBRE_CAMPO, Perfil, aplicar_perfil, modulos_de, perfil_de
+from app.routers.configuracion import (NOMBRE_CAMPO, FacturacionIn, Perfil, aplicar_facturacion, aplicar_perfil,
+                                      modulos_de, perfil_de)
 from app.routers.personal import DocumentoPersonal
 from app.proteccion import generar_clave_temporal, ip_cliente, permitir_intento, registrar_fallo
 from app.seguridad import emitir_token, hashear_clave, verificar_clave_o_simular
@@ -273,3 +274,23 @@ def resumen(db: Session = Depends(get_db)) -> dict:
         "por_estado": dict(db.execute(select(Colegio.estado, func.count()).group_by(Colegio.estado)).all()),
         "personal": db.scalar(select(func.count()).select_from(Usuario)),
     }
+
+
+# --- Comprobantes electrónicos del colegio (el token nunca vuelve) -----------------------------------
+
+@router.get("/colegios/{colegio_id}/facturacion")
+def ver_facturacion(colegio_id: int, db: Session = Depends(get_db)) -> dict:
+    from app import facturacion
+
+    colegio = db.get(Colegio, colegio_id)
+    if colegio is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Colegio no encontrado")
+    return facturacion.config_de(facturacion.config(db, colegio.id))
+
+
+@router.put("/colegios/{colegio_id}/facturacion")
+def cambiar_facturacion(colegio_id: int, d: FacturacionIn, db: Session = Depends(get_db)) -> dict:
+    colegio = db.get(Colegio, colegio_id)
+    if colegio is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Colegio no encontrado")
+    return aplicar_facturacion(db, colegio.id, d, QUIEN)

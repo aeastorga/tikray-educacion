@@ -28,6 +28,15 @@ class Settings(BaseSettings):
     vapid_clave_privada: str = ""
     vapid_clave_publica: str = ""
     vapid_contacto: str = "mailto:soporte@tikraylabs.pe"
+    # Cifra el token del proveedor de comprobantes electrónicos. Sin ella, la facturación no se activa.
+    facturacion_clave: str = ""
+
+    @field_validator("facturacion_clave")
+    @classmethod
+    def _clave_larga(cls, v: str) -> str:
+        if v and len(v) < 32:
+            raise ValueError("FACTURACION_CLAVE debe tener al menos 32 caracteres")
+        return v
 
     @field_validator("database_url")
     @classmethod

@@ -1,7 +1,9 @@
 // Caja: cobrar con la caja del día abierta, pagos y recibos, cierre de cajas, gastos y reportes de ingresos.
 // Ver: "caja" ver. Abrir caja, cobrar, anular y registrar gastos: "caja" editar. Anular con la caja cerrada
 // o un gasto de otro día: director o rol con "puede anular" (el backend decide).
-import { ArrowLeft, FileSpreadsheet, Lock, Paperclip, Plus, Receipt, Search, Wallet } from 'lucide-react'
+// Comprobantes electrónicos (si el colegio emite): boleta al responsable de pago o factura con RUC; salen en
+// segundo plano. "Comprobantes" lista los rechazados y los que fallaron 5 veces ("Reintentar": caja editar).
+import { ArrowLeft, FileSpreadsheet, FileWarning, Lock, Paperclip, Plus, Receipt, RotateCw, Search, Wallet } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 import { api, descargar } from '../api.js'
@@ -19,6 +21,16 @@ const aSoles = (c) => (c / 100).toFixed(2)
 const hoyLima = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(new Date())
 const primeroDeMes = () => `${hoyLima().slice(0, 8)}01`
 const reciboPdf = (p) => descargar(`/api/caja/pagos/${p.id}/recibo.pdf`, `recibo-${p.recibo}.pdf`)
+const TIPO_COMPROBANTE = { boleta: 'Boleta', factura: 'Factura' }
+const ESTADO_COMPROBANTE = {
+  pendiente: ['Por enviar', 'neutro'], enviado: ['Enviado', 'info'], aceptado: ['Aceptado', 'bien'],
+  rechazado: ['Rechazado', 'falta'], anulado: ['Anulado', 'neutro'],
+}
+
+function EstadoComprobante({ c }) {
+  const [texto, tono] = ESTADO_COMPROBANTE[c.estado] || [c.estado, 'neutro']
+  return <Insignia tono={tono}>{texto}</Insignia>
+}
 
 export default function Caja({ editar }) {
   return (
@@ -30,6 +42,7 @@ export default function Caja({ editar }) {
         <NavLink to="/panel/caja/cajas">Cierres de caja</NavLink>
         <NavLink to="/panel/caja/gastos">Gastos</NavLink>
         <NavLink to="/panel/caja/reportes">Reportes</NavLink>
+        <NavLink to="/panel/caja/comprobantes">Comprobantes</NavLink>
       </nav>
       <Routes>
         <Route index element={editar ? <Cobrar /> : <Pagos editar={false} />} />
@@ -37,6 +50,7 @@ export default function Caja({ editar }) {
         <Route path="cajas" element={<Cajas />} />
         <Route path="gastos" element={<Gastos editar={editar} />} />
         <Route path="reportes" element={<Reportes />} />
+        <Route path="comprobantes" element={<ComprobantesConError editar={editar} />} />
       </Routes>
     </section>
   )
@@ -84,7 +98,7 @@ function Cobrar() {
         <>
           {recibo && <ReciboListo pago={recibo} cerrar={() => setRecibo(null)} />}
           {alumno
-            ? <CobrarAlumno id={alumno} volver={() => setAlumno(null)}
+            ? <CobrarAlumno id={alumno} comprobantes={estado.comprobantes} volver={() => setAlumno(null)}
                             alCobrar={(p) => { setRecibo(p); setAlumno(null); cargar() }} />
             : <BuscarAlumno elegir={(id) => { setRecibo(null); setAlumno(id) }} />}
         </>
@@ -186,8 +200,9 @@ function BuscarAlumno({ elegir }) {
   )
 }
 
-function CobrarAlumno({ id, volver, alCobrar }) {
+function CobrarAlumno({ id, comprobantes, volver, alCobrar }) {
   const [a, setA] = useState(null)
+  const [factura, setFactura] = useState(null) // null: boleta; { ruc, razon_social }: factura
   const [montos, setMontos] = useState({})
   const [medio, setMedio] = useState('efectivo')
   const [operacion, setOperacion] = useState('')
@@ -212,7 +227,8 @@ function CobrarAlumno({ id, volver, alCobrar }) {
     try {
       const p = await api('/api/caja/pagos', { metodo: 'POST', datos: {
         alumno_id: a.id, medio, numero_operacion: medio === 'efectivo' ? null : operacion.trim(),
-        detalles: Object.entries(montos).map(([cuota, monto]) => ({ cuota_id: Number(cuota), monto })) } })
+        detalles: Object.entries(montos).map(([cuota, monto]) => ({ cuota_id: Number(cuota), monto })),
+        factura: factura && { ruc: factura.ruc.trim(), razon_social: factura.razon_social } } })
       alCobrar(p)
     } catch (err) { setError(err.message) } finally { setEnviando(false) }
   }
@@ -251,6 +267,33 @@ function CobrarAlumno({ id, volver, alCobrar }) {
                   </label>
                 )}
               </div>
+              {comprobantes && (
+                <fieldset className="montos-cobro">
+                  <legend>Comprobante electrónico</legend>
+                  <div className="fila-form sin-margen">
+                    <label>Tipo
+                      <select value={factura ? 'factura' : 'boleta'}
+                              onChange={(e) => setFactura(e.target.value === 'factura' ? { ruc: '', razon_social: '' } : null)}>
+                        <option value="boleta">Boleta al responsable de pago</option>
+                        <option value="factura">Factura</option>
+                      </select>
+                    </label>
+                    {factura && (
+                      <>
+                        <label>RUC
+                          <input required inputMode="numeric" pattern="\d{11}" maxLength={11} value={factura.ruc}
+                                 onChange={(e) => setFactura({ ...factura, ruc: e.target.value })} />
+                        </label>
+                        <label>Razón social
+                          <input required maxLength={200} value={factura.razon_social}
+                                 onChange={(e) => setFactura({ ...factura, razon_social: e.target.value })} />
+                        </label>
+                      </>
+                    )}
+                  </div>
+                  <p className="tenue">Se envía en segundo plano; el recibo interno se entrega igual.</p>
+                </fieldset>
+              )}
               <div className="cobrar-total">
                 <span>Total</span><b>{soles(aSoles(total))}</b>
               </div>
@@ -273,6 +316,10 @@ function ReciboListo({ pago, cerrar }) {
       <div>
         <b>Recibo {pago.recibo} · {soles(pago.total)}</b>
         <span className="tenue"> {pago.alumno} · {MEDIO[pago.medio]}</span>
+        {pago.comprobante && (
+          <span className="segunda-linea">{TIPO_COMPROBANTE[pago.comprobante.tipo]} {pago.comprobante.numero} a
+            {' '}{pago.comprobante.cliente}: se envía en segundo plano.</span>
+        )}
       </div>
       <div className="acciones">
         <button className="boton" onClick={() => reciboPdf(pago).catch((e) => setError(e.message))}>
@@ -306,6 +353,9 @@ function Pagos({ editar }) {
     { id: 'alumno', titulo: 'Alumno', ancho: '26%', celda: (p) => p.alumno },
     { id: 'medio', titulo: 'Medio', celda: (p) => (
       <>{MEDIO[p.medio]}{p.numero_operacion && <span className="segunda-linea">Op. {p.numero_operacion}</span>}</>) },
+    { id: 'comprobante', titulo: 'Comprobante', ocultarEnCelular: true, celda: (p) => (p.comprobante ? (
+      <><span className="nowrap">{p.comprobante.numero}</span><span className="segunda-linea"><EstadoComprobante c={p.comprobante} /></span></>
+    ) : <span className="tenue">Solo recibo</span>) },
     { id: 'cajero', titulo: 'Cajero', ocultarEnCelular: true, celda: (p) => p.cajero },
     { id: 'total', titulo: 'Total', numero: true, celda: (p) => <b>{soles(p.total)}</b> },
     { id: 'estado', titulo: 'Estado', celda: (p) => (p.anulado ? <Insignia tono="falta">Anulado</Insignia> : <Insignia tono="bien">Válido</Insignia>) },
@@ -332,6 +382,56 @@ function Pagos({ editar }) {
       {(error || errorLista) && <p className="error" role="alert">{error || errorLista}</p>}
       <Tabla etiqueta="Pagos" columnas={columnas} filas={datos?.items} cargando={cargando} claseFila={(p) => (p.anulado ? 'atenuada' : '')}
              vacio={{ icono: Receipt, titulo: 'Sin pagos', texto: 'No hay pagos con esos filtros.' }} />
+      {paginacion && <Paginacion {...paginacion} />}
+    </>
+  )
+}
+
+// --- Comprobantes con error -----------------------------------------------------------------
+
+function ComprobantesConError({ editar }) {
+  const [error, setError] = useState(null)
+  const [aviso, setAviso] = useState(null)
+  const { datos, error: errorLista, cargando, recargar, paginacion } = usePaginado('/api/caja/comprobantes/errores', {})
+
+  async function reintentar(c) {
+    setError(null)
+    setAviso(null)
+    try {
+      await api(`/api/caja/comprobantes/tareas/${c.tarea_id}/reintentar`, { metodo: 'POST' })
+      setAviso(`${TIPO_COMPROBANTE[c.tipo]} ${c.numero}: vuelve a la cola.`)
+      recargar()
+    } catch (err) { setError(err.message) }
+  }
+
+  const columnas = [
+    { id: 'numero', titulo: 'Comprobante', celda: (c) => (
+      <><b className="nowrap">{TIPO_COMPROBANTE[c.tipo]} {c.numero}</b><span className="segunda-linea">Recibo {c.recibo} · {fechaCorta(c.fecha)}</span></>) },
+    { id: 'cliente', titulo: 'Cliente', ancho: '24%', celda: (c) => (
+      <>{c.cliente}<span className="segunda-linea">{c.cliente_documento} · Alumno: {c.alumno}</span></>) },
+    { id: 'total', titulo: 'Total', numero: true, celda: (c) => <b>{soles(c.total)}</b> },
+    { id: 'error', titulo: 'Qué pasó', ancho: '30%', celda: (c) => (
+      <>
+        <EstadoComprobante c={c} />
+        <span className="segunda-linea">
+          {c.accion === 'anular' ? 'No se pudo anular' : c.accion === 'emitir' ? 'No se pudo enviar' : 'SUNAT lo rechazó'}
+          {c.accion && ` (${plural(c.intentos, 'intento', 'intentos')})`}{c.error && `: ${c.error}`}
+        </span>
+      </>) },
+    editar && { id: 'acciones', titulo: 'Acciones', acciones: true, celda: (c) => (c.tarea_id ? (
+      <button type="button" className="boton secundario" onClick={() => reintentar(c)}>
+        <RotateCw size={16} aria-hidden="true" /> Reintentar</button>
+    ) : null) },
+  ].filter(Boolean)
+  return (
+    <>
+      <Encabezado titulo="Comprobantes con error"
+                  descripcion="Boletas y facturas que SUNAT rechazó, y las que no se pudieron enviar o anular tras 5 intentos automáticos. El recibo interno de esos pagos sigue valiendo." />
+      {aviso && <p className="tenue" role="status">{aviso}</p>}
+      {(error || errorLista) && <p className="error" role="alert">{error || errorLista}</p>}
+      <Tabla etiqueta="Comprobantes con error" columnas={columnas} filas={datos?.items} cargando={cargando}
+             clave={(c) => `${c.id}-${c.tarea_id ?? 'r'}`}
+             vacio={{ icono: FileWarning, titulo: 'Sin comprobantes con error', texto: 'Todo lo enviado está al día.' }} />
       {paginacion && <Paginacion {...paginacion} />}
     </>
   )
