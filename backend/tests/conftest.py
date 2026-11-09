@@ -15,7 +15,7 @@ os.environ["TAREAS_EN_FONDO"] = "false"
 os.environ["CARPETA_ARCHIVOS"] = tempfile.mkdtemp(prefix="tikray-archivos-")
 os.environ["CARPETA_PRIVADA"] = tempfile.mkdtemp(prefix="tikray-privados-")
 
-from datetime import UTC, datetime  # noqa: E402
+from datetime import UTC, datetime, time  # noqa: E402
 
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402
@@ -70,7 +70,9 @@ def host(sub: str) -> dict:
 
 
 def crear_colegio(db, sub: str, **extra) -> Colegio:
-    """Colegio con su rol Director y un director (usuario = DNI) que ya cambió la clave."""
+    """Colegio con su rol Director y un director (usuario = DNI) que ya cambió la clave. Sin horario sin
+    molestar (desde = hasta), para que los avisos no dependan de la hora en que corren las pruebas."""
+    extra = {"silencio_desde": time(0), "silencio_hasta": time(0), **extra}
     c = Colegio(nombre=f"Colegio {sub}", subdominio=sub, **extra)
     db.add(c)
     db.flush()

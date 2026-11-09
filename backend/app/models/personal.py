@@ -21,6 +21,9 @@ class Rol(ConColegio, Base):
     es_director: Mapped[bool] = mapped_column(default=False)
     # Cuaderno de control: solo ve y escribe lo de las secciones a su cargo (docente, tutor).
     solo_sus_secciones: Mapped[bool] = mapped_column(default=False, server_default="false")
+    # Caja: anula pagos de una caja ya cerrada (o de otro cajero) y gastos de días anteriores. El director
+    # siempre puede.
+    puede_anular_caja: Mapped[bool] = mapped_column(default=False, server_default="false")
     creado_en: Mapped[datetime] = creado_en()
 
     permisos: Mapped[list["PermisoRol"]] = relationship(

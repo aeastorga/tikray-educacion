@@ -18,7 +18,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import codigos, familias, validacion
+from app import codigos, familias, pensiones, validacion
 from app.models import (Alumno, AlumnoApoderado, AnioEscolar, Apoderado, Grado, Matricula, Nivel, Rol, Seccion,
                         Usuario)
 from app.proteccion import generar_clave_temporal
@@ -38,7 +38,9 @@ COL_ALUMNOS = {
 COL_APODERADO = {
     "tipo_documento": "tipo doc", "numero_documento": "documento", "apellidos": "apellidos",
     "nombres": "nombres", "parentesco": "parentesco", "celular": "celular", "correo": "correo",
+    "responsable": "responsable de pago",
 }
+SI_NO = {"si": True, "s": True, "x": True, "no": False, "n": False, "": False}
 COL_PERSONAL = {
     "tipo_documento": "Tipo doc", "numero_documento": "N° documento", "apellidos": "Apellidos",
     "nombres": "Nombres", "rol": "Rol", "celular": "Celular", "correo": "Correo",
@@ -94,6 +96,7 @@ class DatosApo:
     correo: str | None
     parentesco: str
     fila: int
+    responsable: bool = False
 
 
 @dataclass
@@ -302,7 +305,14 @@ def _analizar_alumnos(db: Session, cid: int, anio: AnioEscolar, filas: list[tupl
             cel, w3 = _campo(validacion.celular, _texto(d.get(p + "celular")), H, n, et + "celular", a)
             mail, w4 = _campo(validacion.correo, _texto(d.get(p + "correo")), H, n, et + "correo", a)
             parentesco = " ".join(_texto(d.get(p + "parentesco")).split())[:30] or "Apoderado"
-            if not (adoc and w1 and w2 and w3 and w4):
+            responsable = SI_NO.get(_cab(_texto(d.get(p + "responsable"))))
+            w5 = responsable is not None
+            if not w5:
+                a.error(H, n, et + "responsable de pago", "Escribe Sí o No (o déjalo vacío)")
+            elif responsable and any(x.responsable for x in apos):
+                a.error(H, n, et + "responsable de pago", "Solo un apoderado por alumno es responsable de pago")
+                w5 = False
+            if not (adoc and w1 and w2 and w3 and w4 and w5):
                 ok = False
                 continue
             if adoc == doc:
@@ -316,7 +326,7 @@ def _analizar_alumnos(db: Session, cid: int, anio: AnioEscolar, filas: list[tupl
                 ok = False
                 continue
             datos = DatosApo(adoc[0], adoc[1], anombres, aapellidos, cel or (previo.celular if previo else None),
-                             mail or (previo.correo if previo else None), parentesco, n)
+                             mail or (previo.correo if previo else None), parentesco, n, responsable)
             apos_archivo[adoc] = datos
             apos.append(datos)
 
@@ -437,8 +447,10 @@ def aplicar(db: Session, colegio_id: int, a: Analisis, usuario_id: int | None = 
             m = Matricula(colegio_id=cid, anio_id=a.anio.id, alumno_id=al.id, seccion_id=f.seccion.id)
             db.add(m)
             matriculas[al.id] = m
-        else:
+            pensiones.al_matricular(db, cid, al.id, a.anio.id)
+        elif m.seccion_id != f.seccion.id:
             m.seccion_id = f.seccion.id
+            pensiones.al_matricular(db, cid, al.id, a.anio.id)
         for d in f.apoderados:
             ap = apoderados.get((d.tipo_documento, d.numero_documento))
             if ap is None:
@@ -454,6 +466,17 @@ def aplicar(db: Session, colegio_id: int, a: Analisis, usuario_id: int | None = 
                 db.add(v)
                 vinculos[(al.id, ap.id)] = v
             v.parentesco = d.parentesco
+            if d.responsable:  # vacío o "No" no cambia al responsable que ya tenga
+                pensiones.marcar_responsable(db, cid, al.id, ap.id)
+        # Nadie con "Sí" en la fila y el alumno sin responsable: queda el apoderado 1 de la fila.
+        if f.apoderados and not any(d.responsable for d in f.apoderados):
+            db.flush()
+            if not db.scalar(select(AlumnoApoderado.alumno_id).where(
+                    AlumnoApoderado.colegio_id == cid, AlumnoApoderado.alumno_id == al.id,
+                    AlumnoApoderado.responsable_pago).limit(1)):
+                primero = f.apoderados[0]
+                pensiones.marcar_responsable(db, cid, al.id,
+                                             apoderados[(primero.tipo_documento, primero.numero_documento)].id)
 
     credenciales = []
     existentes = {(u.tipo_documento, u.numero_documento): u
@@ -523,6 +546,8 @@ def plantilla(secciones: list[tuple[str, str, str]], roles: list[str]) -> bytes:
         "Nivel, Grado y Sección deben existir ya en el año escolar (mira la hoja Secciones).",
         "Tipo doc: DNI, CE (carné de extranjería), PAS (pasaporte) u OTRO. Si se deja vacío, se toma DNI.",
         "Celular: 9 dígitos que empiezan con 9. Fecha de nacimiento: dd/mm/aaaa.",
+        "Responsable de pago: Sí en el apoderado que ve la deuda y recibe los avisos de cobro (uno por alumno). "
+        "Si nadie tiene Sí y el alumno aún no tiene responsable, queda el apoderado 1.",
         "Si un alumno o persona ya existe (mismo documento), se actualizan sus datos.",
         "Personal: el Rol debe existir (mira la hoja Roles). El usuario será su número de documento.",
         "Antes de guardar se muestra una vista previa con los errores: no se guarda nada hasta que no haya ninguno.",

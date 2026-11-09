@@ -15,6 +15,7 @@ const TIPOS_AVISO = [
   ['falta', 'Falta', 'Cuando no llegó a la hora de corte del turno.'],
   ['salida', 'Salida', 'Cuando marca su salida.'],
   ['cuaderno', 'Cuaderno de control', 'Comunicados, incidencias, citaciones y respuestas.'],
+  ['cobro', 'Recordatorio de pago', 'Días antes del vencimiento y el día que vence, solo al responsable de pago.'],
 ]
 
 export default function Configuracion({ editar, colegio, setColegio, recargarYo }) {

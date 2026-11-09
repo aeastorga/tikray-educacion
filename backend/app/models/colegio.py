@@ -10,9 +10,11 @@ COLOR = r"^#[0-9a-fA-F]{6}$"
 ESTADOS = ("prueba", "activo", "suspendido")
 GESTIONES = ("particular", "estatal")
 # Módulos que se contratan aparte; el resto (configuración, roles, personal, padrón) viene siempre.
-CONTRATABLES = ("asistencia", "cuaderno", "familias", "reuniones")
+CONTRATABLES = ("asistencia", "cuaderno", "familias", "reuniones", "pensiones", "caja")
+# Lo que trae un colegio nuevo; pensiones y caja se contratan aparte.
+INCLUIDOS = ("asistencia", "cuaderno", "familias", "reuniones")
 # Avisos a los padres que el director puede apagar uno por uno.
-TIPOS_AVISO = ("ingreso", "tardanza", "falta", "salida", "cuaderno")
+TIPOS_AVISO = ("ingreso", "tardanza", "falta", "salida", "cuaderno", "cobro")
 
 
 class Colegio(Base):
@@ -48,7 +50,7 @@ class Colegio(Base):
     creado_en: Mapped[datetime] = creado_en()
 
     # --- Perfil: lo edita el director o Tikray Labs ---
-    # Particular o estatal: decide qué muestra la fase 2 (caja y gastos, pensiones).
+    # Particular o estatal. Pensiones y caja están para los dos y se contratan aparte.
     tipo_gestion: Mapped[str] = mapped_column(String(10), default="particular", server_default="particular")
     ugel: Mapped[str | None] = mapped_column(String(120))
     codigo_modular: Mapped[str | None] = mapped_column(String(7))
@@ -58,13 +60,14 @@ class Colegio(Base):
 
     # --- Módulos: Tikray Labs marca los contratados; el director apaga los que no usa ---
     modulos_contratados: Mapped[list[str]] = mapped_column(
-        JSONB, default=lambda: list(CONTRATABLES), server_default='["asistencia", "cuaderno", "familias", "reuniones"]')
+        JSONB, default=lambda: list(INCLUIDOS), server_default='["asistencia", "cuaderno", "familias", "reuniones"]')
     modulos_apagados: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
 
     # --- Avisos a los padres ---
     avisos_tipos: Mapped[dict] = mapped_column(
         JSONB, default=lambda: {t: True for t in TIPOS_AVISO},
-        server_default='{"ingreso": true, "tardanza": true, "falta": true, "salida": true, "cuaderno": true}')
+        server_default='{"ingreso": true, "tardanza": true, "falta": true, "salida": true, "cuaderno": true, '
+                       '"cobro": true}')
     # Horario sin molestar (hora de Lima): los avisos del cuaderno esperan a que termine.
     silencio_desde: Mapped[time] = mapped_column(Time, default=time(21, 0), server_default="21:00")
     silencio_hasta: Mapped[time] = mapped_column(Time, default=time(6, 0), server_default="06:00")

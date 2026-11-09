@@ -230,3 +230,5 @@
   [data-tema="auto"] .caja-numero.a-tiempo, [data-tema="auto"] .acceso-icono { color: var(--acento-luz); }
   [data-tema="auto"] .caja-oscura { background: #1F2937; border-color: #374151; }
 }
+.cifra-soles { flex-wrap: wrap; }
+.cifra-soles b { font-size: 1.9rem; white-space: nowrap; }

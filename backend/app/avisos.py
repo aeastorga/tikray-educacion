@@ -25,6 +25,8 @@ log = logging.getLogger(__name__)
 MAX_INTENTOS = 5
 # Un aviso que no pudo salir en este tiempo ya no sirve ("ingresó a las 7:40" a la noche).
 VIGENCIA = timedelta(hours=6)
+# Respetan el horario sin molestar (la asistencia sale siempre) y solo llegan a quien ya tiene acceso.
+ESPERAN_SILENCIO = ("cuaderno", "cobro")
 
 # Resultado de enviar a un navegador: "ok", "expirada" (el navegador la dio de baja) o "error".
 Enviador = Callable[[SuscripcionPush, dict], str]
@@ -65,6 +67,8 @@ def mensaje(aviso: ColaAviso, colegio: Colegio, alumno: Alumno | None) -> dict:
         titulo, cuerpo = colegio.nombre, aviso.datos.get("mensaje", "Hubo un cambio en tu cuenta.")
     elif aviso.tipo == "cuaderno":
         titulo, cuerpo = colegio.nombre, aviso.datos.get("mensaje", "Tienes una novedad en el cuaderno.")
+    elif aviso.tipo == "cobro":
+        titulo, cuerpo = colegio.nombre, aviso.datos.get("mensaje", "Tienes cuotas por pagar.")
     else:
         n = _primer_nombre(alumno)
         cuerpo = {
@@ -74,17 +78,17 @@ def mensaje(aviso: ColaAviso, colegio: Colegio, alumno: Alumno | None) -> dict:
             "falta": f"{n} no ha llegado hoy al colegio.",
         }[aviso.tipo]
         titulo = colegio.nombre
-    if aviso.tipo == "cuaderno":  # cada novedad del cuaderno es su propia notificación
+    if aviso.tipo in ESPERAN_SILENCIO:  # cada novedad del cuaderno y cada recordatorio es su propia notificación
         return {"titulo": titulo, "cuerpo": cuerpo, "url": aviso.datos.get("url", "/familia"),
-                "etiqueta": f"cuaderno-{aviso.id}"}
+                "etiqueta": f"{aviso.tipo}-{aviso.id}"}
     return {"titulo": titulo, "cuerpo": cuerpo, "url": "/familia",
             "etiqueta": f"{aviso.tipo}-{aviso.alumno_id or aviso.apoderado_id}-{aviso.fecha}"}
 
 
 def _sigue_vigente(db: Session, aviso: ColaAviso, ahora: datetime) -> str | None:
     """Motivo para no enviarlo, o None."""
-    # Lo del cuaderno puede esperar a propósito (programado, horario sin molestar): cuenta desde que pudo salir.
-    desde = aviso.procesar_desde if aviso.tipo == "cuaderno" else aviso.creado_en
+    # Lo del cuaderno y los cobros pueden esperar a propósito (programado, horario sin molestar): cuenta desde que pudo salir.
+    desde = aviso.procesar_desde if aviso.tipo in ESPERAN_SILENCIO else aviso.creado_en
     if ahora - desde > VIGENCIA:
         return "vencido"
     if aviso.tipo == "falta":
@@ -100,7 +104,7 @@ def _sigue_vigente(db: Session, aviso: ColaAviso, ahora: datetime) -> str | None
 def _destinatarios(db: Session, aviso: ColaAviso) -> list[Apoderado]:
     if aviso.apoderado_id is not None:
         # De su cuenta se le avisa aunque esté pendiente; del cuaderno, solo si ya tiene acceso.
-        estados = ("activo",) if aviso.tipo == "cuaderno" else ("activo", "pendiente")
+        estados = ("activo",) if aviso.tipo in ESPERAN_SILENCIO else ("activo", "pendiente")
         q = select(Apoderado).where(Apoderado.colegio_id == aviso.colegio_id, Apoderado.id == aviso.apoderado_id,
                                     Apoderado.estado_acceso.in_(estados))
     else:
@@ -118,7 +122,7 @@ def _procesar(db: Session, aviso: ColaAviso, enviar: Enviador, ahora: datetime) 
         aviso.estado, aviso.procesado_en = "descartado", ahora
         aviso.datos = {**aviso.datos, "motivo": "apagado por el colegio"}
         return
-    if aviso.tipo == "cuaderno" and (fin := configuracion.fin_del_silencio(colegio, ahora)):
+    if aviso.tipo in ESPERAN_SILENCIO and (fin := configuracion.fin_del_silencio(colegio, ahora)):
         aviso.procesar_desde = fin  # horario sin molestar: espera en la cola (la asistencia sale siempre)
         return
     motivo = _sigue_vigente(db, aviso, ahora)

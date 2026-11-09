@@ -5,12 +5,12 @@ cuaderno, avisos y todo lo que cuelga de ellos) y lo que se conserva (estructura
 personal, imagen y configuración). Una prueba exige que toda tabla nueva esté en una de las dos.
 """
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.almacenamiento import get_almacenamiento_privado
 from app.db import Base
-from app.models import AdjuntoCuaderno, Apoderado, Colegio, CuentaFamilia
+from app.models import AdjuntoCuaderno, Apoderado, Colegio, ConfigPensiones, CuentaFamilia, Gasto
 
 BORRAR = {
     "alumno", "apoderado", "alumno_apoderado", "matricula", "cambio_apoderado", "consentimiento_apoderado",
@@ -19,11 +19,13 @@ BORRAR = {
     "entrada_cuaderno", "destino_cuaderno", "mensaje_cuaderno", "adjunto_cuaderno",
     "cola_aviso", "entrega_aviso",
     "reunion_padres", "ficha_reunion",
+    "cuota_alumno", "descuento_alumno", "caja_sesion", "pago", "pago_detalle", "gasto",
 }
 CONSERVAR = {
     "anio_escolar", "nivel", "grado", "seccion", "turno", "dia_no_lectivo",
     "rol", "permiso_rol", "usuario", "licencia_personal", "seccion_docente",
     "config_asistencia", "config_familias", "categoria_incidencia", "plantilla_comunicado", "registro_actividad",
+    "config_pensiones", "concepto_cobro", "monto_concepto", "cuota_programada", "categoria_gasto",
 }
 
 
@@ -36,6 +38,8 @@ def borrar_datos_de_ejemplo(db: Session, colegio: Colegio) -> dict[str, int]:
     "_archivos", las claves de adjuntos a borrar del almacenamiento después del commit. No hace commit."""
     cid = colegio.id
     archivos = list(db.scalars(select(AdjuntoCuaderno.clave).where(AdjuntoCuaderno.colegio_id == cid)))
+    archivos += list(db.scalars(select(Gasto.archivo_clave).where(Gasto.colegio_id == cid,
+                                                                  Gasto.archivo_clave.is_not(None))))
     # Cuentas de familia (globales) de sus apoderados: se borran luego si ya no son de ningún otro colegio.
     cuentas = set(db.scalars(select(Apoderado.cuenta_id).where(Apoderado.colegio_id == cid,
                                                               Apoderado.cuenta_id.is_not(None))))
@@ -50,6 +54,8 @@ def borrar_datos_de_ejemplo(db: Session, colegio: Colegio) -> dict[str, int]:
         huerfanas = cuentas - en_uso
         if huerfanas:
             conteo["cuenta_familia"] = db.execute(delete(CuentaFamilia).where(CuentaFamilia.id.in_(huerfanas))).rowcount
+    # Sin los recibos de prueba, el correlativo vuelve a empezar (sin saltos desde el primero real).
+    db.execute(update(ConfigPensiones).where(ConfigPensiones.colegio_id == cid).values(correlativo_recibo=0))
     conteo["_archivos"] = archivos
     return conteo
 
