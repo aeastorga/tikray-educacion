@@ -312,3 +312,61 @@ def select_count(modelo, colegio_id):
     from sqlalchemy import func, select
 
     return select(func.count()).select_from(modelo).where(modelo.colegio_id == colegio_id)
+
+
+# --- Comprobantes electrónicos: A no ve, emite ni anula los de B, ni con ids adivinados ---------------
+
+def test_comprobantes_aislados_por_colegio(client, db, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select
+
+    from app import facturacion
+    from app.config import get_settings
+    from app.models import ColaComprobante, Comprobante
+    from tests.test_facturacion import CLAVE, RUC, TOKEN
+    from tests.test_pensiones import abrir, armar, cobrar, cuotas, preparar
+
+    monkeypatch.setattr(get_settings(), "facturacion_clave", CLAVE)
+    monkeypatch.setitem(facturacion.PROVEEDORES, "prueba", facturacion.FacturadorPrueba)
+    ea, eb = preparar(db, "alfa"), preparar(db, "beta", dni_madre="45555555")
+    ha, hb = auth("alfa", token(client, "alfa")), auth("beta", token(client, "beta"))
+    for hx, ex in ((ha, ea), (hb, eb)):
+        r = client.put("/api/configuracion/facturacion", headers=hx, json={
+            "emite": True, "ruc": RUC, "razon_social": "Colegio", "proveedor": "prueba", "token": TOKEN})
+        assert r.status_code == 200, r.text
+        armar(client, hx, ex)
+        abrir(client, hx)
+    # B cobra y su emisión falla 5 veces: queda en su lista de error.
+    facturacion.FacturadorPrueba.reiniciar(*["fallar"] * 5)
+    cuota_b = cuotas(client, hb, eb.a1.id)[0]
+    pago_b = cobrar(client, hb, eb.a1.id, [(cuota_b["id"], "10")]).json()
+    ahora = datetime.now(UTC)
+    for _ in range(5):
+        ahora += timedelta(hours=1)
+        facturacion.procesar_cola(db, ahora=ahora)
+    db.expire_all()
+    tarea_b = db.scalar(select(ColaComprobante).where(ColaComprobante.colegio_id == eb.colegio.id))
+    comp_b = db.scalar(select(Comprobante).where(Comprobante.colegio_id == eb.colegio.id))
+    assert tarea_b.estado == "error"
+    assert client.get("/api/caja/comprobantes/errores", headers=hb).json()["total"] == 1
+
+    # A no lo ve, no lo reintenta (emitir) ni anula su pago (anular).
+    assert client.get("/api/caja/comprobantes/errores", headers=ha).json()["total"] == 0
+    assert client.get(f"/api/caja/pagos/{pago_b['id']}", headers=ha).status_code == 404
+    assert client.post(f"/api/caja/comprobantes/tareas/{tarea_b.id}/reintentar", headers=ha).status_code == 404
+    assert client.post(f"/api/caja/pagos/{pago_b['id']}/anular", headers=ha, json={"motivo": "xxx"}).status_code == 404
+    # Ni cobrando una cuota de B se crea un comprobante.
+    assert cobrar(client, ha, eb.a1.id, [(cuota_b["id"], "1")]).status_code == 404
+    db.expire_all()
+    assert db.get(ColaComprobante, tarea_b.id).estado == "error"
+    assert db.scalar(select(ColaComprobante).where(ColaComprobante.accion == "anular")) is None
+    assert db.scalar(select(Comprobante).where(Comprobante.colegio_id == ea.colegio.id)) is None
+    # Cada colegio con su propio correlativo.
+    propio = cobrar(client, ha, ea.a1.id, [(cuotas(client, ha, ea.a1.id)[0]["id"], "1")]).json()
+    assert propio["comprobante"]["numero"] == "B001-00000001" == f"B001-{comp_b.numero:08d}"
+
+    # La base tampoco acepta una orden de A que apunte a un comprobante de B.
+    db.add(ColaComprobante(colegio_id=ea.colegio.id, comprobante_id=comp_b.id, accion="emitir"))
+    with pytest.raises(IntegrityError):
+        db.commit()

@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import asistencia as reglas_asistencia
-from app import avisos, pensiones
+from app import avisos, facturacion, pensiones
 from app.config import get_settings
 from app.deps import colegio_del_host, familia_sesion, usuario_actual, usuario_sesion
 from app.proteccion import ip_cliente
@@ -27,6 +27,8 @@ def crear_app() -> FastAPI:
                              name="faltas").start()
             threading.Thread(target=avisos.bucle_avisos, args=(parar,), daemon=True, name="avisos").start()
             threading.Thread(target=pensiones.bucle_cobros, args=(parar,), daemon=True, name="cobros").start()
+            threading.Thread(target=facturacion.bucle_comprobantes, args=(parar,), daemon=True,
+                             name="comprobantes").start()
         yield
         parar.set()
 

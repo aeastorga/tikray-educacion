@@ -20,12 +20,15 @@ BORRAR = {
     "cola_aviso", "entrega_aviso",
     "reunion_padres", "ficha_reunion",
     "cuota_alumno", "descuento_alumno", "caja_sesion", "pago", "pago_detalle", "gasto",
+    # Sin los comprobantes de prueba, cada serie vuelve a empezar (como el recibo interno).
+    "comprobante", "cola_comprobante", "serie_comprobante",
 }
 CONSERVAR = {
     "anio_escolar", "nivel", "grado", "seccion", "turno", "dia_no_lectivo",
     "rol", "permiso_rol", "usuario", "licencia_personal", "seccion_docente",
     "config_asistencia", "config_familias", "categoria_incidencia", "plantilla_comunicado", "registro_actividad",
     "config_pensiones", "concepto_cobro", "monto_concepto", "cuota_programada", "categoria_gasto",
+    "config_facturacion",
 }
 
 

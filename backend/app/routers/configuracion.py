@@ -1,8 +1,8 @@
 """Configuración del director: perfil del colegio, módulos, avisos a los padres, plantillas de comunicados,
-categorías de incidencias e historial de actividad.
+categorías de incidencias, comprobantes electrónicos e historial de actividad.
 
 Todo con el colegio del token. Ver: permiso "configuracion" ver; cambiar: "configuracion" editar. El
-historial es solo del director.
+historial y los comprobantes electrónicos son solo del director (y de Tikray Labs en su panel).
 """
 
 from datetime import date, datetime, time, timedelta
@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import configuracion
+from app import configuracion, facturacion
 from app.comun import guardar, obtener
 from app.db import get_db
 from app.deps import Sesion, puede, requerir_permiso, solo_director, usuario_actual
@@ -21,6 +21,7 @@ from app.fechas import LIMA
 from app.paginacion import Pagina, contar, pagina, recortar
 from app.models import CategoriaIncidencia, Colegio, EntradaCuaderno, PlantillaComunicado, RegistroActividad, Usuario
 from app.models.colegio import CONTRATABLES, TIPOS_AVISO
+from app.models.facturacion import PATRON_SERIE_BOLETA, PATRON_SERIE_FACTURA
 from app.modulos import MODULOS
 
 router = APIRouter(prefix="/configuracion", tags=["configuracion"])
@@ -278,6 +279,77 @@ def borrar_categoria(categoria_id: int, s: Sesion = Depends(editar), db: Session
                             f"Borró la categoría «{c.nombre}»")
     db.delete(c)
     guardar(db)
+
+
+# --- Comprobantes electrónicos (solo el director; lo usa también el panel de Tikray Labs) ----------
+
+class FacturacionIn(BaseModel):
+    emite: bool = False
+    ruc: str | None = None
+    razon_social: str | None = Field(default=None, max_length=200)
+    serie_boleta: str = Field(default="B001", pattern=PATRON_SERIE_BOLETA)
+    serie_factura: str = Field(default="F001", pattern=PATRON_SERIE_FACTURA)
+    proveedor: str = "ninguno"
+    # Vacío: se queda el que ya estaba. Nunca se devuelve.
+    token: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("ruc", "razon_social", "token", mode="before")
+    @classmethod
+    def _vacio_es_nada(cls, v):
+        return (" ".join(v.split()) or None) if isinstance(v, str) else v
+
+    @field_validator("serie_boleta", "serie_factura", mode="before")
+    @classmethod
+    def _mayusculas(cls, v):
+        return v.strip().upper() if isinstance(v, str) else v
+
+    @field_validator("proveedor")
+    @classmethod
+    def _proveedor(cls, v: str) -> str:
+        if v not in facturacion.PROVEEDORES:
+            raise ValueError("Proveedor desconocido")
+        return v
+
+
+def aplicar_facturacion(db: Session, colegio_id: int, d: FacturacionIn, quien) -> dict:
+    """Guarda la configuración y su línea del historial (sin el token) y hace commit."""
+    from app.models import ConfigFacturacion
+
+    cfg = db.get(ConfigFacturacion, colegio_id) or ConfigFacturacion(colegio_id=colegio_id)
+    if d.ruc is not None and not facturacion.ruc_valido(d.ruc):  # con su mensaje en pantalla
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, facturacion.RUC_INVALIDO)
+    sin_clave = "Falta FACTURACION_CLAVE en el servidor: la facturación no se puede activar"
+    if d.token and not facturacion.hay_clave():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, sin_clave)
+    if d.emite:
+        if not facturacion.hay_clave():
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, sin_clave)
+        if not d.ruc or not d.razon_social:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Para emitir, escribe el RUC y la razón social")
+        if d.proveedor != "ninguno" and not (d.token or cfg.token_cifrado):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Para emitir, escribe el token del proveedor")
+    cfg.emite, cfg.ruc, cfg.razon_social = d.emite, d.ruc, d.razon_social
+    cfg.serie_boleta, cfg.serie_factura, cfg.proveedor = d.serie_boleta, d.serie_factura, d.proveedor
+    if d.token:
+        cfg.token_cifrado = facturacion.cifrar(d.token)
+    db.add(cfg)
+    configuracion.registrar(
+        db, colegio_id, quien, "editar", "configuracion", "facturacion", colegio_id,
+        f"Comprobantes electrónicos: {'emite' if d.emite else 'no emite'}, RUC {d.ruc or '—'}, "
+        f"series {d.serie_boleta} y {d.serie_factura}, proveedor {facturacion.NOMBRE_PROVEEDOR.get(d.proveedor, d.proveedor)}"
+        f"{', token cambiado' if d.token else ''}")
+    guardar(db)
+    return facturacion.config_de(cfg)
+
+
+@router.get("/facturacion")
+def ver_facturacion(s: Sesion = Depends(solo_director), db: Session = Depends(get_db)) -> dict:
+    return facturacion.config_de(facturacion.config(db, s.colegio.id))
+
+
+@router.put("/facturacion")
+def cambiar_facturacion(d: FacturacionIn, s: Sesion = Depends(solo_director), db: Session = Depends(get_db)) -> dict:
+    return aplicar_facturacion(db, s.colegio.id, d, s.usuario)
 
 
 # --- Historial de actividad (solo el director) --------------------------------------------
