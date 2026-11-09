@@ -10,15 +10,18 @@ from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 
 from app import avisos, pensiones
+from app.db import get_engine
 from app.fechas import LIMA, hoy_lima
 from app.main import app
 from app.models import (Alumno, AlumnoApoderado, AnioEscolar, Apoderado, ColaAviso, Colegio, ConfigPensiones,
                         CuotaAlumno, CuotaProgramada, Gasto, Grado, Matricula, Nivel, Pago, PagoDetalle,
                         RegistroActividad, Seccion, SuscripcionPush, Turno)
+from app.models.colegio import CONTRATABLES
+from app.routers.pensiones import desde_vencimiento
 from tests.conftest import auth, crear_colegio, crear_familia, crear_personal, token, token_familia
 
 HOY = hoy_lima()
@@ -47,7 +50,7 @@ class Escuela:
 
 
 def preparar(db, sub: str, dni_madre: str = "41234567") -> Escuela:
-    c = crear_colegio(db, sub)
+    c = crear_colegio(db, sub, modulos_contratados=list(CONTRATABLES))  # pensiones y caja se contratan aparte
     # Año escolar que rodea a hoy, para tener cuotas vencidas y por vencer.
     anio = AnioEscolar(colegio_id=c.id, anio=HOY.year, inicio=HOY - timedelta(days=200),
                        fin=HOY + timedelta(days=200), dias_semana="1234567", activo=True)
@@ -683,6 +686,8 @@ def test_aviso_de_cobro_apagado_por_el_director(client, db, e, h):
 
 
 def test_aviso_de_cobro_respeta_el_horario_sin_molestar(client, db, e, h):
+    e.colegio.silencio_desde, e.colegio.silencio_hasta = time(21, 0), time(6, 0)
+    db.commit()
     armar(client, h, e, vences=(-10, 0, 3, 30))
     _push(db, e.madre)
     pensiones.revisar_cobros(db, HOY)
@@ -783,3 +788,214 @@ def test_demo_trae_pagos_variados_y_consistentes(db):
     if HOY.month >= 4:  # con varias cuotas vencidas ya hay de todo
         assert {"pagada", "vencida", "pendiente"} <= estados
     assert db.scalar(select(func.count()).select_from(Gasto).where(Gasto.colegio_id == cid)) > 0
+
+
+# --- Correcciones del PR #15 -------------------------------------------------------------------------
+
+def _con_casilla(db, colegio, dni: str, permisos: dict[str, str]):
+    """Personal cuyo rol tiene "Puede anular pagos de caja cerrada y gastos de días anteriores"."""
+    u = crear_personal(db, colegio, dni, permisos)
+    u.rol.puede_anular_caja = True
+    db.commit()
+    return u
+
+
+def test_casilla_del_rol_para_anular_pagos(client, db, e, h):
+    armar(client, h, e)
+    crear_personal(db, e.colegio, "50000001", {"caja": "editar"})
+    crear_personal(db, e.colegio, "50000002", {"caja": "editar"})
+    _con_casilla(db, e.colegio, "50000003", {"caja": "editar"})
+    _con_casilla(db, e.colegio, "50000004", {"caja": "ver"})
+    cajero = auth("alfa", token(client, "alfa", "50000001"))
+    otro = auth("alfa", token(client, "alfa", "50000002"))
+    autorizado = auth("alfa", token(client, "alfa", "50000003"))
+    solo_ver = auth("alfa", token(client, "alfa", "50000004"))
+    c = cuotas(client, h, e.a1.id)
+    abrir(client, cajero)
+    p1, p2, p3, p4 = (cobrar(client, cajero, e.a1.id, [(c[0]["id"], m)]).json() for m in ("10", "11", "12", "13"))
+
+    def anular(cabecera, p):
+        return client.post(f"/api/caja/pagos/{p['id']}/anular", headers=cabecera, json={"motivo": "Revisión"})
+
+    # Caja abierta de otro cajero: sin casilla 403, con casilla 200; la casilla no reemplaza "caja › editar".
+    r = anular(otro, p1)
+    assert r.status_code == 403 and "cajero que cobró" in r.json()["detail"]
+    assert anular(solo_ver, p1).status_code == 403
+    assert anular(autorizado, p1).status_code == 200
+    assert client.post("/api/caja/cerrar", headers=cajero, json={"contado": "36"}).status_code == 200
+    # Caja cerrada: el cajero 403; un rol con la casilla y el director, 200.
+    r = anular(cajero, p2)
+    assert r.status_code == 403 and "La caja ya se cerró" in r.json()["detail"]
+    assert anular(solo_ver, p2).status_code == 403
+    assert anular(autorizado, p2).status_code == 200
+    assert anular(h, p3).status_code == 200
+    assert anular(otro, p4).status_code == 403
+
+
+def test_casilla_se_ve_y_se_edita_en_roles(client, db, e, h):
+    r = client.post("/api/roles", headers=h, json={"nombre": "Tesorería", "permisos": {"caja": "editar"},
+                                                   "puede_anular_caja": True})
+    assert r.status_code == 201, r.text
+    rol = r.json()
+    assert rol["puede_anular_caja"] is True
+    r = client.put(f"/api/roles/{rol['id']}", headers=h, json={"nombre": "Tesorería", "permisos": {"caja": "editar"}})
+    assert r.status_code == 200 and r.json()["puede_anular_caja"] is False
+    director = next(x for x in client.get("/api/roles", headers=h).json() if x["es_director"])
+    assert director["puede_anular_caja"] is False  # no la necesita: siempre puede
+
+
+def test_anular_gastos_con_la_misma_regla(client, db, e, h):
+    from app.configuracion import crear_categorias_por_defecto
+    crear_categorias_por_defecto(db, e.colegio.id)
+    db.commit()
+    crear_personal(db, e.colegio, "50000001", {"caja": "editar"})
+    crear_personal(db, e.colegio, "50000002", {"caja": "editar"})
+    _con_casilla(db, e.colegio, "50000003", {"caja": "editar"})
+    quien = auth("alfa", token(client, "alfa", "50000001"))
+    otro = auth("alfa", token(client, "alfa", "50000002"))
+    autorizado = auth("alfa", token(client, "alfa", "50000003"))
+    servicios = client.get("/api/caja/categorias", headers=h).json()[0]["id"]
+
+    def anular(cabecera, g):
+        return client.post(f"/api/caja/gastos/{g['id']}/anular", headers=cabecera, json={"motivo": "Duplicado"})
+
+    # Del mismo día: quien lo registró sí; otro sin casilla no.
+    hoy = _gasto(client, quien, servicios).json()
+    r = anular(otro, hoy)
+    assert r.status_code == 403 and "quien lo registró" in r.json()["detail"]
+    assert anular(quien, hoy).status_code == 200
+    # De un día anterior: quien lo registró ya no; un rol con la casilla sí.
+    ayer = _gasto(client, quien, servicios, fecha=(HOY - timedelta(days=1)).isoformat()).json()
+    r = anular(quien, ayer)
+    assert r.status_code == 403 and "día anterior" in r.json()["detail"]
+    assert anular(autorizado, ayer).status_code == 200
+    antes = _gasto(client, quien, servicios, fecha=(HOY - timedelta(days=3)).isoformat()).json()
+    assert anular(h, antes).status_code == 200  # el director siempre
+
+
+def test_excel_sin_si_deja_al_apoderado_1_aunque_el_2_ya_exista_por_un_hermano(client, db, e, h):
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    from app.importacion import COL_ALUMNOS, COL_APODERADO
+
+    # La madre ya existe (hermanos a1 y a2) y el padre de a1 ya está marcado como responsable.
+    pensiones.marcar_responsable(db, e.colegio.id, e.a1.id, e.padre.id)
+    db.commit()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Alumnos"
+    cab = list(COL_ALUMNOS.values())
+    for n in (1, 2):
+        cab += [f"Apoderado {n} {v}" for v in COL_APODERADO.values()]
+    ws.append(cab)
+    # Hermano nuevo: apoderado 1 nuevo (la tía), apoderado 2 la madre que ya existía; nadie con "Sí".
+    ws.append(["DNI", "71111111", "QUISPE MAMANI", "Teo", "", "Primaria", "1°", "A",
+               "DNI", "42222222", "Mamani", "Ana", "Tía", "", "", "",
+               "DNI", e.madre.numero_documento, "Mamani", "Rosa", "Madre", "", "", "No"])
+    # a1 ya tiene responsable (el padre): sin "Sí" en la fila no cambia.
+    ws.append(["DNI", e.a1.numero_documento, e.a1.apellidos, e.a1.nombres, "", "Primaria", "1°", "A",
+               "DNI", e.madre.numero_documento, "Mamani", "Rosa", "Madre", "", "", "",
+               "DNI", e.padre.numero_documento, "Quispe", "Juan", "Padre", "", "", ""])
+    buf = BytesIO()
+    wb.save(buf)
+    r = client.post("/api/padron/importacion/confirmar", headers=h,
+                    files={"archivo": ("padron.xlsx", buf.getvalue(), "application/vnd.ms-excel")})
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    teo = db.scalar(select(Alumno).where(Alumno.colegio_id == e.colegio.id, Alumno.numero_documento == "71111111"))
+    tia = db.scalar(select(Apoderado).where(Apoderado.colegio_id == e.colegio.id,
+                                            Apoderado.numero_documento == "42222222"))
+    assert tia.id > e.madre.id  # por orden de id saldría la madre; manda la fila
+    marcados = db.scalars(select(AlumnoApoderado.apoderado_id).where(
+        AlumnoApoderado.colegio_id == e.colegio.id, AlumnoApoderado.alumno_id == teo.id,
+        AlumnoApoderado.responsable_pago)).all()
+    assert marcados == [tia.id]
+    assert pensiones.responsables(db, e.colegio.id, [e.a1.id]) == {e.a1.id: e.padre.id}
+
+
+def test_vencimiento_hasta_3_meses_antes_del_inicio_de_clases(client, db, e, h):
+    e.anio.inicio = date(HOY.year, 3, 1)
+    db.commit()
+    c = concepto(client, h, "Matrícula", "matricula")
+
+    def agregar(vence: date):
+        return client.post(f"/api/pensiones/conceptos/{c['id']}/cronograma", headers=h,
+                           json={"numero": 1, "mes": "Matrícula", "vence": vence.isoformat()})
+
+    assert agregar(date(HOY.year - 1, 11, 30)).status_code == 422  # noviembre del año anterior: no
+    r = agregar(e.anio.fin + timedelta(days=1))  # después del fin: no
+    assert r.status_code == 422 and "3 meses antes del inicio" in r.json()["detail"]
+    assert agregar(date(HOY.year - 1, 12, 1)).status_code == 201  # justo 3 meses antes: sí
+    r = client.put(f"/api/pensiones/cronograma/{client.get('/api/pensiones/conceptos', headers=h).json()['conceptos'][0]['cronograma'][0]['id']}",
+                   headers=h, json={"numero": 1, "mes": "Matrícula", "vence": date(HOY.year, 1, 15).isoformat()})
+    assert r.status_code == 200, r.text  # enero, antes de marzo: sí
+    assert client.get("/api/pensiones/conceptos", headers=h).json()["anio"]["vence_desde"] == f"{HOY.year - 1}-12-01"
+    assert desde_vencimiento(date(2026, 5, 31)) == date(2026, 2, 28)  # el día que no existe: último del mes
+
+
+def test_colegio_nuevo_sin_pensiones_ni_caja_y_la_demo_con_ambos(client, db):
+    from app import demo
+
+    nuevo = crear_colegio(db, "nuevo")
+    assert set(nuevo.modulos_contratados) == {"asistencia", "cuaderno", "familias", "reuniones"}
+    hn = auth("nuevo", token(client, "nuevo"))
+    assert client.get("/api/pensiones/config", headers=hn).status_code == 403
+    assert client.get("/api/caja/mi-caja", headers=hn).status_code == 403
+    # El servidor de la base también: un INSERT sin la columna nace sin ellos.
+    defecto = db.scalar(text("SELECT column_default FROM information_schema.columns "
+                             "WHERE table_name = 'colegio' AND column_name = 'modulos_contratados'"))
+    assert "reuniones" in defecto and "pensiones" not in defecto and "caja" not in defecto
+    res = demo.crear_o_reiniciar(db, "demo", alumnos_por_seccion=2)
+    d = db.get(Colegio, res.colegio_id)
+    assert d.modulo_activo("pensiones") and d.modulo_activo("caja")
+    hd = auth("demo", token(client, "demo", res.credenciales["director"]["usuario"],
+                            res.credenciales["director"]["clave"]))
+    assert client.get("/api/pensiones/config", headers=hd).status_code == 200
+    assert client.get("/api/caja/mi-caja", headers=hd).status_code == 200
+
+
+def test_migracion_de_correcciones_sube_y_baja(db):
+    import os
+
+    from alembic import command
+    from alembic.config import Config
+
+    real = crear_colegio(db, "real")
+    db.execute(text("UPDATE colegio SET modulos_contratados = modulos_contratados || '[\"pensiones\"]'::jsonb "
+                    "WHERE id = :c"), {"c": real.id})  # pensiones contratado antes de la corrección
+    prueba = crear_colegio(db, "demo2", es_demo=True)
+    al = Alumno(colegio_id=real.id, numero_documento="70000001", nombres="A", apellidos="B", codigo="MIGRAAAA")
+    ap1 = Apoderado(colegio_id=real.id, numero_documento="40000011", nombres="P", apellidos="Uno")
+    ap2 = Apoderado(colegio_id=real.id, numero_documento="40000012", nombres="P", apellidos="Dos")
+    db.add_all([al, ap1, ap2])
+    db.flush()
+    db.add_all([AlumnoApoderado(colegio_id=real.id, alumno_id=al.id, apoderado_id=ap2.id, parentesco="Padre"),
+                AlumnoApoderado(colegio_id=real.id, alumno_id=al.id, apoderado_id=ap1.id, parentesco="Madre")])
+    db.commit()
+    db.close()
+    cfg = Config(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
+    cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "..", "alembic"))
+
+    def modulos(cid):
+        with get_engine().connect() as conn:
+            return conn.execute(text("SELECT modulos_contratados, modulos_apagados FROM colegio WHERE id = :c"),
+                                {"c": cid}).one()
+
+    try:
+        command.downgrade(cfg, "8319188332ef")
+        contratados, apagados = modulos(real.id)
+        assert {"pensiones", "caja"} <= set(contratados) and "caja" in apagados and "pensiones" not in apagados
+        command.upgrade(cfg, "head")
+    finally:
+        command.upgrade(cfg, "head")
+    contratados, apagados = modulos(real.id)
+    assert "pensiones" not in contratados and "caja" not in contratados and apagados == []
+    contratados, apagados = modulos(prueba.id)
+    assert {"pensiones", "caja"} <= set(contratados) and apagados == []
+    with get_engine().connect() as conn:
+        marcados = conn.execute(text("SELECT apoderado_id FROM alumno_apoderado WHERE alumno_id = :a "
+                                     "AND responsable_pago"), {"a": al.id}).scalars().all()
+        assert marcados == [ap1.id]  # el de apoderado_id menor
+        assert conn.execute(text("SELECT puede_anular_caja FROM rol LIMIT 1")).scalar() is False

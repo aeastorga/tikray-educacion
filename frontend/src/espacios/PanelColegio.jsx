@@ -65,7 +65,7 @@ export default function PanelColegio({ colegio, setColegio }) {
           <Route path="cuaderno/*" element={<Cuaderno editar={puede(yo, 'cuaderno', 'editar')}
             docentes={puede(yo, 'padron', 'editar')} />} />
           {puede(yo, 'pensiones') && <Route path="pensiones/*" element={<Pensiones editar={puede(yo, 'pensiones', 'editar')} />} />}
-          {puede(yo, 'caja') && <Route path="caja/*" element={<Caja yo={yo} editar={puede(yo, 'caja', 'editar')} />} />}
+          {puede(yo, 'caja') && <Route path="caja/*" element={<Caja editar={puede(yo, 'caja', 'editar')} />} />}
           <Route path="padron/*" element={<Padron editar={puede(yo, 'padron', 'editar')} />} />
           <Route path="familias/*" element={<CuentasPadres colegio={colegio} editar={puede(yo, 'familias', 'editar')}
             reglas={puede(yo, 'configuracion', 'editar')} />} />
@@ -207,7 +207,8 @@ function Roles({ yo }) {
     setError(null)
     const permisos = Object.fromEntries(Object.entries(editando.permisos).filter(([, n]) => n))
     try {
-      const datos = { nombre: editando.nombre, permisos, solo_sus_secciones: Boolean(editando.solo_sus_secciones) }
+      const datos = { nombre: editando.nombre, permisos, solo_sus_secciones: Boolean(editando.solo_sus_secciones),
+        puede_anular_caja: Boolean(editando.puede_anular_caja) }
       if (editando.id) await api(`/api/roles/${editando.id}`, { metodo: 'PUT', datos })
       else await api('/api/roles', { metodo: 'POST', datos })
       setEditando(null)
@@ -224,7 +225,7 @@ function Roles({ yo }) {
     <section>
       <Encabezado titulo="Roles y permisos" descripcion="Cada rol decide qué módulos ve o edita quien lo tiene."
                   acciones={editar && !editando && (
-                    <button className="boton" onClick={() => setEditando({ nombre: '', permisos: {}, solo_sus_secciones: false })}>Nuevo rol</button>
+                    <button className="boton" onClick={() => setEditando({ nombre: '', permisos: {}, solo_sus_secciones: false, puede_anular_caja: false })}>Nuevo rol</button>
                   )} />
       <Tabla etiqueta="Roles" filas={roles}
              vacio={{ icono: ShieldCheck, titulo: 'Sin roles' }}
@@ -234,6 +235,7 @@ function Roles({ yo }) {
                  <>
                    {r.es_director ? 'Todos los permisos' : Object.keys(r.permisos).map((m) => modulos[m] || m).join(', ') || <span className="tenue">Sin permisos</span>}
                    {r.solo_sus_secciones && <span className="segunda-linea">Solo sus secciones</span>}
+                   {r.puede_anular_caja && <span className="segunda-linea">Puede anular pagos y gastos pasados</span>}
                  </>
                ) },
                editar && { id: 'acciones', acciones: true, celda: (r) => (!r.es_director && (
@@ -260,6 +262,11 @@ function Roles({ yo }) {
             <input type="checkbox" checked={Boolean(editando.solo_sus_secciones)}
                    onChange={(e) => setEditando({ ...editando, solo_sus_secciones: e.target.checked })} />
             Solo ve las secciones a su cargo (cuaderno de control: docentes y tutores)
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={Boolean(editando.puede_anular_caja)}
+                   onChange={(e) => setEditando({ ...editando, puede_anular_caja: e.target.checked })} />
+            Puede anular pagos de caja cerrada y gastos de días anteriores
           </label>
           {error && <p className="error">{error}</p>}
           <div className="acciones">

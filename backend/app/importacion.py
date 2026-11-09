@@ -468,6 +468,15 @@ def aplicar(db: Session, colegio_id: int, a: Analisis, usuario_id: int | None = 
             v.parentesco = d.parentesco
             if d.responsable:  # vacío o "No" no cambia al responsable que ya tenga
                 pensiones.marcar_responsable(db, cid, al.id, ap.id)
+        # Nadie con "Sí" en la fila y el alumno sin responsable: queda el apoderado 1 de la fila.
+        if f.apoderados and not any(d.responsable for d in f.apoderados):
+            db.flush()
+            if not db.scalar(select(AlumnoApoderado.alumno_id).where(
+                    AlumnoApoderado.colegio_id == cid, AlumnoApoderado.alumno_id == al.id,
+                    AlumnoApoderado.responsable_pago).limit(1)):
+                primero = f.apoderados[0]
+                pensiones.marcar_responsable(db, cid, al.id,
+                                             apoderados[(primero.tipo_documento, primero.numero_documento)].id)
 
     credenciales = []
     existentes = {(u.tipo_documento, u.numero_documento): u
@@ -538,7 +547,7 @@ def plantilla(secciones: list[tuple[str, str, str]], roles: list[str]) -> bytes:
         "Tipo doc: DNI, CE (carné de extranjería), PAS (pasaporte) u OTRO. Si se deja vacío, se toma DNI.",
         "Celular: 9 dígitos que empiezan con 9. Fecha de nacimiento: dd/mm/aaaa.",
         "Responsable de pago: Sí en el apoderado que ve la deuda y recibe los avisos de cobro (uno por alumno). "
-        "Si nadie tiene Sí, se toma el primero.",
+        "Si nadie tiene Sí y el alumno aún no tiene responsable, queda el apoderado 1.",
         "Si un alumno o persona ya existe (mismo documento), se actualizan sus datos.",
         "Personal: el Rol debe existir (mira la hoja Roles). El usuario será su número de documento.",
         "Antes de guardar se muestra una vista previa con los errores: no se guarda nada hasta que no haya ninguno.",

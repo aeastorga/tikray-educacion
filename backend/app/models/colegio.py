@@ -11,6 +11,8 @@ ESTADOS = ("prueba", "activo", "suspendido")
 GESTIONES = ("particular", "estatal")
 # Módulos que se contratan aparte; el resto (configuración, roles, personal, padrón) viene siempre.
 CONTRATABLES = ("asistencia", "cuaderno", "familias", "reuniones", "pensiones", "caja")
+# Lo que trae un colegio nuevo; pensiones y caja se contratan aparte.
+INCLUIDOS = ("asistencia", "cuaderno", "familias", "reuniones")
 # Avisos a los padres que el director puede apagar uno por uno.
 TIPOS_AVISO = ("ingreso", "tardanza", "falta", "salida", "cuaderno", "cobro")
 
@@ -48,7 +50,7 @@ class Colegio(Base):
     creado_en: Mapped[datetime] = creado_en()
 
     # --- Perfil: lo edita el director o Tikray Labs ---
-    # Particular o estatal. Pensiones y caja están para los dos; el que no los usa los apaga.
+    # Particular o estatal. Pensiones y caja están para los dos y se contratan aparte.
     tipo_gestion: Mapped[str] = mapped_column(String(10), default="particular", server_default="particular")
     ugel: Mapped[str | None] = mapped_column(String(120))
     codigo_modular: Mapped[str | None] = mapped_column(String(7))
@@ -58,7 +60,7 @@ class Colegio(Base):
 
     # --- Módulos: Tikray Labs marca los contratados; el director apaga los que no usa ---
     modulos_contratados: Mapped[list[str]] = mapped_column(
-        JSONB, default=lambda: list(CONTRATABLES), server_default='["asistencia", "cuaderno", "familias", "reuniones", "pensiones", "caja"]')
+        JSONB, default=lambda: list(INCLUIDOS), server_default='["asistencia", "cuaderno", "familias", "reuniones"]')
     modulos_apagados: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
 
     # --- Avisos a los padres ---

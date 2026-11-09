@@ -1,8 +1,12 @@
 """Caja: la caja del día de cada cajero, cobros con recibo interno, anulaciones, cierre, gastos y reportes
 de ingresos y gastos.
 
-Ver: permiso "caja" ver. Abrir, cobrar, cerrar y registrar gastos: "caja" editar. Anular un pago: el
-cajero (con "caja" editar) solo el suyo y antes de cerrar su caja; después, solo el director.
+Ver: permiso "caja" ver. Abrir, cobrar, cerrar y registrar gastos: "caja" editar. Anular pide además
+"caja" editar y:
+- un pago con la caja abierta: el cajero que cobró, el director o un rol con "puede anular" (casilla del rol);
+- un pago con la caja cerrada: solo el director o un rol con "puede anular";
+- un gasto del día (Lima): quien lo registró, el director o un rol con "puede anular";
+- un gasto de un día anterior: solo el director o un rol con "puede anular".
 Con el módulo apagado todo responde 403. Nada de dinero se borra: solo se anula.
 """
 
@@ -42,6 +46,14 @@ NOMBRE_MEDIO = {"efectivo": "Efectivo", "yape": "Yape", "plin": "Plin", "transfe
 MAX_ARCHIVO = 5 * 1024 * 1024
 TIPOS_ARCHIVO = {"application/pdf": b"%PDF", "image/jpeg": b"\xff\xd8\xff", "image/png": b"\x89PNG\r\n\x1a\n",
                  "image/webp": b"RIFF"}
+
+
+SOLO_AUTORIZADOS = "solo lo anulan el director o un rol con permiso para anular"
+
+
+def anula_todo(s: Sesion) -> bool:
+    """Director o rol con la casilla "Puede anular pagos de caja cerrada y gastos de días anteriores"."""
+    return s.usuario.rol.es_director or s.usuario.rol.puede_anular_caja
 
 
 def numero_recibo(p: Pago) -> str:
@@ -321,8 +333,8 @@ def recibo(pago_id: int, s: Sesion = Depends(ver), db: Session = Depends(get_db)
 
 @router.post("/pagos/{pago_id}/anular")
 def anular_pago(pago_id: int, d: AnularIn, s: Sesion = Depends(editar), db: Session = Depends(get_db)) -> dict:
-    """Queda visible como anulado y cada cuota recupera su saldo. Con la caja abierta lo anula su cajero;
-    con la caja cerrada, solo el director."""
+    """Queda visible como anulado y cada cuota recupera su saldo. Con la caja abierta lo anulan su cajero, el
+    director o un rol con permiso para anular; con la caja cerrada, solo estos dos últimos."""
     cid = s.colegio.id
     p = db.scalar(select(Pago).where(Pago.colegio_id == cid, Pago.id == pago_id).with_for_update())
     if p is None:
@@ -330,11 +342,12 @@ def anular_pago(pago_id: int, d: AnularIn, s: Sesion = Depends(editar), db: Sess
     if p.anulado_en is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Ese pago ya está anulado")
     caja = db.get(CajaSesion, p.caja_id)
-    if not s.usuario.rol.es_director:
+    if not anula_todo(s):
         if caja.cerrada_en is not None:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "La caja ya se cerró: solo el director puede anular")
+            raise HTTPException(status.HTTP_403_FORBIDDEN, f"La caja ya se cerró: {SOLO_AUTORIZADOS}")
         if caja.usuario_id != s.usuario.id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el cajero que cobró (o el director) puede anularlo")
+            raise HTTPException(status.HTTP_403_FORBIDDEN,
+                                "Solo lo anulan el cajero que cobró, el director o un rol con permiso para anular")
     detalles = db.scalars(select(PagoDetalle).where(PagoDetalle.colegio_id == cid, PagoDetalle.pago_id == p.id)).all()
     cuotas = {c.id: c for c in db.scalars(select(CuotaAlumno).where(
         CuotaAlumno.colegio_id == cid, CuotaAlumno.id.in_([x.cuota_id for x in detalles]))
@@ -502,6 +515,12 @@ def anular_gasto(gasto_id: int, d: AnularIn, s: Sesion = Depends(editar), db: Se
     g = obtener(db, Gasto, s.colegio.id, gasto_id, "Gasto")
     if g.anulado_en is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Ese gasto ya está anulado")
+    if not anula_todo(s):
+        if g.fecha != hoy_lima():
+            raise HTTPException(status.HTTP_403_FORBIDDEN, f"El gasto es de un día anterior: {SOLO_AUTORIZADOS}")
+        if g.registrado_por_id != s.usuario.id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN,
+                                "Solo lo anulan quien lo registró, el director o un rol con permiso para anular")
     g.anulado_en, g.anulado_motivo, g.anulado_por = datetime.now(UTC), d.motivo, quien(s)
     c = db.get(CategoriaGasto, g.categoria_id)
     anotar(db, s, "anular", "caja", "gasto", g, f"Anuló el gasto {pensiones.texto_soles(g.monto)} en {c.nombre}")

@@ -188,7 +188,8 @@ def conceptos(anio_id: int | None = None, s: Sesion = Depends(ver), db: Session 
     anio = anio_o_activo(db, cid, anio_id)
     niveles = db.scalars(select(Nivel).where(Nivel.colegio_id == cid).order_by(Nivel.orden, Nivel.nombre)).all()
     grados = db.scalars(select(Grado).where(Grado.colegio_id == cid).order_by(Grado.orden, Grado.nombre)).all()
-    return {"anio": {"id": anio.id, "anio": anio.anio, "inicio": anio.inicio.isoformat(), "fin": anio.fin.isoformat()},
+    return {"anio": {"id": anio.id, "anio": anio.anio, "inicio": anio.inicio.isoformat(), "fin": anio.fin.isoformat(),
+                     "vence_desde": desde_vencimiento(anio.inicio).isoformat()},
             "conceptos": _conceptos(db, cid, anio.id),
             "niveles": [{"id": n.id, "nombre": n.nombre,
                          "grados": [{"id": g.id, "nombre": g.nombre} for g in grados if g.nivel_id == n.id]}
@@ -270,12 +271,23 @@ def cambiar_montos(concepto_id: int, d: MontosIn, s: Sesion = Depends(editar), d
     return _conceptos(db, cid, c.anio_id, c.id)[0]
 
 
+MESES_ANTES = 3  # la matrícula puede vencer hasta 3 meses antes del inicio de clases
+
+
+def desde_vencimiento(inicio: date) -> date:
+    """Inicio del año escolar menos 3 meses de calendario (si el día no existe, el último del mes)."""
+    total = inicio.year * 12 + inicio.month - 1 - MESES_ANTES
+    anio, mes = divmod(total, 12)
+    return date(anio, mes + 1, min(inicio.day, calendar.monthrange(anio, mes + 1)[1]))
+
+
 def _dentro_del_anio(db: Session, c: ConceptoCobro, vence: date) -> None:
     anio = db.get(AnioEscolar, c.anio_id)
-    if not anio.inicio <= vence <= anio.fin:
+    desde = desde_vencimiento(anio.inicio)
+    if not desde <= vence <= anio.fin:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            f"El vencimiento debe estar dentro del año escolar ({anio.inicio:%d/%m/%Y} al "
-                            f"{anio.fin:%d/%m/%Y})")
+                            f"El vencimiento va del {desde:%d/%m/%Y} (3 meses antes del inicio de clases) al "
+                            f"{anio.fin:%d/%m/%Y} (fin del año escolar)")
 
 
 @router.post("/conceptos/{concepto_id}/cronograma", status_code=201)

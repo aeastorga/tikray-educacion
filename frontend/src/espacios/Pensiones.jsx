@@ -534,7 +534,7 @@ function Concepto({ c, niveles, anio, editar, llamar }) {
               <input type="number" min={1} max={31} required value={serie.dia} onChange={(e) => setSerie({ ...serie, dia: e.target.value })} />
             </label>
           </div>
-          <p className="tenue">Si el mes no tiene ese día, vence el último del mes. El vencimiento debe caer dentro del año escolar.</p>
+          <p className="tenue">Si el mes no tiene ese día, vence el último del mes. El vencimiento va desde 3 meses antes del inicio de clases hasta el fin del año escolar.</p>
           <div className="acciones">
             <button className="boton">Armar cronograma</button>
             <button type="button" className="enlace" onClick={() => setSerie(null)}>Cancelar</button>
@@ -546,7 +546,7 @@ function Concepto({ c, niveles, anio, editar, llamar }) {
           <div className="fila-form sin-margen">
             <label>N.°<input type="number" min={1} max={24} required value={linea.numero} onChange={(e) => setLinea({ ...linea, numero: e.target.value })} /></label>
             <label>Mes<input required maxLength={20} value={linea.mes} placeholder="Marzo" onChange={(e) => setLinea({ ...linea, mes: e.target.value })} /></label>
-            <label>Vence<input type="date" required min={anio.inicio} max={anio.fin} value={linea.vence}
+            <label>Vence<input type="date" required min={anio.vence_desde} max={anio.fin} value={linea.vence}
                                onChange={(e) => setLinea({ ...linea, vence: e.target.value })} /></label>
           </div>
           {linea.id && c.cuotas_generadas > 0 && <p className="tenue">El nuevo vencimiento vale también para las cuotas ya generadas.</p>}

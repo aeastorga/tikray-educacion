@@ -18,6 +18,8 @@ class DatosRol(BaseModel):
     permisos: dict[str, str] = {}
     # Cuaderno: solo ve y escribe lo de las secciones a su cargo (docente, tutor).
     solo_sus_secciones: bool = False
+    # Caja: anular pagos de caja cerrada y gastos de días anteriores (el director siempre puede).
+    puede_anular_caja: bool = False
 
     @field_validator("permisos")
     @classmethod
@@ -36,12 +38,14 @@ class RolOut(BaseModel):
     es_director: bool
     permisos: dict[str, str]
     solo_sus_secciones: bool
+    puede_anular_caja: bool
 
 
 def _salida(r: Rol) -> RolOut:
     permisos = {m: "editar" for m in MODULOS} if r.es_director else {p.modulo: p.nivel for p in r.permisos}
     return RolOut(id=r.id, nombre=r.nombre, es_director=r.es_director, permisos=permisos,
-                  solo_sus_secciones=r.solo_sus_secciones and not r.es_director)
+                  solo_sus_secciones=r.solo_sus_secciones and not r.es_director,
+                  puede_anular_caja=r.puede_anular_caja and not r.es_director)
 
 
 def _rol(db: Session, colegio_id: int, rol_id: int) -> Rol:
@@ -60,7 +64,8 @@ def _guardar(db: Session, rol: Rol, s: Sesion, accion: str) -> None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe un rol con ese nombre") from None
     permisos = ", ".join(f"{MODULOS.get(p.modulo, p.modulo)} ({p.nivel})" for p in rol.permisos) or "sin permisos"
     configuracion.registrar(db, s.colegio.id, s.usuario, accion, "roles", "rol", rol.id,
-                            f"Rol «{rol.nombre}»: {permisos}{' · solo sus secciones' if rol.solo_sus_secciones else ''}")
+                            f"Rol «{rol.nombre}»: {permisos}{' · solo sus secciones' if rol.solo_sus_secciones else ''}"
+                            f"{' · puede anular pagos y gastos pasados' if rol.puede_anular_caja else ''}")
     db.commit()
 
 
@@ -79,7 +84,8 @@ def listar(s: Sesion = Depends(requerir_permiso("roles")), db: Session = Depends
 def crear(
     datos: DatosRol, s: Sesion = Depends(requerir_permiso("roles", "editar")), db: Session = Depends(get_db),
 ) -> RolOut:
-    rol = Rol(colegio_id=s.colegio.id, nombre=datos.nombre.strip(), solo_sus_secciones=datos.solo_sus_secciones)
+    rol = Rol(colegio_id=s.colegio.id, nombre=datos.nombre.strip(), solo_sus_secciones=datos.solo_sus_secciones,
+              puede_anular_caja=datos.puede_anular_caja)
     rol.permisos = [PermisoRol(colegio_id=s.colegio.id, modulo=m, nivel=n) for m, n in datos.permisos.items()]
     db.add(rol)
     _guardar(db, rol, s, "crear")
@@ -95,6 +101,7 @@ def editar(
     if rol.es_director:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El rol del director no se modifica")
     rol.nombre, rol.solo_sus_secciones = datos.nombre.strip(), datos.solo_sus_secciones
+    rol.puede_anular_caja = datos.puede_anular_caja
     rol.permisos = [PermisoRol(colegio_id=s.colegio.id, modulo=m, nivel=n) for m, n in datos.permisos.items()]
     _guardar(db, rol, s, "editar")
     return _salida(rol)

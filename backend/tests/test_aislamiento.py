@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from app.db import Base, get_engine
 from app.main import app
 from app.models import Rol, Usuario
+from app.models.colegio import CONTRATABLES
 from tests.conftest import (auth, crear_admin, crear_colegio, crear_familia, crear_personal, host, token,
                             token_familia, token_plataforma)
 
@@ -45,7 +46,9 @@ RUTAS_PLATAFORMA = _rutas("/plataforma/")
 
 @pytest.fixture
 def dos(db):
-    return crear_colegio(db, "alfa"), crear_colegio(db, "beta")
+    # Con todo contratado: un 403 en pensiones o caja no debe venir de un módulo apagado.
+    return (crear_colegio(db, "alfa", modulos_contratados=list(CONTRATABLES)),
+            crear_colegio(db, "beta", modulos_contratados=list(CONTRATABLES)))
 
 
 # --- Esquema ---------------------------------------------------------------

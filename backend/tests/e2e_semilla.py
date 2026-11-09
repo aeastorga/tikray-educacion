@@ -24,6 +24,7 @@ from sqlalchemy import text  # noqa: E402
 
 from app.db import get_engine, get_sessionmaker  # noqa: E402
 from app.fechas import hoy_lima  # noqa: E402
+from app.models.colegio import CONTRATABLES  # noqa: E402
 from app.models import (Alumno, AlumnoApoderado, AnioEscolar, Apoderado, Colegio, CuentaFamilia,  # noqa: E402
                         Grado, Matricula, Nivel, Rol, Seccion, Turno, Usuario)
 from app.seguridad import hashear_clave  # noqa: E402
@@ -46,7 +47,8 @@ def main() -> None:
 
     hoy = hoy_lima()
     with get_sessionmaker()() as db:
-        c = Colegio(nombre="Colegio de Pruebas", subdominio=SUBDOMINIO)
+        # Con todo contratado (pensiones y caja se contratan aparte), para probarlo en el navegador.
+        c = Colegio(nombre="Colegio de Pruebas", subdominio=SUBDOMINIO, modulos_contratados=list(CONTRATABLES))
         db.add(c)
         db.flush()
         rol = Rol(colegio_id=c.id, nombre="Director", es_director=True)

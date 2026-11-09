@@ -1,5 +1,6 @@
 // Caja: cobrar con la caja del día abierta, pagos y recibos, cierre de cajas, gastos y reportes de ingresos.
-// Ver: "caja" ver. Abrir caja, cobrar, anular y registrar gastos: "caja" editar. Anular con la caja cerrada: director.
+// Ver: "caja" ver. Abrir caja, cobrar, anular y registrar gastos: "caja" editar. Anular con la caja cerrada
+// o un gasto de otro día: director o rol con "puede anular" (el backend decide).
 import { ArrowLeft, FileSpreadsheet, Lock, Paperclip, Plus, Receipt, Search, Wallet } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
@@ -19,7 +20,7 @@ const hoyLima = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima
 const primeroDeMes = () => `${hoyLima().slice(0, 8)}01`
 const reciboPdf = (p) => descargar(`/api/caja/pagos/${p.id}/recibo.pdf`, `recibo-${p.recibo}.pdf`)
 
-export default function Caja({ yo, editar }) {
+export default function Caja({ editar }) {
   return (
     <section className="pensiones">
       <h2 className="solo-lectores">Caja</h2>
@@ -31,8 +32,8 @@ export default function Caja({ yo, editar }) {
         <NavLink to="/panel/caja/reportes">Reportes</NavLink>
       </nav>
       <Routes>
-        <Route index element={editar ? <Cobrar /> : <Pagos yo={yo} editar={false} />} />
-        <Route path="pagos" element={<Pagos yo={yo} editar={editar} />} />
+        <Route index element={editar ? <Cobrar /> : <Pagos editar={false} />} />
+        <Route path="pagos" element={<Pagos editar={editar} />} />
         <Route path="cajas" element={<Cajas />} />
         <Route path="gastos" element={<Gastos editar={editar} />} />
         <Route path="reportes" element={<Reportes />} />
@@ -135,7 +136,7 @@ function ResumenCaja({ caja, alCerrar }) {
                 : `${diferencia > 0 ? 'Sobran' : 'Faltan'} ${soles(aSoles(Math.abs(diferencia)))} frente al efectivo cobrado.`}
             </p>
           )}
-          <p className="tenue">Cerrada, ya no admite cobros ni anulaciones tuyas: solo el director podrá anular.</p>
+          <p className="tenue">Cerrada, ya no admite cobros ni anulaciones tuyas: solo el director o un rol con permiso para anular podrán anular.</p>
           <div className="acciones">
             <button className="boton">Cerrar caja</button>
             <button type="button" className="enlace" onClick={() => setCierre(null)}>Cancelar</button>
@@ -285,7 +286,7 @@ function ReciboListo({ pago, cerrar }) {
 
 // --- Pagos ----------------------------------------------------------------------------------
 
-function Pagos({ yo, editar }) {
+function Pagos({ editar }) {
   const [filtros, setFiltros] = useState({ q: '', medio: '', estado: '', cajero_id: '', desde: primeroDeMes(), hasta: hoyLima() })
   const [error, setError] = useState(null)
   const { datos, error: errorLista, cargando, recargar, paginacion } = usePaginado('/api/caja/pagos', { ...filtros, q: filtros.q.trim() })
@@ -314,7 +315,7 @@ function Pagos({ yo, editar }) {
   ]
   return (
     <>
-      <Encabezado titulo="Pagos" descripcion={`Nada se borra: un pago anulado queda visible con su motivo.${yo.es_director ? '' : ' Puedes anular tus cobros mientras tu caja siga abierta.'}`} />
+      <Encabezado titulo="Pagos" descripcion="Nada se borra: un pago anulado queda visible con su motivo. Con la caja abierta lo anula quien cobró; con la caja cerrada, el director o un rol con permiso para anular." />
       {datos && <Cifras items={[{ etiqueta: 'Cobrado (válidos)', valor: soles(datos.suma), tono: 'bien' }]} />}
       <Filtros total={datos && plural(datos.total, 'pago', 'pagos')}>
         <Buscador valor={filtros.q} cambiar={cambiar('q')} placeholder="Alumno, documento u operación" />
@@ -408,7 +409,7 @@ function Gastos({ editar }) {
   ]
   return (
     <>
-      <Encabezado titulo="Gastos" descripcion="Salidas de dinero del colegio con su comprobante. Nada se borra: se anula con motivo."
+      <Encabezado titulo="Gastos" descripcion="Salidas de dinero del colegio con su comprobante. Nada se borra: se anula con motivo. El mismo día lo anula quien lo registró; después, el director o un rol con permiso para anular."
                   acciones={editar && (
                     <>
                       <button className="boton secundario" onClick={() => setVerCategorias(!verCategorias)}>Categorías</button>

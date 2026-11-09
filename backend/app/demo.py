@@ -29,6 +29,7 @@ from app.models import (AdjuntoCuaderno, Alumno, AlumnoApoderado, AnioEscolar, A
                         DestinoCuaderno, DiaNoLectivo, EntradaCuaderno, Grado, LicenciaPersonal, Matricula,
                         MensajeCuaderno, Nivel, PermisoRol, PlantillaComunicado, Rol, Seccion, SeccionDocente, Turno,
                         Usuario)
+from app.models.colegio import CONTRATABLES, INCLUIDOS
 from app.models.pensiones import MEDIOS
 from app.modulos import MODULOS
 from app.seguridad import hashear_clave
@@ -558,6 +559,10 @@ def crear_o_reiniciar(db: Session, subdominio: str = "demo", nombre: str = "Cole
         db.execute(text("SELECT pg_advisory_xact_lock(7, :c)"), {"c": colegio.id})
         borrar_datos(db, colegio)
         db.flush()
+    # La demo muestra todo: pensiones y caja (que se contratan aparte) van contratadas y encendidas.
+    colegio.modulos_contratados = [m for m in CONTRATABLES
+                                   if m in set(colegio.modulos_contratados or INCLUIDOS) | {"pensiones", "caja"}]
+    colegio.modulos_apagados = [m for m in (colegio.modulos_apagados or []) if m not in ("pensiones", "caja")]
     res = sembrar(db, colegio, alumnos_por_seccion)
     from app.demo_dia import simular_dia
     simular_dia(db, colegio)
