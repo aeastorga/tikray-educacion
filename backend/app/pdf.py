@@ -1,7 +1,8 @@
-"""PDF de carnets (con QR), cartas de acceso del personal, fichas de la reunión y recibos de caja."""
+"""PDF de carnets (con QR), cartas de acceso del personal, fichas de la reunión, recibos de caja y el
+calendario del mes."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from io import BytesIO
 
 from reportlab.graphics import renderPDF
@@ -447,5 +448,149 @@ def recibo(imagen: Imagen, r: Recibo) -> bytes:
         c.setFont("Helvetica", 10)
         c.drawCentredString(0, -8 * mm, _recortar(f"Motivo: {r.anulado}", "Helvetica", 10, util))
         c.restoreState()
+    c.save()
+    return salida.getvalue()
+
+
+@dataclass
+class EventoMes:
+    inicio: date
+    fin: date
+    hora: str | None
+    titulo: str
+    tipo: str
+    para: str
+
+
+_DIAS_CORTOS = ("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
+_MESES = ("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre",
+          "Noviembre", "Diciembre")
+
+
+def calendario_mes(imagen: Imagen, primero: date, eventos: list[EventoMes],
+                   sin_clases: list[tuple[date, str]]) -> bytes:
+    """C6: el mes en una hoja A4 apaisada (cuadrícula de lunes a domingo) y, en la siguiente, el detalle de
+    cada evento con a quién va. Para imprimir o mandar por WhatsApp."""
+    import calendar
+    from datetime import timedelta
+
+    from reportlab.lib.pagesizes import landscape
+
+    salida = BytesIO()
+    hoja = landscape(A4)
+    c = Canvas(salida, pagesize=hoja)
+    titulo_mes = f"{_MESES[primero.month - 1]} {primero.year}"
+    c.setTitle(f"Calendario {titulo_mes} · {imagen.nombre}")
+    ancho, alto = hoja
+    color = HexColor(imagen.color_primario)
+    izq, util = 12 * mm, ancho - 24 * mm
+
+    def cabecera(subtitulo: str) -> float:
+        y = alto - 12 * mm
+        logo = _logo(imagen)
+        if logo:
+            c.drawImage(logo, izq, y - 12 * mm, 12 * mm, 12 * mm, preserveAspectRatio=True, mask="auto")
+        x = izq + (15 * mm if logo else 0)
+        c.setFillColor(color)
+        c.setFont("Helvetica-Bold", _ajustar(imagen.nombre, "Helvetica-Bold", 14, util / 2))
+        c.drawString(x, y - 5 * mm, imagen.nombre)
+        c.setFillColorRGB(0.35, 0.35, 0.35)
+        c.setFont("Helvetica", 9)
+        c.drawString(x, y - 10.5 * mm, subtitulo)
+        c.setFillColor(color)
+        c.setFont("Helvetica-Bold", 18)
+        c.drawRightString(ancho - izq, y - 8 * mm, titulo_mes)
+        return y - 17 * mm
+
+    # --- Página 1: cuadrícula ---
+    y_tope = cabecera("Calendario escolar")
+    semanas = calendar.Calendar(firstweekday=0).monthdatescalendar(primero.year, primero.month)
+    alto_cab = 7 * mm
+    col = util / 7
+    fila = (y_tope - alto_cab - 14 * mm) / len(semanas)
+    c.setFillColor(color)
+    c.rect(izq, y_tope - alto_cab, util, alto_cab, stroke=0, fill=1)
+    c.setFillColor(white)
+    c.setFont("Helvetica-Bold", 9)
+    for i, nombre in enumerate(_DIAS_CORTOS):
+        c.drawCentredString(izq + col * i + col / 2, y_tope - alto_cab + 2.3 * mm, nombre)
+    motivos = dict(sin_clases)
+    c.setLineWidth(0.5)
+    for s, semana in enumerate(semanas):
+        for d, dia in enumerate(semana):
+            x = izq + col * d
+            y = y_tope - alto_cab - fila * (s + 1)
+            fuera = dia.month != primero.month
+            if dia in motivos and not fuera:
+                c.setFillColorRGB(0.93, 0.93, 0.93)
+                c.rect(x, y, col, fila, stroke=0, fill=1)
+            c.setStrokeColorRGB(0.8, 0.8, 0.8)
+            c.rect(x, y, col, fila, stroke=1, fill=0)
+            if fuera:
+                continue
+            c.setFillColorRGB(0.1, 0.1, 0.1)
+            c.setFont("Helvetica-Bold", 10)
+            c.drawString(x + 1.5 * mm, y + fila - 4.5 * mm, str(dia.day))
+            lineas: list[tuple[str, str, bool]] = []  # (fuente, texto, gris)
+            if dia in motivos:
+                lineas.append(("Helvetica-Oblique", f"Sin clases: {motivos[dia]}", True))
+            for e in eventos:
+                if e.inicio <= dia <= e.fin:
+                    lineas.append(("Helvetica-Bold" if e.hora is None else "Helvetica",
+                                   f"{e.hora} {e.titulo}" if e.hora else e.titulo, False))
+            caben = max(int((fila - 6.5 * mm) / (3.4 * mm)), 1)
+            if len(lineas) > caben:
+                lineas = lineas[:caben - 1] + [("Helvetica-Oblique", f"+{len(lineas) - caben + 1} más (ver detalle)", True)]
+            ly = y + fila - 8.5 * mm
+            for fuente, texto, gris in lineas:
+                c.setFillColorRGB(0.4, 0.4, 0.4) if gris else c.setFillColor(color)
+                c.setFont(fuente, 7)
+                c.drawString(x + 1.5 * mm, ly, _recortar(texto, fuente, 7, col - 3 * mm))
+                ly -= 3.4 * mm
+    c.setFillColorRGB(0.45, 0.45, 0.45)
+    c.setFont("Helvetica", 8)
+    c.drawString(izq, 8 * mm, "Gris: día sin clases. El detalle de cada evento y a quién va está en la página siguiente.")
+
+    # --- Página 2 en adelante: detalle ---
+    if eventos or sin_clases:
+        c.showPage()
+        y = cabecera("Detalle de eventos y días sin clases")
+
+        def cuando(e: EventoMes) -> str:
+            f = f"{e.inicio:%d/%m}" + (f" al {e.fin:%d/%m}" if e.fin != e.inicio else "")
+            return f + (f" · {e.hora}" if e.hora else "")
+
+        filas = [(e.inicio, cuando(e), e.titulo, e.tipo, e.para) for e in eventos]
+        filas += [(f, f"{f:%d/%m}", m, "Sin clases", "Todo el colegio") for f, m in sin_clases]
+        filas.sort(key=lambda x: x[0])
+        anchos = (32 * mm, util - 32 * mm - 38 * mm - 80 * mm, 38 * mm, 80 * mm)
+        encabezados = ("Fecha", "Evento", "Tipo", "Para")
+
+        def encabezado_tabla(y: float) -> float:
+            c.setFillColor(color)
+            c.rect(izq, y - 2 * mm, util, 7 * mm, stroke=0, fill=1)
+            c.setFillColor(white)
+            c.setFont("Helvetica-Bold", 9)
+            x = izq
+            for w, t in zip(anchos, encabezados):
+                c.drawString(x + 2 * mm, y, t)
+                x += w
+            return y - 8 * mm
+
+        y = encabezado_tabla(y)
+        c.setStrokeColorRGB(0.85, 0.85, 0.85)
+        for _, *valores in filas:
+            if y < 15 * mm:
+                c.showPage()
+                y = encabezado_tabla(cabecera("Detalle de eventos y días sin clases"))
+                c.setStrokeColorRGB(0.85, 0.85, 0.85)
+            x = izq
+            c.setFillColorRGB(0.1, 0.1, 0.1)
+            for w, v in zip(anchos, valores):
+                c.setFont("Helvetica", 9)
+                c.drawString(x + 2 * mm, y, _recortar(v, "Helvetica", 9, w - 4 * mm))
+                x += w
+            c.line(izq, y - 2.5 * mm, ancho - izq, y - 2.5 * mm)
+            y -= 7 * mm
     c.save()
     return salida.getvalue()

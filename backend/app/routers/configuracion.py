@@ -128,7 +128,7 @@ def cambiar_modulos(d: ModulosIn, s: Sesion = Depends(editar), db: Session = Dep
 # --- Avisos a los padres -------------------------------------------------------------------
 
 class AvisosIn(BaseModel):
-    tipos: dict[Literal["ingreso", "tardanza", "falta", "salida", "cuaderno", "cobro"], bool]
+    tipos: dict[Literal["ingreso", "tardanza", "falta", "salida", "cuaderno", "cobro", "calendario"], bool]
     silencio_desde: time
     silencio_hasta: time
 

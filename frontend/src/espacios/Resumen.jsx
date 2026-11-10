@@ -7,7 +7,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api.js'
 import { hora12, LIMA, saludo } from '../tema.js'
+import { cuando } from './CalendarioMes.jsx'
 import { plural, soles } from './comun/index.js'
+import './calendario.css'
 import './inicio.css'
 
 const TIPOS = { justificacion: 'Justificaciones', permiso_salida: 'Permisos de salida', citacion: 'Citaciones',
@@ -60,7 +62,7 @@ export default function Resumen({ yo, puede }) {
 
 function Tablero({ d, puede }) {
   const a = d.asistencia, c = d.cuaderno, f = d.familias
-  if (!a && !c && !f && !d.pensiones) return <p className="tenue">Elija un módulo en el menú.</p>
+  if (!a && !c && !f && !d.pensiones && !d.calendario) return <p className="tenue">Elija un módulo en el menú.</p>
   return (
     <>
       {(a || f) && (
@@ -79,6 +81,7 @@ function Tablero({ d, puede }) {
         {d.personal && <Personal p={d.personal} />}
         {c && <CuadernoHoy c={c} />}
         {d.pensiones && <PensionesMes p={d.pensiones} />}
+        {d.calendario && <ProximosEventos eventos={d.calendario} />}
         <Accesos puede={puede} />
       </div>
     </>
@@ -335,6 +338,31 @@ function CuadernoHoy({ c }) {
             <li key={s.id}>
               <Link to={`/panel/cuaderno/${s.id}`}><b>{hora12(s.hora)}</b> {s.alumno}</Link>
               <small className={`chip-mini ${s.estado}`}>{ESTADO_PERMISO[s.estado] || s.estado}</small>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+function ProximosEventos({ eventos }) {
+  return (
+    <section className="caja" aria-labelledby="t-proximos">
+      <div className="caja-cabeza">
+        <h2 id="t-proximos">Próximos eventos</h2>
+        <Link to="/panel/calendario" className="enlace-chico">Calendario</Link>
+      </div>
+      {eventos.length === 0 ? <p className="tenue">No hay eventos próximos.</p> : (
+        <ul className="proximos-inicio">
+          {eventos.map((e) => (
+            <li key={e.id}>
+              <Link to="/panel/calendario/proximos" className={`tipo-${e.tipo}`}>
+                <span className="fecha-chica"><b>{Number(e.inicio.slice(8))}</b><small>{MES_CORTO[Number(e.inicio.slice(5, 7)) - 1]}</small></span>
+                <span><b>{e.titulo}</b><small>{cuando(e)}{e.hora ? ` · ${e.hora}` : ''} · {e.para}</small></span>
+              </Link>
             </li>
           ))}
         </ul>

@@ -7,12 +7,12 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import asistencia as reglas_asistencia
-from app import avisos, facturacion, pensiones
+from app import avisos, calendario as reglas_calendario, facturacion, pensiones
 from app.config import get_settings
 from app.deps import colegio_del_host, familia_sesion, usuario_actual, usuario_sesion
 from app.proteccion import ip_cliente
-from app.routers import (alumnos, asistencia, auth, caja, colegio, configuracion, cuaderno, estructura, familia,
-                         familia_cuaderno, familia_pagos, familia_recojo, familias, importacion, panel,
+from app.routers import (alumnos, asistencia, auth, caja, calendario, colegio, configuracion, cuaderno, estructura,
+                         familia, familia_calendario, familia_cuaderno, familia_pagos, familia_recojo, familias, importacion, panel,
                          pensiones as rutas_pensiones, personal, plataforma, recojo, reunion, roles)
 
 
@@ -27,6 +27,8 @@ def crear_app() -> FastAPI:
                              name="faltas").start()
             threading.Thread(target=avisos.bucle_avisos, args=(parar,), daemon=True, name="avisos").start()
             threading.Thread(target=pensiones.bucle_cobros, args=(parar,), daemon=True, name="cobros").start()
+            threading.Thread(target=reglas_calendario.bucle_recordatorios, args=(parar,), daemon=True,
+                             name="calendario").start()
             threading.Thread(target=facturacion.bucle_comprobantes, args=(parar,), daemon=True,
                              name="comprobantes").start()
         yield
@@ -52,12 +54,14 @@ def crear_app() -> FastAPI:
     api_familia.include_router(familia_cuaderno.privado)
     api_familia.include_router(familia_pagos.privado)
     api_familia.include_router(familia_recojo.privado)
+    api_familia.include_router(familia_calendario.privado)
 
     # Sesión completa: token del mismo colegio del Host y clave ya cambiada.
     api_privada = APIRouter(dependencies=[Depends(usuario_actual)])
     for r in (colegio.privado, roles.router, personal.router, estructura.router, alumnos.router,
               importacion.router, asistencia.router, familias.router, cuaderno.router, panel.router,
-              reunion.router, configuracion.router, rutas_pensiones.router, caja.router, recojo.router):
+              reunion.router, configuracion.router, rutas_pensiones.router, caja.router, recojo.router,
+              calendario.router):
         api_privada.include_router(r)
 
     for r in (api_publica, api_sesion, api_familia, api_privada):

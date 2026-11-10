@@ -1,0 +1,119 @@
+/* Calendario escolar (panel y familia). Colores fijos por tipo (C1: no se configuran), de tono medio para
+   que se lean en tema claro y oscuro; todo lo demás sale de los tokens del tema. */
+.tipo-actuacion { --tipo: #8B5CF6; }
+.tipo-reunion_padres { --tipo: #0EA5E9; }
+.tipo-examen { --tipo: #F59E0B; }
+.tipo-feriado { --tipo: #EF4444; }
+.tipo-salida { --tipo: #16A34A; }
+.tipo-otro { --tipo: #64748B; }
+
+.navegar-mes { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.navegar-mes h3 { margin: 0; min-width: 9.5em; text-align: center; font-size: 1.1rem; }
+
+.mes-calendario { border: 1px solid var(--borde); border-radius: var(--radio-chico); overflow: hidden; background: var(--superficie); }
+.mes-fila { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.mes-fila + .mes-fila { border-top: 1px solid var(--borde); }
+.mes-cabeza span { padding: 8px 4px; text-align: center; font-size: .78rem; font-weight: 700; color: var(--tenue); text-transform: uppercase; letter-spacing: .03em; }
+.mes-dia {
+  position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 3px; min-width: 0; min-height: 108px;
+  padding: 6px; border: 0; border-left: 1px solid var(--borde); background: none; color: var(--texto); text-align: left;
+  font: inherit; cursor: pointer;
+}
+.mes-dia:first-child { border-left: 0; }
+.mes-dia:hover:not(:disabled) { background: var(--acento-suave); }
+.mes-dia:focus-visible { outline: 3px solid var(--acento); outline-offset: -3px; }
+.mes-dia.fuera { background: var(--fondo); cursor: default; }
+.mes-dia.fuera .mes-numero { color: var(--borde-fuerte); }
+.mes-dia.libre { background: repeating-linear-gradient(135deg, var(--fondo) 0 6px, transparent 6px 12px); }
+.mes-dia.elegido { box-shadow: inset 0 0 0 2px var(--acento-texto); }
+.mes-numero { font-weight: 700; font-size: .9rem; font-variant-numeric: tabular-nums; }
+.mes-dia.hoy .mes-numero {
+  display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 999px; background: var(--acento-fuerte); color: #fff;
+}
+.mes-libre { font-size: .72rem; font-weight: 600; color: var(--tenue); }
+.mes-eventos { display: grid; gap: 2px; min-width: 0; }
+.mes-evento {
+  display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 1px 6px; border-radius: 6px;
+  border-left: 3px solid var(--tipo); background: var(--fondo); font-size: .74rem; line-height: 1.35;
+}
+.mes-evento b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.mes-evento.anulado { text-decoration: line-through; color: var(--tenue); }
+.mes-mas { font-size: .72rem; color: var(--tenue); font-weight: 600; }
+.mes-puntos { display: none; gap: 3px; flex-wrap: wrap; }
+.mes-puntos i { width: 7px; height: 7px; border-radius: 999px; background: var(--tipo); }
+.mes-puntos i.anulado { background: none; box-shadow: inset 0 0 0 1.5px var(--tipo); }
+
+/* Celular: solo el número y puntos; el detalle se abre abajo al tocar el día. */
+@media (max-width: 760px) {
+  .mes-dia { min-height: 54px; padding: 4px; align-items: center; }
+  .mes-eventos, .mes-libre { display: none; }
+  .mes-puntos { display: flex; justify-content: center; }
+  .mes-cabeza span { font-size: .7rem; padding: 6px 2px; }
+}
+
+.detalle-dia, .proximos-mes { margin-top: 16px; }
+.detalle-dia h3, .proximos-mes h3 { margin: 0 0 8px; font-size: 1rem; }
+.lista-eventos { display: grid; gap: 10px; }
+.aviso-libre {
+  margin: 0; padding: 10px 12px; border-radius: var(--radio-chico); background: var(--fondo); border: 1px dashed var(--borde-fuerte);
+  color: var(--texto); font-weight: 600; font-size: .92rem;
+}
+.tarjeta-evento {
+  display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--borde); border-left: 4px solid var(--tipo);
+  border-radius: var(--radio-chico); background: var(--superficie); min-width: 0;
+}
+.tarjeta-evento h4 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.tarjeta-evento.anulado h4 { text-decoration: line-through; color: var(--tenue); }
+.tarjeta-evento p { margin: 0; overflow-wrap: anywhere; }
+.tarjeta-evento-cabeza { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip-tipo, .chip-anulado { font-size: .74rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.chip-tipo { background: var(--fondo); color: var(--texto); box-shadow: inset 0 0 0 1px var(--tipo); }
+.chip-anulado { background: var(--falta-fondo); color: var(--falta-texto); }
+.tarjeta-evento-cuando, .tarjeta-evento-para { display: flex; align-items: flex-start; gap: 6px; color: var(--tenue); font-size: .9rem; }
+.tarjeta-evento-cuando svg, .tarjeta-evento-para svg { flex: none; margin-top: 3px; }
+.tarjeta-evento-texto { white-space: pre-line; font-size: .92rem; }
+.tarjeta-evento-motivo { color: var(--falta-texto); font-size: .9rem; }
+.tarjeta-evento .acciones { margin-top: 6px; }
+
+/* Panel: formulario del evento */
+.form-evento { display: grid; gap: 12px; margin-bottom: 16px; }
+.form-evento h3 { margin: 0; }
+.form-evento label { display: grid; gap: 4px; }
+.form-evento .fila-form { margin-top: 0; }
+.form-evento .fila-form > label { flex: 1 1 150px; }
+.form-evento textarea { min-height: 72px; resize: vertical; }
+.form-evento fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
+.form-evento legend { font-weight: 600; margin-bottom: 4px; padding: 0; }
+.opciones-para { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.form-evento .opciones-para label, .form-evento .destinos label, .form-evento .casilla-avisar {
+  display: flex; flex-direction: row; align-items: center; gap: 8px; color: var(--texto); font-weight: 500;
+}
+.form-evento .opciones-para input, .form-evento .destinos input, .form-evento .casilla-avisar input { flex: none; }
+.destinos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 12px; padding: 10px 12px;
+  border: 1px solid var(--borde); border-radius: var(--radio-chico); max-height: 260px; overflow: auto; }
+.destinos h5 { grid-column: 1 / -1; margin: 6px 0 0; font-size: .8rem; color: var(--tenue); text-transform: uppercase; letter-spacing: .03em; }
+.destinos h5:first-child { margin-top: 0; }
+.form-evento .casilla-avisar { align-items: flex-start; }
+.casilla-avisar input { margin-top: 4px; }
+.casilla-avisar small { display: block; color: var(--tenue); }
+.form-anular { display: grid; gap: 8px; margin-top: 8px; }
+.form-anular label { display: grid; gap: 4px; }
+
+.calendario-leyenda { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 0; padding: 0; list-style: none; font-size: .82rem; color: var(--tenue); }
+.calendario-leyenda li { display: flex; align-items: center; gap: 6px; }
+.calendario-leyenda i { width: 10px; height: 10px; border-radius: 3px; background: var(--tipo); }
+.calendario-leyenda i.sin-clases { background: repeating-linear-gradient(135deg, var(--borde-fuerte) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 1px var(--borde-fuerte); }
+
+/* Inicio del panel: próximos eventos */
+.proximos-inicio { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.proximos-inicio a {
+  display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px; border-radius: var(--radio-chico);
+  color: var(--texto); text-decoration: none; border-left: 4px solid var(--tipo); background: var(--fondo);
+}
+.proximos-inicio a:hover { background: var(--acento-suave); }
+.proximos-inicio .fecha-chica { display: grid; justify-items: center; line-height: 1.1; }
+.proximos-inicio .fecha-chica b { font-family: var(--letra-titulo); font-size: 1.3rem; }
+.proximos-inicio .fecha-chica small { font-size: .7rem; text-transform: uppercase; color: var(--tenue); font-weight: 700; }
+.proximos-inicio span:last-child { display: grid; gap: 2px; min-width: 0; }
+.proximos-inicio span:last-child b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proximos-inicio span:last-child small { color: var(--tenue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

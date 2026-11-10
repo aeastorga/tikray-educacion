@@ -31,6 +31,7 @@ CONSERVAR = {
     "config_asistencia", "config_familias", "categoria_incidencia", "plantilla_comunicado", "registro_actividad",
     "config_pensiones", "concepto_cobro", "monto_concepto", "cuota_programada", "categoria_gasto",
     "config_facturacion",
+    "evento_calendario", "destino_evento",
 }
 
 
