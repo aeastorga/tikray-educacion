@@ -499,3 +499,35 @@ def _sin_colegios_sueltos(db):
     yield
     db.rollback()
     assert Colegio  # noqa: B018 (la limpieza la hace conftest)
+
+
+def test_correccion_llave_colegio_e_indices_sube_y_baja(client, db):
+    """La corrección (e7a1c5d9f3b2) deja la llave hacia `colegio` en RESTRICT con índice de `colegio_id` en las tres
+    tablas de recojo, y al bajar vuelve a como estaba. Después de subir, `alembic check` no ve diferencias."""
+    from alembic import command
+    from alembic.config import Config
+
+    db.close()
+    cfg = Config(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
+    cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "..", "alembic"))
+    tablas = ("autorizado_recojo", "autorizacion_recojo_dia", "recojo")
+
+    def estado() -> tuple[dict[str, str], set[str]]:
+        with get_engine().begin() as conn:
+            llaves = dict(conn.execute(text(
+                "SELECT conrelid::regclass::text, confdeltype FROM pg_constraint "
+                "WHERE conname = 'fk_' || conrelid::regclass::text || '_colegio_id_colegio' "
+                "AND conrelid::regclass::text = ANY(:t)"), {"t": list(tablas)}).all())
+            indices = set(conn.execute(text(
+                "SELECT tablename FROM pg_indexes WHERE indexname = 'ix_' || tablename || '_colegio_id' "
+                "AND tablename = ANY(:t)"), {"t": list(tablas)}).scalars())
+        return llaves, indices
+
+    try:
+        command.downgrade(cfg, "d4e9f2a5b8c1")  # la migración anterior (calendario)
+        assert estado() == ({t: "c" for t in tablas}, set())
+        command.upgrade(cfg, "head")
+        assert estado() == ({t: "r" for t in tablas}, set(tablas))
+        command.check(cfg)  # falla si el modelo y la base no coinciden
+    finally:
+        command.upgrade(cfg, "head")
