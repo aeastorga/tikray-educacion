@@ -26,7 +26,7 @@ from app.db import Base
 from app.fechas import LIMA, hoy_lima
 from app.models import (AdjuntoCuaderno, Alumno, AlumnoApoderado, AnioEscolar, Apoderado, AsistenciaAlumno,
                         AsistenciaPersonal, AutorizadoRecojo, CategoriaIncidencia, Colegio, ConfigFamilias, CuentaFamilia,
-                        DestinoCuaderno, DiaNoLectivo, EntradaCuaderno, Grado, LicenciaPersonal, Matricula,
+                        DestinoCuaderno, DestinoEvento, DiaNoLectivo, EntradaCuaderno, EventoCalendario, Grado, LicenciaPersonal, Matricula,
                         MensajeCuaderno, Nivel, PermisoRol, PlantillaComunicado, Rol, Seccion, SeccionDocente, Turno,
                         Usuario)
 from app.models.colegio import CONTRATABLES, INCLUIDOS
@@ -160,9 +160,10 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
     permisos = {
         "Subdirección": {m: "ver" for m in MODULOS} | {"cuaderno": "editar", "asistencia": "editar"},
         "Secretaría": {"padron": "editar", "familias": "editar", "cuaderno": "editar", "asistencia": "ver", "reuniones": "ver",
-                       "personal": "ver", "pensiones": "ver", "caja": "editar", "recojo": "editar"},
+                       "personal": "ver", "pensiones": "ver", "caja": "editar", "recojo": "editar",
+                       "calendario": "editar"},
         "Portería": {"asistencia": "editar"},
-        "Docente": {"cuaderno": "editar", "asistencia": "ver", "reuniones": "editar"},
+        "Docente": {"cuaderno": "editar", "asistencia": "ver", "reuniones": "editar", "calendario": "ver"},
     }
     for nombre, rol in roles.items():
         rol.permisos = [PermisoRol(colegio_id=cid, modulo=m, nivel=n) for m, n in permisos.get(nombre, {}).items()]
@@ -293,7 +294,41 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
     _cuaderno(db, rnd, cid, administrador, docentes, secciones, alumnos, dias, hoy)
     # --- Pensiones y caja ---
     _pensiones(db, rnd, cid, anio, secretaria, administrador, hoy)
+    # --- Calendario ---
+    _calendario(db, cid, anio, secretaria, secciones, hoy)
     return res
+
+
+def _calendario(db: Session, cid: int, anio: AnioEscolar, autora: Usuario, secciones: list, hoy: date) -> None:
+    """Algunos eventos de este mes y el siguiente (sin avisos: la demo no manda push al crearse)."""
+    niveles = {n.nombre: n.id for n in db.scalars(select(Nivel).where(Nivel.colegio_id == cid))}
+    primaria_1a = next(s.id for s, etiqueta, _ in secciones if etiqueta == "1° A Primaria")
+    lunes = hoy - timedelta(days=hoy.weekday())
+
+    def evento(dias: int, titulo: str, tipo: str, hora: time | None = None, duracion: int = 0,
+               niveles_ids: list[int] = (), secciones_ids: list[int] = (), descripcion: str | None = None,
+               anulado: str | None = None) -> None:
+        inicio = lunes + timedelta(days=dias)
+        alcance = "niveles" if niveles_ids else "secciones" if secciones_ids else "colegio"
+        e = EventoCalendario(colegio_id=cid, anio_id=anio.id, titulo=titulo, descripcion=descripcion, inicio=inicio,
+                             fin=inicio + timedelta(days=duracion), hora=hora, tipo=tipo, alcance=alcance,
+                             creado_por_id=autora.id)
+        if anulado:
+            e.anulado_en, e.anulado_motivo, e.anulado_por_id = datetime.now(UTC), anulado, autora.id
+        db.add(e)
+        db.flush()
+        db.add_all([DestinoEvento(colegio_id=cid, evento_id=e.id, nivel_id=n) for n in niveles_ids]
+                   + [DestinoEvento(colegio_id=cid, evento_id=e.id, seccion_id=s) for s in secciones_ids])
+
+    evento(3, "Reunión de padres del primer bimestre", "reunion_padres", time(18, 0),
+           descripcion="En las aulas de cada sección. Se entregan las libretas.")
+    evento(4, "Actuación por el Día de la Canción Criolla", "actuacion", time(9, 0), niveles_ids=[niveles["Inicial"]])
+    evento(8, "Exámenes bimestrales", "examen", duracion=4, niveles_ids=[niveles["Primaria"], niveles["Secundaria"]])
+    evento(10, "Paseo al Parque de las Leyendas", "salida", time(8, 30), secciones_ids=[primaria_1a],
+           descripcion="Traer lonchera, gorro y bloqueador.")
+    evento(15, "Feria de ciencias", "otro", time(10, 0), niveles_ids=[niveles["Secundaria"]],
+           anulado="Se pasa al próximo mes por obras en el patio")
+    evento(22, "Aniversario del colegio", "actuacion", time(10, 0))
 
 
 def hora_escolar(rnd: random.Random, dia: date, ahora: datetime) -> datetime:
@@ -562,8 +597,9 @@ def crear_o_reiniciar(db: Session, subdominio: str = "demo", nombre: str = "Cole
         db.execute(text("SELECT pg_advisory_xact_lock(7, :c)"), {"c": colegio.id})
         borrar_datos(db, colegio)
         db.flush()
-    # La demo muestra todo: pensiones, caja y recojo seguro (que se contratan aparte) van contratados y encendidos.
-    aparte = ("pensiones", "caja", "recojo")
+    # La demo muestra todo: pensiones, caja, recojo seguro y calendario (que se contratan aparte) van contratados
+    # y encendidos.
+    aparte = ("pensiones", "caja", "recojo", "calendario")
     colegio.modulos_contratados = [m for m in CONTRATABLES
                                    if m in set(colegio.modulos_contratados or INCLUIDOS) | set(aparte)]
     colegio.modulos_apagados = [m for m in (colegio.modulos_apagados or []) if m not in aparte]

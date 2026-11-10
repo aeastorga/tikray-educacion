@@ -19,7 +19,8 @@ CATEGORIAS_GASTO_POR_DEFECTO = ("Servicios", "Materiales", "Mantenimiento", "Pla
 # Tipo de la cola de avisos -> interruptor del administrador y módulo del que depende.
 AVISO_DE_COLA = {"ingreso": ("ingreso", "asistencia"), "tarde": ("tardanza", "asistencia"),
                  "falta": ("falta", "asistencia"), "salida": ("salida", "asistencia"),
-                 "cuaderno": ("cuaderno", "cuaderno"), "cobro": ("cobro", "pensiones")}
+                 "cuaderno": ("cuaderno", "cuaderno"), "cobro": ("cobro", "pensiones"),
+                 "calendario": ("calendario", "calendario")}
 
 
 def crear_categorias_por_defecto(db: Session, colegio_id: int) -> None:

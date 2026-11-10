@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
-from app import cuaderno, familias, pensiones
+from app import calendario, cuaderno, familias, pensiones
 from app.db import get_db
 from app.deps import Sesion, puede, usuario_actual
 from app.fechas import LIMA, hoy_lima
@@ -280,6 +280,13 @@ def resumen(s: Sesion = Depends(usuario_actual), db: Session = Depends(get_db)) 
         vencida, morosos = pensiones.deuda_vencida(db, cid, hoy)
         salida["pensiones"] = {"cobrado_mes": str(pensiones.soles(cobrado)), "deuda_vencida": str(vencida),
                                "morosos": morosos}
+    if puede(s, "calendario", "ver"):  # los 3 siguientes eventos, solo con el módulo encendido
+        prox = calendario.proximos(db, cid, hoy_lima(), 3)
+        dest = calendario.destinos(db, cid, prox)
+        niveles, secciones = calendario.nombres_destinos(db, cid)
+        salida["calendario"] = [calendario.evento_dict(e, dest[e.id], calendario.para_quien(e, dest[e.id], niveles,
+                                                                                             secciones), completo=False)
+                                for e in prox]
     if u.rol.es_administrador:
         salida["personal_activo"] = db.scalar(select(func.count()).select_from(Usuario).where(
             Usuario.colegio_id == cid, Usuario.activo))
