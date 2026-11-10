@@ -146,3 +146,6 @@
 .cuotas-familia .numero, .recibos-familia .numero { display: grid; justify-items: end; font-weight: 700; font-variant-numeric: tabular-nums; }
 .pagos-hijo h3 { margin: 16px 0 4px; font-size: 1rem; }
 .nota-pagos { margin: 12px 0 0; font-size: .85rem; }
+/* Recojo seguro: quién lo recogió (si la portería lo registró). */
+.en-vivo-recojo { margin: 6px 0 0; color: #fff; font-size: .92rem; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dia-recojo { display: block; overflow-wrap: anywhere; }

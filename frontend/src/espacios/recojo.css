@@ -1,0 +1,50 @@
+/* Recojo seguro: la portería (quién recoge al alumno que acaba de salir), la ficha del alumno y la app de la familia. */
+.porteria-derecha { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.recojo-panel { border: 1px solid var(--borde); border-radius: 14px; padding: 14px; background: var(--superficie); }
+.recojo-panel h3 { margin: 0 0 2px; }
+.recojo-panel > .tenue { margin: 0 0 10px; }
+.recojo-panel.elegido { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  border-left: 4px solid var(--bien); }
+.recojo-panel.elegido.fuera { border-left-color: var(--falta-barra); }
+.recojo-panel.elegido > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.recojo-lista { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); }
+.recojo-persona { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; min-height: var(--toque, 44px);
+  padding: 10px; border: 1px solid var(--borde-fuerte); border-radius: 12px; background: var(--fondo); color: var(--texto);
+  font: inherit; cursor: pointer; }
+.recojo-persona:hover, .recojo-persona:focus-visible { border-color: var(--primario); }
+.recojo-foto { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; flex: none; }
+.recojo-foto.sin-foto { display: inline-flex; align-items: center; justify-content: center; background: var(--acento-suave);
+  color: var(--acento-texto); }
+.recojo-datos { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.recojo-datos > span { font-size: .9rem; color: var(--tenue); }
+.recojo-datos > .recojo-tipo { align-self: flex-start; font-size: .78rem; font-weight: 600; padding: 1px 8px; border-radius: 999px;
+  background: var(--just-fondo); color: var(--just-texto); }
+.recojo-tipo.del_dia { background: var(--tarde-fondo); color: var(--tarde-texto); }
+.recojo-fuera { color: var(--falta-texto); background: var(--falta-fondo); border-radius: 8px; padding: 4px 8px; font-size: .9rem;
+  font-weight: 600; align-self: flex-start; }
+.recojo-otro { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.recojo-campos { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); }
+.recojo-campos label { display: flex; flex-direction: column; gap: 4px; }
+.recojo-campos input, .recojo-campos select { width: 100%; min-width: 0; }
+.recojo-filtro { display: flex; align-items: center; gap: 8px; margin: 16px 0 8px; }
+.recojo-ficha { margin-top: 24px; }
+.recojo-personas li { display: flex; align-items: center; gap: 12px; }
+.recojo-personas li > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.recojo-personas li.inactivo { opacity: .65; }
+.recojo-personas .recojo-foto { width: 44px; height: 44px; }
+.recojo-acciones { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; margin-left: 8px; }
+.recojo-acciones .enlace { min-height: 32px; }
+.recojo-hijo h3 { margin: 18px 0 6px; }
+.recojo-hijo h3:first-of-type { margin-top: 4px; }
+.recojo-hijo .recojo-personas li { align-items: flex-start; }
+.recojo-hijo .recojo-personas li > span:last-child { display: flex; flex-direction: column; gap: 2px; }
+.recojo-hijo .recojo-acciones { margin-left: 0; }
+.recojo-inactivos { margin-top: 10px; }
+.recojo-fecha { display: flex; flex-direction: column; gap: 4px; max-width: 220px; }
+.recojo-filas { list-style: none; margin: 0 0 10px; padding: 0; }
+.recojo-filas li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0;
+  border-bottom: 1px solid var(--borde); }
+.recojo-filas li:last-child { border-bottom: 0; }
+.recojo-filas li > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.recojo-hijo .recojo-personas li { justify-content: flex-start; align-items: flex-start; }

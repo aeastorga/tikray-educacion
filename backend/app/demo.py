@@ -25,7 +25,7 @@ from app.almacenamiento import get_almacenamiento_privado
 from app.db import Base
 from app.fechas import LIMA, hoy_lima
 from app.models import (AdjuntoCuaderno, Alumno, AlumnoApoderado, AnioEscolar, Apoderado, AsistenciaAlumno,
-                        AsistenciaPersonal, CategoriaIncidencia, Colegio, ConfigFamilias, CuentaFamilia,
+                        AsistenciaPersonal, AutorizadoRecojo, CategoriaIncidencia, Colegio, ConfigFamilias, CuentaFamilia,
                         DestinoCuaderno, DiaNoLectivo, EntradaCuaderno, Grado, LicenciaPersonal, Matricula,
                         MensajeCuaderno, Nivel, PermisoRol, PlantillaComunicado, Rol, Seccion, SeccionDocente, Turno,
                         Usuario)
@@ -92,6 +92,9 @@ def borrar_datos(db: Session, colegio: Colegio) -> None:
     almacen = get_almacenamiento_privado()
     for clave in db.scalars(select(AdjuntoCuaderno.clave).where(AdjuntoCuaderno.colegio_id == cid)):
         almacen.borrar(clave)
+    for clave in db.scalars(select(AutorizadoRecojo.foto_clave).where(AutorizadoRecojo.colegio_id == cid,
+                                                                       AutorizadoRecojo.foto_clave.is_not(None))):
+        almacen.borrar(clave)
     # Los hijos antes que los padres (orden inverso de las llaves foráneas).
     for tabla in reversed(Base.metadata.sorted_tables):
         if tabla.name != "colegio" and "colegio_id" in tabla.c:
@@ -157,7 +160,7 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
     permisos = {
         "Subdirección": {m: "ver" for m in MODULOS} | {"cuaderno": "editar", "asistencia": "editar"},
         "Secretaría": {"padron": "editar", "familias": "editar", "cuaderno": "editar", "asistencia": "ver", "reuniones": "ver",
-                       "personal": "ver", "pensiones": "ver", "caja": "editar"},
+                       "personal": "ver", "pensiones": "ver", "caja": "editar", "recojo": "editar"},
         "Portería": {"asistencia": "editar"},
         "Docente": {"cuaderno": "editar", "asistencia": "ver", "reuniones": "editar"},
     }
@@ -559,10 +562,11 @@ def crear_o_reiniciar(db: Session, subdominio: str = "demo", nombre: str = "Cole
         db.execute(text("SELECT pg_advisory_xact_lock(7, :c)"), {"c": colegio.id})
         borrar_datos(db, colegio)
         db.flush()
-    # La demo muestra todo: pensiones y caja (que se contratan aparte) van contratadas y encendidas.
+    # La demo muestra todo: pensiones, caja y recojo seguro (que se contratan aparte) van contratados y encendidos.
+    aparte = ("pensiones", "caja", "recojo")
     colegio.modulos_contratados = [m for m in CONTRATABLES
-                                   if m in set(colegio.modulos_contratados or INCLUIDOS) | {"pensiones", "caja"}]
-    colegio.modulos_apagados = [m for m in (colegio.modulos_apagados or []) if m not in ("pensiones", "caja")]
+                                   if m in set(colegio.modulos_contratados or INCLUIDOS) | set(aparte)]
+    colegio.modulos_apagados = [m for m in (colegio.modulos_apagados or []) if m not in aparte]
     res = sembrar(db, colegio, alumnos_por_seccion)
     from app.demo_dia import simular_dia
     simular_dia(db, colegio)

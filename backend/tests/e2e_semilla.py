@@ -90,7 +90,8 @@ def main() -> None:
                     for i in range(EXTRA_APODERADOS)])
         db.commit()
     print(json.dumps({"subdominio": SUBDOMINIO, "administrador": ADMINISTRADOR, "familia": FAMILIA,
-                      "alumnos": [{"nombre": f"{ap}, {no}", "codigo": co} for ap, no, co in ALUMNOS]}))
+                      "alumnos": [{"id": i, "nombre": f"{ap}, {no}", "codigo": co}
+                                  for i, (ap, no, co) in enumerate(ALUMNOS, 1)]}))
 
 
 if __name__ == "__main__":

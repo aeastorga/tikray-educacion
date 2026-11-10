@@ -58,6 +58,7 @@ class Marcacion(ConColegio, Base):
     __tablename__ = "marcacion"
     __table_args__ = (
         UniqueConstraint("colegio_id", "id_cliente"),
+        UniqueConstraint("colegio_id", "id"),  # destino del recojo
         _fk("alumno_id", "alumno", "CASCADE"),
         _fk("usuario_id", "usuario", "CASCADE"),
         _fk("registrado_por_id", "usuario", "SET NULL"),

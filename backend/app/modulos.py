@@ -12,6 +12,7 @@ MODULOS: dict[str, str] = {
     "reuniones": "Reunión de padres",
     "pensiones": "Pensiones y cuotas",
     "caja": "Caja y gastos",
+    "recojo": "Recojo seguro",
 }
 
 NIVELES = ("ver", "editar")

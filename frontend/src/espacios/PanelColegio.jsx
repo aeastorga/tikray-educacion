@@ -66,7 +66,8 @@ export default function PanelColegio({ colegio, setColegio }) {
             docentes={puede(yo, 'padron', 'editar')} />} />
           {puede(yo, 'pensiones') && <Route path="pensiones/*" element={<Pensiones editar={puede(yo, 'pensiones', 'editar')} />} />}
           {puede(yo, 'caja') && <Route path="caja/*" element={<Caja editar={puede(yo, 'caja', 'editar')} />} />}
-          <Route path="padron/*" element={<Padron editar={puede(yo, 'padron', 'editar')} />} />
+          <Route path="padron/*" element={<Padron editar={puede(yo, 'padron', 'editar')}
+            recojo={{ ver: puede(yo, 'recojo'), editar: puede(yo, 'recojo', 'editar') }} />} />
           <Route path="familias/*" element={<CuentasPadres colegio={colegio} editar={puede(yo, 'familias', 'editar')}
             reglas={puede(yo, 'configuracion', 'editar')} />} />
           <Route path="reunion/*" element={<Reunion colegio={colegio} editar={puede(yo, 'reuniones', 'editar')} />} />

@@ -13,14 +13,14 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
-from app import asistencia, configuracion
+from app import asistencia, configuracion, recojo
 from app.comun import guardar, obtener
 from app.configuracion import anotar
 from app.db import get_db
 from app.deps import Sesion, requerir_permiso, tiene_permiso
-from app.fechas import hoy_lima
+from app.fechas import LIMA, hoy_lima
 from app.models import (Alumno, AnioEscolar, AsistenciaAlumno, AsistenciaPersonal, ConfigAsistencia,
-                        LicenciaPersonal, Marcacion, Matricula, Rol, Seccion, Turno, Usuario)
+                        LicenciaPersonal, Marcacion, Matricula, Recojo, Rol, Seccion, Turno, Usuario)
 from app.models.asistencia import TIPOS_LICENCIA
 from app.routers.cuaderno import permisos_salida
 from app.routers.estructura import anio_activo, es_dia_lectivo
@@ -79,6 +79,11 @@ def recibir(datos: LoteIn, s: Sesion = Depends(marcar), db: Session = Depends(ge
             if r.get("resultado") == "salida" and r["persona"]["tipo"] == "alumno":
                 permisos = permisos if permisos is not None else permisos_salida(db, s.colegio.id)
                 r["permiso_salida"] = permisos.get(r["persona"]["id"])
+                if s.colegio.modulo_activo("recojo"):
+                    # Quién puede recogerlo hoy, al día (pudieron autorizar a alguien después del padrón).
+                    fecha = lectura.momento.astimezone(LIMA).date()
+                    r["recojo"] = recojo.quienes_pueden(db, s.colegio.id, fecha, [r["persona"]["id"]]).get(
+                        r["persona"]["id"], {"personas": []})
             resultados.append(r)
         except Exception:
             db.rollback()
@@ -132,6 +137,9 @@ def porteria(s: Sesion = Depends(marcar), db: Session = Depends(get_db)) -> dict
                      for i, c, ap, no, t in personal],
         # Permisos de salida de hoy por alumno (cuaderno), para verlos al marcar la salida sin internet.
         "permisos_salida": {str(k): v for k, v in permisos_salida(db, cid).items()},
+        # Recojo seguro: quién puede recoger hoy a cada alumno (documento con los últimos 4 dígitos).
+        "recojo": ({str(k): v for k, v in recojo.quienes_pueden(db, cid, hoy_lima()).items()}
+                   if s.colegio.modulo_activo("recojo") else None),
     }
 
 
@@ -144,7 +152,8 @@ def _estados_vacios() -> dict:
 @router.get("/dia")
 def dia(fecha: date | None = None, seccion_id: int | None = None, s: Sesion = Depends(ver),
         db: Session = Depends(get_db)) -> dict:
-    """Resumen del día por sección; con `seccion_id`, la lista de alumnos de esa sección."""
+    """Resumen del día por sección; con `seccion_id`, la lista de alumnos de esa sección (con quién lo recogió, si
+    el colegio usa recojo seguro)."""
     cid, fecha = s.colegio.id, fecha or hoy_lima()
     anio = anio_activo(db, cid)
     tardia = asistencia.registrada_despues(cid, fecha, alumno_id=Alumno.id)
@@ -154,14 +163,18 @@ def dia(fecha: date | None = None, seccion_id: int | None = None, s: Sesion = De
                                               AsistenciaAlumno.alumno_id == Matricula.alumno_id,
                                               AsistenciaAlumno.fecha == fecha))
             .where(Matricula.colegio_id == cid, Matricula.anio_id == anio.id, Alumno.activo))
-    salida: dict = {"fecha": fecha.isoformat(), "lectivo": es_dia_lectivo(db, cid, fecha)}
+    con_recojo = s.colegio.modulo_activo("recojo")
+    salida: dict = {"fecha": fecha.isoformat(), "lectivo": es_dia_lectivo(db, cid, fecha), "recojo": con_recojo}
     if seccion_id is not None:
         obtener(db, Seccion, cid, seccion_id, "Sección")
-        filas = db.execute(base.where(Matricula.seccion_id == seccion_id).order_by(Alumno.apellidos, Alumno.nombres))
+        filas = db.execute(base.where(Matricula.seccion_id == seccion_id)
+                           .order_by(Alumno.apellidos, Alumno.nombres)).all()
+        recojos = recojo.ultimos_recojos(db, cid, fecha, [a.id for _, a, _, _ in filas]) if con_recojo else {}
         salida["alumnos"] = [{
             "alumno_id": a.id, "nombre": f"{a.apellidos}, {a.nombres}", "estado": f.estado if f else None,
             "entrada": asistencia.hora(f.entrada) if f else None, "salida": asistencia.hora(f.salida) if f else None,
             "minutos_tarde": f.minutos_tarde if f else 0, "registrada_despues": tardia,
+            **({"recojo": recojo.recojo_dict(recojos.get(a.id))} if con_recojo else {}),
         } for _, a, f, tardia in filas]
         return salida
     por_seccion: dict[int, dict] = {}
@@ -184,6 +197,33 @@ def dia(fecha: date | None = None, seccion_id: int | None = None, s: Sesion = De
         for k in totales:
             totales[k] += c[k]
     return {**salida, "totales": totales, "secciones": secciones}
+
+
+@router.get("/recojos")
+def recojos(fecha: date | None = None, fuera_de_lista: bool = False, s: Sesion = Depends(ver),
+            db: Session = Depends(get_db)) -> dict:
+    """Recojo seguro: las salidas del día con quién recogió a cada alumno, de todo el colegio. Con
+    `fuera_de_lista`, solo las de alguien que no estaba en la lista (o "salió solo" sin el permiso)."""
+    cid, fecha = s.colegio.id, fecha or hoy_lima()
+    if not s.colegio.modulo_activo("recojo"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Este módulo no está activo en el colegio")
+    q = (select(Recojo, Alumno, Usuario.nombres, Usuario.apellidos)
+         .join(Alumno, and_(Alumno.colegio_id == Recojo.colegio_id, Alumno.id == Recojo.alumno_id))
+         .outerjoin(Usuario, and_(Usuario.colegio_id == Recojo.colegio_id, Usuario.id == Recojo.registrado_por_id))
+         .where(Recojo.colegio_id == cid, Recojo.fecha == fecha).order_by(Recojo.momento.desc()))
+    if fuera_de_lista:
+        q = q.where(Recojo.fuera_de_lista)
+    filas = db.execute(q).all()
+    anio = db.scalar(select(AnioEscolar.id).where(AnioEscolar.colegio_id == cid, AnioEscolar.activo))
+    etiquetas = {sec.id: f"{n} · {g} {sec.nombre}" for sec, g, n in _secciones(db, cid, anio)} if anio else {}
+    secciones = dict(db.execute(select(Matricula.alumno_id, Matricula.seccion_id).where(
+        Matricula.colegio_id == cid, Matricula.anio_id == anio,
+        Matricula.alumno_id.in_([a.id for _, a, _, _ in filas]))).all()) if filas and anio else {}
+    return {"fecha": fecha.isoformat(), "recojos": [{
+        "id": r.id, "alumno_id": a.id, "alumno": f"{a.apellidos}, {a.nombres}",
+        "seccion": etiquetas.get(secciones.get(a.id)), "hora": asistencia.hora(r.momento),
+        "registrado_por": f"{un} {ua}" if un else None, "recojo": recojo.recojo_dict(r),
+    } for r, a, un, ua in filas]}
 
 
 def _dias(db: Session, cid: int, anio: int, mes: int) -> list[date]:

@@ -22,14 +22,14 @@ from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
 from webauthn.helpers.structs import (AuthenticatorSelectionCriteria, PublicKeyCredentialDescriptor,
                                       ResidentKeyRequirement, UserVerificationRequirement)
 
-from app import asistencia, familias
+from app import asistencia, familias, recojo
 from app.config import get_settings
 from app.db import get_db
 from app.deps import SesionFamilia, _host, colegio_del_host, familia_sesion
 from app.fechas import hoy_lima
 from app.models import (Alumno, AlumnoApoderado, AnioEscolar, Apoderado, AsistenciaAlumno, Colegio,
                         ConsentimientoApoderado, CuentaFamilia, EntregaAviso, Grado, InvitacionFamilia, Marcacion,
-                        Matricula, PasskeyFamilia, RetoUsado, Seccion, SuscripcionPush, Turno)
+                        Matricula, PasskeyFamilia, Recojo, RetoUsado, Seccion, SuscripcionPush, Turno)
 from app.proteccion import FALLOS_IP, ip_cliente, permitir_intento, registrar_fallo
 from app.routers.estructura import es_dia_lectivo
 from app.seguridad import emitir_token, hashear_clave, leer_token, verificar_clave, verificar_clave_o_simular
@@ -350,7 +350,7 @@ def yo(request: Request, s: SesionFamilia = Depends(familia_sesion), db: Session
                                                               PasskeyFamilia.rp_id == _host(request))) is not None
     return {"nombres": ap.nombres, "apellidos": ap.apellidos, "estado": ap.estado_acceso,
             "tiene_passkey": tiene_passkey, "push_clave": get_settings().vapid_clave_publica or None,
-            "modulos": {m: s.colegio.modulo_activo(m) for m in ("asistencia", "cuaderno", "pensiones")}}
+            "modulos": {m: s.colegio.modulo_activo(m) for m in ("asistencia", "cuaderno", "pensiones", "recojo")}}
 
 
 def _apoderados_activos(db: Session, cuenta_id: int):
@@ -395,6 +395,9 @@ def hijos(s: SesionFamilia = Depends(familia_sesion), db: Session = Depends(get_
                                     Marcacion.fecha == hoy, Marcacion.resultado != "duplicada"))} if ids else {}
         lectivo = es_dia_lectivo(db, colegio.id, hoy)
         con_asistencia = colegio.modulo_activo("asistencia")
+        # Recojo seguro: quién lo recogió en su última salida de hoy (si la portería lo registró).
+        recogidos = (recojo.ultimos_recojos(db, colegio.id, hoy, ids)
+                     if con_asistencia and colegio.modulo_activo("recojo") else {})
         for a, grado, seccion, dia, hora_salida in filas:
             if not con_asistencia:  # el colegio no usa asistencia: la tarjeta sin datos del día
                 dia, lectivo_a = None, False
@@ -410,6 +413,7 @@ def hijos(s: SesionFamilia = Depends(familia_sesion), db: Session = Depends(get_
                 "puerta": puertas.get((a.id, dia.entrada)) if dia and dia.entrada else None,
                 "hora_salida": hora_salida.strftime("%H:%M") if hora_salida else None,
                 "tardanzas_mes": tardanzas.get(a.id, 0) if con_asistencia else 0,
+                "recogido_por": recojo.para_familia(recogidos.get(a.id)),
             })
     pendientes = db.scalars(select(Colegio.nombre).join(Apoderado, Apoderado.colegio_id == Colegio.id)
                             .where(Apoderado.cuenta_id == s.cuenta.id, Apoderado.estado_acceso == "pendiente")).all()
@@ -434,13 +438,21 @@ def asistencia_del_mes(alumno_id: int, mes: str | None = Query(None, pattern=r"^
     dias = db.scalars(select(AsistenciaAlumno).where(
         AsistenciaAlumno.colegio_id == cid, AsistenciaAlumno.alumno_id == alumno_id,
         AsistenciaAlumno.fecha.between(inicio, fin)).order_by(AsistenciaAlumno.fecha.desc())).all()
+    recogidos: dict = {}
+    con_recojo = db.get(Colegio, cid).modulo_activo("recojo")
+    if con_recojo:
+        for r in db.scalars(select(Recojo).where(Recojo.colegio_id == cid, Recojo.alumno_id == alumno_id,
+                                                 Recojo.fecha.between(inicio, fin)).order_by(Recojo.momento)):
+            recogidos[r.fecha] = r  # el de la última salida del día
     conteo = {k: 0 for k in ("presente", "tarde", "falta", "justificada")}
     for d in dias:
         conteo[d.estado] = conteo.get(d.estado, 0) + 1
     return {
         "mes": inicio.strftime("%Y-%m"), "resumen": conteo,
         "dias": [{"fecha": d.fecha.isoformat(), "estado": d.estado, "entrada": asistencia.hora(d.entrada),
-                  "salida": asistencia.hora(d.salida), "minutos_tarde": d.minutos_tarde} for d in dias],
+                  "salida": asistencia.hora(d.salida), "minutos_tarde": d.minutos_tarde,
+                  **({"recogido_por": recojo.para_familia(recogidos.get(d.fecha))} if con_recojo else {})}
+                 for d in dias],
     }
 
 

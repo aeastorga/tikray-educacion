@@ -10,8 +10,8 @@ COLOR = r"^#[0-9a-fA-F]{6}$"
 ESTADOS = ("prueba", "activo", "suspendido")
 GESTIONES = ("particular", "estatal")
 # Módulos que se contratan aparte; el resto (configuración, roles, personal, padrón) viene siempre.
-CONTRATABLES = ("asistencia", "cuaderno", "familias", "reuniones", "pensiones", "caja")
-# Lo que trae un colegio nuevo; pensiones y caja se contratan aparte.
+CONTRATABLES = ("asistencia", "cuaderno", "familias", "reuniones", "pensiones", "caja", "recojo")
+# Lo que trae un colegio nuevo; pensiones, caja y recojo seguro se contratan aparte.
 INCLUIDOS = ("asistencia", "cuaderno", "familias", "reuniones")
 # Avisos a los padres que el administrador puede apagar uno por uno.
 TIPOS_AVISO = ("ingreso", "tardanza", "falta", "salida", "cuaderno", "cobro")

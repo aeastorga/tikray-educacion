@@ -1,6 +1,7 @@
 import { ArrowLeft, CalendarX2, FileSpreadsheet, Layers, UserPlus, Users } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom'
+import RecojoAlumno from './RecojoAlumno.jsx'
 import { api, descargar, guardarArchivo } from '../api.js'
 import {
   Buscador, documento, Encabezado, Filtros, Insignia, MenuAcciones, Paginacion, Persona, plural, Selector, Tabla,
@@ -10,7 +11,7 @@ import {
 const DIAS = [['1', 'Lu'], ['2', 'Ma'], ['3', 'Mi'], ['4', 'Ju'], ['5', 'Vi'], ['6', 'Sá'], ['7', 'Do']]
 const TIPOS_DOC = ['DNI', 'CE', 'PAS', 'OTRO']
 
-export default function Padron({ editar }) {
+export default function Padron({ editar, recojo }) {
   const [anios, cargarAnios] = useCarga('/api/padron/anios')
   const sinAnio = anios !== null && !anios.some((a) => a.activo)
   const necesitaAnio = (el) => (sinAnio ? <Empezar editar={editar} /> : el)
@@ -25,7 +26,7 @@ export default function Padron({ editar }) {
         {editar && <NavLink to="/panel/padron/importar">Importar Excel</NavLink>}
       </nav>
       <Routes>
-        <Route index element={necesitaAnio(<Alumnos editar={editar} />)} />
+        <Route index element={necesitaAnio(<Alumnos editar={editar} recojo={recojo} />)} />
         <Route path="secciones" element={necesitaAnio(<Secciones editar={editar} />)} />
         <Route path="estructura" element={<Estructura editar={editar} />} />
         <Route path="calendario" element={necesitaAnio(<Calendario editar={editar} />)} />
@@ -324,7 +325,7 @@ function Calendario({ editar }) {
 const ESTADO_ALUMNO = { activo: ['bien', 'Matriculado'], sin_matricula: ['neutro', 'Sin matrícula'], retirado: ['falta', 'Retirado'] }
 const estadoAlumno = (a) => (!a.activo ? 'retirado' : a.seccion ? 'activo' : 'sin_matricula')
 
-function Alumnos({ editar }) {
+function Alumnos({ editar, recojo }) {
   const [secciones] = useCarga('/api/padron/secciones')
   const [params, setParams] = useSearchParams()
   const navegar = useNavigate()
@@ -339,7 +340,7 @@ function Alumnos({ editar }) {
   const [nuevo, setNuevo] = useState(false)
   const { datos, error, cargando, recargar, paginacion } = usePaginado('/api/padron/alumnos', filtro)
 
-  if (abierto) return <FichaAlumno id={abierto} editar={editar} secciones={secciones || []} cerrar={() => { setAbierto(null); recargar() }} />
+  if (abierto) return <FichaAlumno id={abierto} editar={editar} recojo={recojo} secciones={secciones || []} cerrar={() => { setAbierto(null); recargar() }} />
   if (nuevo) return <FormAlumno secciones={secciones || []} cerrar={(id) => { setNuevo(false); if (id) setAbierto(id); else recargar() }} />
 
   const filtrado = filtro.q || filtro.seccion_id || filtro.estado
@@ -435,7 +436,7 @@ function FormAlumno({ alumno, secciones, cerrar }) {
   )
 }
 
-function FichaAlumno({ id, editar, secciones, cerrar }) {
+function FichaAlumno({ id, editar, recojo, secciones, cerrar }) {
   const [a, setA] = useState(null)
   const [editando, setEditando] = useState(false)
   const [apo, setApo] = useState(null)
@@ -534,6 +535,7 @@ function FichaAlumno({ id, editar, secciones, cerrar }) {
         </form>
       )}
       <MensajeError texto={error} />
+      {recojo?.ver && <RecojoAlumno alumnoId={a.id} editar={recojo.editar} />}
     </div>
   )
 }
