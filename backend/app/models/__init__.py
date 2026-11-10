@@ -13,6 +13,7 @@ from app.models.pensiones import (CajaSesion, CategoriaGasto, ConceptoCobro, Con
                                   CuotaProgramada, DescuentoAlumno, Gasto, MontoConcepto, Pago, PagoDetalle)
 from app.models.personal import PermisoRol, Rol, Usuario
 from app.models.plataforma import AdminPlataforma, IntentoFallido
+from app.models.recojo import AutorizacionRecojoDia, AutorizadoRecojo, Recojo
 from app.models.reunion import FichaReunion, ReunionPadres
 
 __all__ = [
@@ -21,6 +22,7 @@ __all__ = [
     "DescuentoAlumno", "Gasto", "MontoConcepto", "Pago", "PagoDetalle",
     "CategoriaIncidencia", "PlantillaComunicado", "RegistroActividad",
     "FichaReunion", "ReunionPadres",
+    "AutorizacionRecojoDia", "AutorizadoRecojo", "Recojo",
     "AdjuntoCuaderno", "DestinoCuaderno", "EntradaCuaderno", "MensajeCuaderno", "SeccionDocente",
     "AdminPlataforma", "Alumno", "AlumnoApoderado", "AnioEscolar", "Apoderado", "AsistenciaAlumno",
     "AsistenciaPersonal", "CambioApoderado", "ColaAviso", "Colegio", "ConfigAsistencia", "ConfigFamilias",

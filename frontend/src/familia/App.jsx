@@ -1,7 +1,7 @@
 // App de la familia (celular primero): inicio con la tarjeta en vivo, asistencia del mes, cuaderno y perfil.
 import {
   Bell, CalendarCheck, ChevronLeft, ChevronRight, DoorOpen, Fingerprint, House, LogIn, LogOut, NotebookPen,
-  PenLine, UserRound, Wallet,
+  PenLine, ShieldCheck, UserRound, Wallet,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom'
@@ -146,6 +146,7 @@ export function Inicio() {
       {yo && <Notificaciones yo={yo} />}
       {porFirmar.length > 0 && <PorFirmar entrada={porFirmar[0]} mas={porFirmar.length - 1} alFirmar={cargar} />}
       {hijo && hijo.asistencia !== false && <DelDia hijo={hijo} />}
+      {yo?.modulos?.recojo && yo.estado === 'activo' && hijos.length > 0 && <TarjetaRecojo />}
       <section className="tarjeta-app">
         <h2>Avisos recientes</h2>
         {avisos.length === 0 ? <p className="tenue">Aún no hay avisos.</p> : (
@@ -180,6 +181,12 @@ function chipIngreso(hijo) {
     : { chip: 'A tiempo', clase: 'a-tiempo' }
 }
 
+// Recojo seguro: "con Rosa Mamani (madre)", si la portería lo registró.
+function conQuien(r) {
+  if (!r) return ''
+  return ` · con ${r.nombre}${r.parentesco ? ` (${r.parentesco.toLowerCase()})` : ''}`
+}
+
 function TarjetaEnVivo({ hijo, varios }) {
   const e = estadoDe(hijo)
   const salida = hijo.salida ? hora12(hijo.salida) : hijo.hora_salida ? `${hora12(hijo.hora_salida)} (programada)` : '—'
@@ -191,6 +198,12 @@ function TarjetaEnVivo({ hijo, varios }) {
       </div>
       <h2 className="en-vivo-titulo">{e.titulo}</h2>
       <p className="en-vivo-alumno">{hijo.nombres} {hijo.apellidos}{varios ? ` · ${hijo.colegio}` : ''}</p>
+      {hijo.salida && hijo.recogido_por && (
+        <p className="en-vivo-recojo">
+          Lo recogió {hijo.recogido_por.nombre}{hijo.recogido_por.parentesco ? ` (${hijo.recogido_por.parentesco.toLowerCase()})` : ''}
+          {hijo.recogido_por.fuera_de_lista && <span className="chip-estado falta">No está en su lista</span>}
+        </p>
+      )}
       <dl className="en-vivo-datos">
         <div><dt>Puerta</dt><dd>{hijo.puerta || '—'}</dd></div>
         <div><dt>Sección</dt><dd>{hijo.seccion || '—'}</dd></div>
@@ -234,6 +247,21 @@ function PorFirmar({ entrada, mas, alFirmar }) {
   )
 }
 
+// Recojo seguro: acceso a la lista de quién puede recoger a los hijos.
+function TarjetaRecojo() {
+  const navegar = useNavigate()
+  return (
+    <section className="tarjeta-app activar-avisos">
+      <span className="por-firmar-icono"><ShieldCheck size={20} aria-hidden="true" /></span>
+      <div>
+        <p><b>Recojo seguro</b></p>
+        <p className="tenue">Elija quién puede recoger a sus hijos o autorice a alguien solo por un día.</p>
+        <button type="button" className="boton secundario" onClick={() => navegar('/familia/recojo')}>Quién puede recogerlos</button>
+      </div>
+    </section>
+  )
+}
+
 function DelDia({ hijo }) {
   if (!hijo.lectivo && !hijo.estado) return null
   const falto = hijo.estado === 'falta' || hijo.estado === 'justificada'
@@ -252,7 +280,7 @@ function DelDia({ hijo }) {
           <li className={hijo.salida ? 'hecho' : 'pendiente'}>
             <span className="linea-icono"><DoorOpen size={18} aria-hidden="true" /></span>
             <span><b>Salida</b>
-              <small>{hijo.salida ? hora12(hijo.salida) : `Pendiente${hijo.hora_salida ? ` · ${hora12(hijo.hora_salida)}` : ''}`}</small>
+              <small>{hijo.salida ? `${hora12(hijo.salida)}${conQuien(hijo.recogido_por)}` : `Pendiente${hijo.hora_salida ? ` · ${hora12(hijo.hora_salida)}` : ''}`}</small>
             </span>
           </li>
         )}
@@ -321,6 +349,7 @@ export function AsistenciaHijo() {
                       </span>
                       <span className="tenue">
                         {x.entrada ? hora12(x.entrada) : '—'}{x.salida ? ` – ${hora12(x.salida)}` : ''}
+                        {x.recogido_por && <small className="dia-recojo">Con {x.recogido_por.nombre}</small>}
                       </span>
                       <span className={`chip-estado ${CLASE_ESTADO[x.estado]}`}>
                         {ESTADOS[x.estado]}{x.estado === 'tarde' ? ` · ${x.minutos_tarde} min` : ''}

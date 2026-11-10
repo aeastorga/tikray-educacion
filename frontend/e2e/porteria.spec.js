@@ -7,7 +7,7 @@ const PORTERIA = '/panel/asistencia/porteria'
 // Lo guardado por la portería en el celular (IndexedDB): ¿hay padrón? ¿cuántas pendientes?
 function almacen(page) {
   return page.evaluate(() => new Promise((ok) => {
-    const r = indexedDB.open('tikray-porteria', 1)
+    const r = indexedDB.open('tikray-porteria')
     r.onsuccess = () => {
       const t = r.result.transaction(['datos', 'pendientes'])
       const padron = t.objectStore('datos').get('padron')

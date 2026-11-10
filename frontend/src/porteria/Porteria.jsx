@@ -3,19 +3,30 @@ import { Link } from 'react-router-dom'
 import { ScanLine } from 'lucide-react'
 import { api, ErrorApi, leerToken } from '../api.js'
 import { Insignia, Persona, Tabla } from '../espacios/comun/index.js'
-import { datos, nuevoId, pendientes } from './almacen.js'
+import { datos, nuevoId, pendientes, recojos } from './almacen.js'
 import Camara from './Camara.jsx'
+import Recojo, { nombreElegido } from './Recojo.jsx'
 import { buscar, decidir, fechaLima, horaLima, indexar, leerCodigo, minutosTarde, sinTildes } from './reglas.js'
 
 const CADA_MS = 10000 // reintento de envío
 const LOTE = 200
 const TEXTO = { entrada: 'Entrada', salida: 'Salida', duplicada: 'Ya registrado' }
 
+// Quién puede recogerlo hoy según el padrón del celular. Las autorizaciones "solo hoy" de un padrón de otro día
+// ya no valen (la respuesta del servidor trae la lista al día cuando hay internet).
+function listaDelDia(padron, alumnoId) {
+  const lista = padron.recojo?.[alumnoId]
+  if (!lista) return { personas: [] }
+  if (fechaLima(new Date(padron.generado_en)) === fechaLima(new Date())) return lista
+  return { ...lista, personas: lista.personas.filter((p) => p.tipo !== 'del_dia') }
+}
+
 export default function Porteria({ yo }) {
   const [padron, setPadron] = useState(null)
   const [enLinea, setEnLinea] = useState(navigator.onLine)
   const [porEnviar, setPorEnviar] = useState(0)
   const [tarjeta, setTarjeta] = useState(null)
+  const [salida, setSalida] = useState(null) // recojo seguro: la última salida de un alumno y quién lo recoge
   const [recientes, setRecientes] = useState([])
   const [camara, setCamara] = useState(false)
   const [busqueda, setBusqueda] = useState('')
@@ -45,7 +56,10 @@ export default function Porteria({ yo }) {
     })
   }, [])
 
-  const contar = useCallback(async () => setPorEnviar((await pendientes.todos()).length), [])
+  const contar = useCallback(async () => {
+    const [m, r] = await Promise.all([pendientes.todos(), recojos.todos().catch(() => [])])
+    setPorEnviar(m.length + r.length)
+  }, [])
 
   const sincronizar = useCallback(async () => {
     if (enviando.current || !leerToken()) return
@@ -62,7 +76,13 @@ export default function Porteria({ yo }) {
         if (Object.keys(rechazos).length) {
           setRecientes((rs) => rs.map((x) => (rechazos[x.id] ? { ...x, rechazo: rechazos[x.id] } : x)))
           setTarjeta((t) => (t && rechazos[t.id] ? { ...t, rechazo: rechazos[t.id] } : t))
+          // Una salida rechazada no tiene recojo que registrar.
+          await recojos.quitar(Object.keys(rechazos)).catch(() => {})
+          setSalida((x) => (x && rechazos[x.id] ? null : x))
         }
+        // Quién puede recogerlo, al día (pudieron autorizar a alguien después de bajar el padrón).
+        const listas = Object.fromEntries(r.resultados.filter((x) => x.recojo).map((x) => [x.id_cliente, x.recojo]))
+        if (Object.keys(listas).length) setSalida((x) => (x && listas[x.id] ? { ...x, lista: listas[x.id] } : x))
         // Un permiso de salida que el padrón del celular aún no tenía (lo pidieron después).
         const permisos = Object.fromEntries(r.resultados.filter((x) => x.permiso_salida)
           .map((x) => [x.id_cliente, x.permiso_salida]))
@@ -70,6 +90,16 @@ export default function Porteria({ yo }) {
           setTarjeta((t) => (t && permisos[t.id] && !t.permiso ? { ...t, permiso: permisos[t.id] } : t))
         }
         setEnLinea(true)
+      }
+      // Después de las marcaciones: quién recogió a cada alumno. "esperando" (su salida aún no llegó) y
+      // "error" se quedan para el siguiente intento.
+      const porRecoger = await recojos.todos().catch(() => [])
+      for (let i = 0; i < porRecoger.length; i += LOTE) {
+        const r = await api('/api/recojo/registros',
+          { metodo: 'POST', datos: { recojos: porRecoger.slice(i, i + LOTE).map(({ nombre, fuera_de_lista, ...x }) => x) }, sinSalir: true })
+        await recojos.quitar(r.resultados.filter((x) => x.estado === 'ok' || x.estado === 'rechazada').map((x) => x.marcacion))
+        const fuera = Object.fromEntries(r.resultados.filter((x) => x.estado === 'ok').map((x) => [x.marcacion, x.fuera_de_lista]))
+        setSalida((x) => (x?.elegido && x.id in fuera ? { ...x, elegido: { ...x.elegido, fuera_de_lista: fuera[x.id] } } : x))
       }
     } catch (e) {
       if (!(e instanceof ErrorApi)) setEnLinea(false)
@@ -121,6 +151,9 @@ export default function Porteria({ yo }) {
     const permiso = persona?.tipo === 'alumno' && resultado === 'salida' ? padron.permisos_salida?.[persona.id] : null
     const leida = { id, persona, resultado, tarde, permiso, hora: horaLima(momento) }
     setTarjeta(leida)
+    // Recojo seguro: al salir un alumno, quién puede recogerlo hoy. Otra lectura cierra la anterior.
+    setSalida(persona?.tipo === 'alumno' && resultado === 'salida' && padron.recojo
+      ? { id, persona, lista: listaDelDia(padron, persona.id), elegido: null } : null)
     setRecientes((rs) => [leida, ...rs].slice(0, 15))
     avisar(persona ? (resultado === 'duplicada' ? 'repetida' : 'bien') : 'mal')
     contar()
@@ -153,6 +186,17 @@ export default function Porteria({ yo }) {
     return [...indice.alumnos.values(), ...indice.personal.values()]
       .filter((p) => !(p.tipo === 'personal' && p.id === yo?.id) && sinTildes(p.nombre).includes(q)).slice(0, 8)
   }, [busqueda, indice, yo])
+
+  async function elegirRecojo(e) {
+    const marcacion = salida.id
+    const { nombre, fuera_de_lista, ...envio } = e
+    await recojos.agregar({ marcacion, ...envio, nombre, fuera_de_lista })
+    setSalida((x) => (x?.id === marcacion ? { ...x, elegido: e } : x))
+    setRecientes((rs) => rs.map((x) => (x.id === marcacion ? { ...x, recogido: nombreElegido(e) } : x)))
+    contar()
+    sincronizar()
+    lector.current?.focus()
+  }
 
   function manual(p) {
     if (!confirm(`¿Marcar a ${p.nombre} sin carnet?`)) return
@@ -199,7 +243,11 @@ export default function Porteria({ yo }) {
           </button>
           {camara && <Camara alLeer={leer} />}
         </div>
-        <Tarjeta t={tarjeta} />
+        <div className="porteria-derecha">
+          <Tarjeta t={tarjeta} />
+          {salida && <Recojo key={salida.id} alumno={salida.persona} lista={salida.lista} elegido={salida.elegido}
+                             alElegir={elegirRecojo} />}
+        </div>
       </div>
 
       <h3>Marcar sin carnet</h3>
@@ -221,7 +269,8 @@ export default function Porteria({ yo }) {
              columnas={[
                { id: 'persona', titulo: 'Persona', celda: (r) => (
                  <Persona nombre={r.persona?.nombre || 'Desconocido'}
-                          detalle={r.persona ? (r.persona.tipo === 'alumno' ? r.persona.seccion : 'Personal') : null} />
+                          detalle={r.persona ? [r.persona.tipo === 'alumno' ? r.persona.seccion : 'Personal',
+                            r.recogido && `Con ${r.recogido}`].filter(Boolean).join(' · ') : null} />
                ) },
                { id: 'hora', titulo: 'Hora', numero: true, alinear: 'derecha', celda: (r) => r.hora },
                { id: 'estado', titulo: 'Estado', nowrap: true, celda: (r) => <EstadoLectura r={r} /> },

@@ -5,6 +5,7 @@ import { api, CLAVE_TOKEN_FAMILIA, guardarToken } from '../api.js'
 import AppFamilia, { AsistenciaHijo, CuadernoFamilia, Inicio, Perfil } from '../familia/App.jsx'
 import { DetalleCuaderno, PedidoCuaderno } from '../familia/Cuaderno.jsx'
 import PagosFamilia from '../familia/Pagos.jsx'
+import RecojoFamilia from '../familia/Recojo.jsx'
 import Reunion from '../familia/Reunion.jsx'
 import { hayPasskeys, usarPasskey } from '../familia/webauthn.js'
 import Acceso from './Acceso.jsx'
@@ -24,6 +25,7 @@ export default function Familia({ colegio }) {
         <Route path="asistencia" element={<AsistenciaHijo />} />
         <Route path="cuaderno" element={<CuadernoFamilia />} />
         <Route path="pagos" element={<PagosFamilia />} />
+        <Route path="recojo" element={<RecojoFamilia />} />
         <Route path="perfil" element={<Perfil />} />
         <Route path="cuaderno/nuevo/:tipo" element={<PedidoCuaderno />} />
         <Route path="cuaderno/:id" element={<DetalleCuaderno />} />

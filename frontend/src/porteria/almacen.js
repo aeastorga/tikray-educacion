@@ -1,5 +1,5 @@
 // Lo que la portería guarda en el celular para seguir marcando sin internet:
-// las marcaciones aún no enviadas y el último padrón descargado. IndexedDB es
+// las marcaciones aún no enviadas (y quién recogió a cada alumno) y el último padrón descargado. IndexedDB es
 // por origen, así que cada colegio (subdominio) tiene el suyo.
 
 const BASE = 'tikray-porteria'
@@ -7,10 +7,13 @@ let conexion = null
 
 function abrir() {
   conexion ??= new Promise((ok, mal) => {
-    const r = indexedDB.open(BASE, 1)
+    const r = indexedDB.open(BASE, 2)
     r.onupgradeneeded = () => {
-      r.result.createObjectStore('pendientes', { keyPath: 'id_cliente' })
-      r.result.createObjectStore('datos')
+      const tiendas = r.result.objectStoreNames
+      if (!tiendas.contains('pendientes')) r.result.createObjectStore('pendientes', { keyPath: 'id_cliente' })
+      if (!tiendas.contains('datos')) r.result.createObjectStore('datos')
+      // Recojo seguro: quién recogió al alumno en una salida, por enviar (uno por marcación).
+      if (!tiendas.contains('recojos')) r.result.createObjectStore('recojos', { keyPath: 'marcacion' })
     }
     r.onsuccess = () => ok(r.result)
     r.onerror = () => { conexion = null; mal(r.error) }
@@ -32,6 +35,12 @@ export const pendientes = {
   todos: () => operar('pendientes', 'readonly', (s) => s.getAll()),
   agregar: (marca) => operar('pendientes', 'readwrite', (s) => s.put(marca)),
   quitar: (ids) => operar('pendientes', 'readwrite', (s) => { ids.forEach((id) => s.delete(id)) }),
+}
+
+export const recojos = {
+  todos: () => operar('recojos', 'readonly', (s) => s.getAll()),
+  agregar: (r) => operar('recojos', 'readwrite', (s) => s.put(r)),
+  quitar: (ids) => operar('recojos', 'readwrite', (s) => { ids.forEach((id) => s.delete(id)) }),
 }
 
 export const datos = {

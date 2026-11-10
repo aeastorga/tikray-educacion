@@ -123,12 +123,56 @@ function Alumnos() {
                    { id: 'estado', titulo: 'Estado', nowrap: true, celda: (a) => <Estado valor={a.estado} minutos={a.minutos_tarde} /> },
                    { id: 'entrada', titulo: 'Entrada', numero: true, alinear: 'derecha', vacio: (a) => !a.entrada, celda: (a) => <Hora valor={a.entrada} tardia={a.registrada_despues} /> },
                    { id: 'salida', titulo: 'Salida', numero: true, alinear: 'derecha', vacio: (a) => !a.salida, celda: (a) => <Hora valor={a.salida} /> },
+                   ...(detalle.recojo ? [{ id: 'recojo', titulo: 'Recogido por', vacio: (a) => !a.recojo,
+                     celda: (a) => <Recogido r={a.recojo} /> }] : []),
                  ]} />
           {alumnos.paginacion && <Paginacion {...alumnos.paginacion} />}
         </section>
       )}
+      {dia?.recojo && <Recojos fecha={fecha} />}
       <Mensual ruta={`/api/asistencia/mensual.xlsx${seccion ? `?seccion_id=${seccion.id}` : ''}`} nombre="asistencia" />
     </>
+  )
+}
+
+// Recojo seguro: quién se llevó al alumno en su última salida del día.
+function Recogido({ r }) {
+  if (!r) return <span className="tenue">—</span>
+  const texto = `${r.nombre}${r.parentesco ? ` (${r.parentesco.toLowerCase()})` : ''}`
+  return (
+    <>
+      <span>{texto}</span>
+      {r.tipo === 'otro' && <span className="segunda-linea tenue">{r.tipo_documento} {r.numero_documento}</span>}
+      {r.fuera_de_lista && <span className="segunda-linea"><Insignia tono="falta">Fuera de la lista</Insignia></span>}
+    </>
+  )
+}
+
+function Recojos({ fecha }) {
+  const [fuera, setFuera] = useState(false)
+  const [datos, error] = useDia(`/api/asistencia/recojos?fecha=${fecha}${fuera ? '&fuera_de_lista=true' : ''}`)
+  const filas = usePaginaLocal(datos?.recojos)
+  return (
+    <section className="detalle-seccion">
+      <Encabezado nivel={3} titulo="Salidas y quién recogió a cada alumno"
+                  descripcion={datos && plural(datos.recojos.length, 'salida registrada', 'salidas registradas')} />
+      <label className="check recojo-filtro">
+        <input type="checkbox" checked={fuera} onChange={(e) => setFuera(e.target.checked)} />
+        Solo recogidos por alguien fuera de la lista
+      </label>
+      {error && <p className="error">{error}</p>}
+      <Tabla etiqueta="Salidas y recojos" cargando={!datos && !error} filas={filas.filas} clave={(r) => r.id}
+             vacio={fuera
+               ? { icono: Users, titulo: 'Nadie fuera de la lista', texto: 'Todas las salidas de este día fueron con alguien autorizado.' }
+               : { icono: Users, titulo: 'Sin recojos registrados', texto: 'Aparecen cuando la portería marca la salida y elige quién lo recoge.' }}
+             columnas={[
+               { id: 'alumno', titulo: 'Alumno', celda: (r) => <Persona nombre={r.alumno} detalle={r.seccion} /> },
+               { id: 'hora', titulo: 'Salida', numero: true, alinear: 'derecha', celda: (r) => <span className="nowrap">{r.hora}</span> },
+               { id: 'recojo', titulo: 'Recogido por', celda: (r) => <Recogido r={r.recojo} /> },
+               { id: 'portero', titulo: 'Registró', ocultarEnCelular: true, vacio: (r) => !r.registrado_por, celda: (r) => r.registrado_por },
+             ]} />
+      {filas.paginacion && <Paginacion {...filas.paginacion} />}
+    </section>
   )
 }
 
