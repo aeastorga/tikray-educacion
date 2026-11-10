@@ -149,3 +149,32 @@
 /* Recojo seguro: quién lo recogió (si la portería lo registró). */
 .en-vivo-recojo { margin: 6px 0 0; color: #fff; font-size: .92rem; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .dia-recojo { display: block; overflow-wrap: anywhere; }
+
+/* Autorizaciones */
+.lista-autorizaciones { display: grid; gap: 12px; }
+.autorizacion-familia { display: grid; gap: 8px; }
+.autorizacion-familia.pendiente { border-left: 4px solid var(--acento-fuerte); }
+.autorizacion-familia header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.autorizacion-familia h2 { margin: 0; font-size: 1.1rem; flex: 1 1 auto; min-width: 0; }
+.chip-autorizacion { padding: 2px 10px; border-radius: 999px; font-size: .78rem; font-weight: 700; background: var(--fondo); color: var(--tenue); }
+.chip-autorizacion.por-responder { background: var(--acento-suave); color: var(--acento-texto); }
+.chip-autorizacion.anulada { background: var(--falta-fondo); color: var(--falta-texto); }
+.fechas-autorizacion { margin: 0; font-size: .9rem; }
+.descripcion-autorizacion { margin: 0; white-space: pre-line; }
+.aviso-anulada-familia { margin: 0; padding: 8px 12px; border-radius: 12px; background: var(--falta-fondo); color: var(--falta-texto); font-weight: 600; }
+.hijos-autorizacion { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 10px; }
+.hijos-autorizacion > li { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--borde); justify-items: start; }
+.hijo-autorizacion { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+.respuesta-autorizacion { padding: 2px 10px; border-radius: 999px; font-size: .82rem; font-weight: 700; }
+.respuesta-autorizacion.si { background: var(--bien-fondo); color: var(--bien-texto); }
+.respuesta-autorizacion.no { background: var(--falta-fondo); color: var(--falta-texto); }
+.respuesta-autorizacion.sin { background: var(--fondo); color: var(--tenue); }
+.detalle-respuesta { margin: 0; font-size: .85rem; }
+.responder-autorizacion { display: grid; gap: 8px; width: 100%; }
+.responder-autorizacion label { display: grid; gap: 4px; }
+.botones-respuesta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+/* Con 7 pestañas: letra un poco menor y "Autorizaciones" se parte en su guion suave (las demás caben enteras). */
+.barra-inferior a span { text-align: center; line-height: 1.1; hyphens: manual; }
+.barra-inferior:has(> a:nth-child(7)) { padding-left: 2px; padding-right: 2px; }
+.barra-inferior:has(> a:nth-child(7)) a { font-size: .66rem; }
+.barra-inferior:has(> a:nth-child(7)) a.active svg { padding: 3px 10px; width: 44px; }

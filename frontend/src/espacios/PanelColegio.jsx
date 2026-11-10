@@ -5,6 +5,7 @@ import { borrarPadron } from '../porteria/almacen.js'
 import { KeyRound, ShieldCheck, Users } from 'lucide-react'
 import Asistencia from './Asistencia.jsx'
 import Caja from './Caja.jsx'
+import Autorizaciones from './Autorizaciones.jsx'
 import Calendario from './Calendario.jsx'
 import {
   documento, Encabezado, Insignia, MenuAcciones, Paginacion, Persona, Tabla, usePaginaLocal,
@@ -67,6 +68,7 @@ export default function PanelColegio({ colegio, setColegio }) {
             docentes={puede(yo, 'padron', 'editar')} />} />
           {puede(yo, 'pensiones') && <Route path="pensiones/*" element={<Pensiones editar={puede(yo, 'pensiones', 'editar')} />} />}
           {puede(yo, 'calendario') && <Route path="calendario/*" element={<Calendario editar={puede(yo, 'calendario', 'editar')} />} />}
+          {puede(yo, 'autorizaciones') && <Route path="autorizaciones/*" element={<Autorizaciones editar={puede(yo, 'autorizaciones', 'editar')} />} />}
           {puede(yo, 'caja') && <Route path="caja/*" element={<Caja editar={puede(yo, 'caja', 'editar')} />} />}
           <Route path="padron/*" element={<Padron editar={puede(yo, 'padron', 'editar')}
             recojo={{ ver: puede(yo, 'recojo'), editar: puede(yo, 'recojo', 'editar') }} />} />

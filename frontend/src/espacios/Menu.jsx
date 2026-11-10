@@ -1,7 +1,7 @@
 // Menú lateral del panel del colegio. Solo muestra los módulos que el rol permite.
 import {
   BookUser, CalendarCheck, CalendarDays, CircleDollarSign, History, IdCard, KeyRound, LayoutDashboard, LogOut, Menu as IconoMenu, NotebookPen, Presentation,
-  ScanLine, Settings, ShieldCheck, UsersRound, Wallet, X,
+  ScanLine, Settings, ShieldCheck, Signature, UsersRound, Wallet, X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
@@ -41,6 +41,7 @@ export default function Menu({ colegio, yo, puede, salir }) {
       puede('cuaderno') && { a: '/panel/cuaderno', texto: 'Cuaderno de control', icono: NotebookPen,
         contador: datos.cuaderno_pendientes, titulo: 'pendientes de aprobar' },
       puede('calendario') && { a: '/panel/calendario', texto: 'Calendario', icono: CalendarDays },
+      puede('autorizaciones') && { a: '/panel/autorizaciones', texto: 'Autorizaciones', icono: Signature },
       puede('caja') && { a: '/panel/caja', texto: 'Caja', icono: Wallet },
     ]],
     ['Familias', [

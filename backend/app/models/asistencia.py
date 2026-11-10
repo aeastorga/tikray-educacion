@@ -24,9 +24,9 @@ RESULTADOS = ("entrada", "salida", "duplicada")
 ESTADOS_ALUMNO = ("presente", "tarde", "falta", "justificada")
 ESTADOS_PERSONAL = ("presente", "tarde", "falta", "licencia")
 TIPOS_LICENCIA = ("salud", "personal", "vacaciones", "comision", "maternidad", "otro")
-TIPOS_AVISO = ("ingreso", "tarde", "salida", "falta", "cuenta", "cuaderno", "cobro", "calendario")
+TIPOS_AVISO = ("ingreso", "tarde", "salida", "falta", "cuenta", "cuaderno", "cobro", "calendario", "autorizar")
 # Los que van a un apoderado (y no a los apoderados de un alumno).
-AVISOS_A_APODERADO = ("cuenta", "cuaderno", "cobro", "calendario")
+AVISOS_A_APODERADO = ("cuenta", "cuaderno", "cobro", "calendario", "autorizar")
 ESTADOS_AVISO = ("pendiente", "enviado", "sin_destinatarios", "descartado", "error")
 
 

@@ -1,5 +1,5 @@
-"""PDF de carnets (con QR), cartas de acceso del personal, fichas de la reunión, recibos de caja y el
-calendario del mes."""
+"""PDF de carnets (con QR), cartas de acceso del personal, fichas de la reunión, recibos de caja, el
+calendario del mes y la lista de una autorización por sección."""
 
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -592,5 +592,94 @@ def calendario_mes(imagen: Imagen, primero: date, eventos: list[EventoMes],
                 x += w
             c.line(izq, y - 2.5 * mm, ancho - izq, y - 2.5 * mm)
             y -= 7 * mm
+    c.save()
+    return salida.getvalue()
+
+
+@dataclass
+class FilaAutorizacion:
+    alumno: str
+    respuesta: str  # "Autoriza", "No autoriza" o "Sin respuesta"
+    apoderado: str
+    cuando: str
+
+
+def lista_autorizacion(imagen: Imagen, titulo: str, detalle: str,
+                       secciones: list[tuple[str, list[FilaAutorizacion]]]) -> bytes:
+    """Autorizaciones: una lista por sección (cada sección empieza en una hoja nueva), para llevar el día de la
+    actividad. `detalle`: fecha de la actividad y fecha límite."""
+    salida = BytesIO()
+    c = Canvas(salida, pagesize=A4)
+    c.setTitle(f"{titulo} · {imagen.nombre}")
+    ancho, alto = A4
+    color = HexColor(imagen.color_primario)
+    izq, util = 14 * mm, ancho - 28 * mm
+    columnas = [("N°", 9 * mm), ("Alumno", 62 * mm), ("Respuesta", 26 * mm), ("Respondió", 52 * mm),
+                ("Fecha y hora", util - 149 * mm)]
+    alto_fila = 7 * mm
+
+    def cabecera(seccion: str, sigue: bool) -> float:
+        y = alto - 14 * mm
+        logo = _logo(imagen)
+        if logo:
+            c.drawImage(logo, izq, y - 12 * mm, 12 * mm, 12 * mm, preserveAspectRatio=True, mask="auto")
+        x = izq + (15 * mm if logo else 0)
+        c.setFillColor(color)
+        c.setFont("Helvetica-Bold", _ajustar(imagen.nombre, "Helvetica-Bold", 13, util - 15 * mm))
+        c.drawString(x, y - 5 * mm, imagen.nombre)
+        c.setFillColorRGB(0.35, 0.35, 0.35)
+        c.setFont("Helvetica", 9)
+        c.drawString(x, y - 10.5 * mm, _recortar(detalle, "Helvetica", 9, util - 15 * mm))
+        y -= 20 * mm
+        c.setFillColorRGB(0.1, 0.1, 0.1)
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(izq, y, _recortar(titulo, "Helvetica-Bold", 12, util))
+        y -= 6 * mm
+        c.setFillColor(color)
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(izq, y, seccion + (" (continúa)" if sigue else ""))
+        y -= 4 * mm
+        c.rect(izq, y - alto_fila, util, alto_fila, stroke=0, fill=1)
+        c.setFillColor(white)
+        c.setFont("Helvetica-Bold", 9)
+        x = izq
+        for nombre, w in columnas:
+            c.drawString(x + 1.5 * mm, y - alto_fila + 2.3 * mm, nombre)
+            x += w
+        return y - alto_fila
+
+    for i, (seccion, filas) in enumerate(secciones):
+        if i:
+            c.showPage()
+        y = cabecera(seccion, False)
+        si = sum(1 for f in filas if f.respuesta == "Autoriza")
+        no = sum(1 for f in filas if f.respuesta == "No autoriza")
+        for n, f in enumerate(filas, 1):
+            if y - alto_fila < 18 * mm:
+                c.showPage()
+                y = cabecera(seccion, True)
+            y -= alto_fila
+            if n % 2 == 0:
+                c.setFillColorRGB(0.96, 0.96, 0.96)
+                c.rect(izq, y, util, alto_fila, stroke=0, fill=1)
+            valores = [str(n), f.alumno, f.respuesta, f.apoderado, f.cuando]
+            x = izq
+            for (_, w), v in zip(columnas, valores):
+                fuente = "Helvetica-Bold" if v == "No autoriza" else "Helvetica"
+                if v == "No autoriza":
+                    c.setFillColorRGB(0.75, 0.1, 0.1)
+                elif v == "Sin respuesta":
+                    c.setFillColorRGB(0.45, 0.45, 0.45)
+                else:
+                    c.setFillColorRGB(0.1, 0.1, 0.1)
+                c.setFont(fuente, 9)
+                c.drawString(x + 1.5 * mm, y + 2.3 * mm, _recortar(v, fuente, 9, w - 3 * mm))
+                x += w
+        c.setFillColorRGB(0.35, 0.35, 0.35)
+        c.setFont("Helvetica", 9)
+        c.drawString(izq, max(y - 7 * mm, 10 * mm),
+                     f"Autorizan: {si} · No autorizan: {no} · Sin respuesta: {len(filas) - si - no} · Total: {len(filas)}")
+    if not secciones:
+        cabecera("Sin alumnos", False)
     c.save()
     return salida.getvalue()

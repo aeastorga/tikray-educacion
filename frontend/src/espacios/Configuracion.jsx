@@ -18,6 +18,7 @@ const TIPOS_AVISO = [
   ['cuaderno', 'Cuaderno de control', 'Comunicados, incidencias, citaciones y respuestas.'],
   ['cobro', 'Recordatorio de pago', 'Días antes del vencimiento y el día que vence, solo al responsable de pago.'],
   ['calendario', 'Calendario escolar', 'Al publicar un evento y el día anterior, solo si se marcó "avisar a las familias".'],
+  ['autorizaciones', 'Autorizaciones', 'Al publicar una autorización, el día anterior a la fecha límite y con "Recordar", solo a los que faltan.'],
 ]
 
 export default function Configuracion({ editar, administrador, colegio, setColegio, recargarYo }) {

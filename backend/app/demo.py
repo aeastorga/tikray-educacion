@@ -25,7 +25,7 @@ from app.almacenamiento import get_almacenamiento_privado
 from app.db import Base
 from app.fechas import LIMA, hoy_lima
 from app.models import (AdjuntoCuaderno, Alumno, AlumnoApoderado, AnioEscolar, Apoderado, AsistenciaAlumno,
-                        AsistenciaPersonal, AutorizadoRecojo, CategoriaIncidencia, Colegio, ConfigFamilias, CuentaFamilia,
+                        AsistenciaPersonal, Autorizacion, AutorizadoRecojo, CategoriaIncidencia, Colegio, ConfigFamilias, CuentaFamilia,
                         DestinoCuaderno, DestinoEvento, DiaNoLectivo, EntradaCuaderno, EventoCalendario, Grado, LicenciaPersonal, Matricula,
                         MensajeCuaderno, Nivel, PermisoRol, PlantillaComunicado, Rol, Seccion, SeccionDocente, Turno,
                         Usuario)
@@ -95,6 +95,9 @@ def borrar_datos(db: Session, colegio: Colegio) -> None:
     for clave in db.scalars(select(AutorizadoRecojo.foto_clave).where(AutorizadoRecojo.colegio_id == cid,
                                                                        AutorizadoRecojo.foto_clave.is_not(None))):
         almacen.borrar(clave)
+    for clave in db.scalars(select(Autorizacion.adjunto_clave).where(Autorizacion.colegio_id == cid,
+                                                                     Autorizacion.adjunto_clave.is_not(None))):
+        almacen.borrar(clave)
     # Los hijos antes que los padres (orden inverso de las llaves foráneas).
     for tabla in reversed(Base.metadata.sorted_tables):
         if tabla.name != "colegio" and "colegio_id" in tabla.c:
@@ -161,9 +164,10 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
         "Subdirección": {m: "ver" for m in MODULOS} | {"cuaderno": "editar", "asistencia": "editar"},
         "Secretaría": {"padron": "editar", "familias": "editar", "cuaderno": "editar", "asistencia": "ver", "reuniones": "ver",
                        "personal": "ver", "pensiones": "ver", "caja": "editar", "recojo": "editar",
-                       "calendario": "editar"},
+                       "calendario": "editar", "autorizaciones": "editar"},
         "Portería": {"asistencia": "editar"},
-        "Docente": {"cuaderno": "editar", "asistencia": "ver", "reuniones": "editar", "calendario": "ver"},
+        "Docente": {"cuaderno": "editar", "asistencia": "ver", "reuniones": "editar", "calendario": "ver",
+                    "autorizaciones": "editar"},
     }
     for nombre, rol in roles.items():
         rol.permisos = [PermisoRol(colegio_id=cid, modulo=m, nivel=n) for m, n in permisos.get(nombre, {}).items()]
@@ -597,9 +601,9 @@ def crear_o_reiniciar(db: Session, subdominio: str = "demo", nombre: str = "Cole
         db.execute(text("SELECT pg_advisory_xact_lock(7, :c)"), {"c": colegio.id})
         borrar_datos(db, colegio)
         db.flush()
-    # La demo muestra todo: pensiones, caja, recojo seguro y calendario (que se contratan aparte) van contratados
-    # y encendidos.
-    aparte = ("pensiones", "caja", "recojo", "calendario")
+    # La demo muestra todo: pensiones, caja, recojo seguro, calendario y autorizaciones (que se contratan aparte)
+    # van contratados y encendidos.
+    aparte = ("pensiones", "caja", "recojo", "calendario", "autorizaciones")
     colegio.modulos_contratados = [m for m in CONTRATABLES
                                    if m in set(colegio.modulos_contratados or INCLUIDOS) | set(aparte)]
     colegio.modulos_apagados = [m for m in (colegio.modulos_apagados or []) if m not in aparte]

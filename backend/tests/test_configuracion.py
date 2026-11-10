@@ -181,7 +181,7 @@ def test_el_administrador_elige_que_avisos_salen(client, db, e, b, h):
     tipos = {"ingreso": False, "tardanza": True, "falta": True, "salida": True, "cuaderno": False}
     r = client.put("/api/configuracion/avisos", headers=h,
                    json={"tipos": tipos, "silencio_desde": "00:00", "silencio_hasta": "00:00"})
-    assert r.status_code == 200 and r.json()["tipos"] == tipos | {"cobro": True, "calendario": True}  # los que no se mandan, quedan
+    assert r.status_code == 200 and r.json()["tipos"] == tipos | {"cobro": True, "calendario": True, "autorizaciones": True}  # los que no se mandan, quedan
     ingreso, tarde = _aviso(db, e.colegio, e.a1, "ingreso"), _aviso(db, e.colegio, e.a1, "tarde")
     ingreso_beta = _aviso(db, b.colegio, b.a1, "ingreso")
     escribir(client, h, tipo="comunicado", alcance="colegio")

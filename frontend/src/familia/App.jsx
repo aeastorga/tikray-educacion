@@ -1,7 +1,7 @@
 // App de la familia (celular primero): inicio con la tarjeta en vivo, asistencia del mes, cuaderno y perfil.
 import {
   Bell, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, DoorOpen, Fingerprint, House, LogIn, LogOut, NotebookPen,
-  PenLine, ShieldCheck, UserRound, Wallet,
+  PenLine, ShieldCheck, Signature, UserRound, Wallet,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom'
@@ -90,6 +90,9 @@ export default function AppFamilia({ colegio, ingreso }) {
         )}
         {yo?.modulos?.calendario && (
           <NavLink to="/familia/calendario"><CalendarDays aria-hidden="true" /><span>Calendario</span></NavLink>
+        )}
+        {yo?.modulos?.autorizaciones && (
+          <NavLink to="/familia/autorizaciones"><Signature aria-hidden="true" /><span>{'Autoriza\u00adciones'}</span></NavLink>
         )}
         {yo?.modulos?.pensiones && (
           <NavLink to="/familia/pagos"><Wallet aria-hidden="true" /><span>Pagos</span></NavLink>

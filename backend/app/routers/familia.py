@@ -351,7 +351,7 @@ def yo(request: Request, s: SesionFamilia = Depends(familia_sesion), db: Session
     return {"nombres": ap.nombres, "apellidos": ap.apellidos, "estado": ap.estado_acceso,
             "tiene_passkey": tiene_passkey, "push_clave": get_settings().vapid_clave_publica or None,
             "modulos": {m: s.colegio.modulo_activo(m) for m in ("asistencia", "cuaderno", "pensiones", "recojo",
-                                                                      "calendario")}}
+                                                                      "calendario", "autorizaciones")}}
 
 
 def _apoderados_activos(db: Session, cuenta_id: int):

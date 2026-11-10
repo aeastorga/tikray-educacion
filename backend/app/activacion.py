@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.almacenamiento import get_almacenamiento_privado
 from app.db import Base
-from app.models import (AdjuntoCuaderno, Apoderado, AutorizadoRecojo, Colegio, ConfigPensiones, CuentaFamilia,
+from app.models import (AdjuntoCuaderno, Apoderado, Autorizacion, AutorizadoRecojo, Colegio, ConfigPensiones, CuentaFamilia,
                         Gasto)
 
 BORRAR = {
@@ -24,6 +24,7 @@ BORRAR = {
     # Sin los comprobantes de prueba, cada serie vuelve a empezar (como el recibo interno).
     "comprobante", "cola_comprobante", "serie_comprobante",
     "autorizado_recojo", "autorizacion_recojo_dia", "recojo",
+    "autorizacion", "destino_autorizacion", "alumno_autorizacion", "respuesta_autorizacion",
 }
 CONSERVAR = {
     "anio_escolar", "nivel", "grado", "seccion", "turno", "dia_no_lectivo",
@@ -48,6 +49,8 @@ def borrar_datos_de_ejemplo(db: Session, colegio: Colegio) -> dict[str, int]:
                                                                   Gasto.archivo_clave.is_not(None))))
     archivos += list(db.scalars(select(AutorizadoRecojo.foto_clave).where(AutorizadoRecojo.colegio_id == cid,
                                                                           AutorizadoRecojo.foto_clave.is_not(None))))
+    archivos += list(db.scalars(select(Autorizacion.adjunto_clave).where(Autorizacion.colegio_id == cid,
+                                                                         Autorizacion.adjunto_clave.is_not(None))))
     # Cuentas de familia (globales) de sus apoderados: se borran luego si ya no son de ningún otro colegio.
     cuentas = set(db.scalars(select(Apoderado.cuenta_id).where(Apoderado.colegio_id == cid,
                                                               Apoderado.cuenta_id.is_not(None))))
