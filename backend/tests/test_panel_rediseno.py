@@ -9,16 +9,17 @@ from app import asistencia
 from app.routers import panel
 from app.codigos import contenido_qr
 from app.models import AsistenciaAlumno, EntradaCuaderno, LicenciaPersonal, Turno
-from tests.conftest import auth, crear_familia, crear_personal, host, token, token_familia
-from tests.test_asistencia import HOY, en, preparar
+from tests.conftest import auth, crear_familia, crear_personal, host, hoy, token, token_familia
+from tests.test_asistencia import en, preparar
 
 
 def _reloj(monkeypatch, hh, mm):
     """Fija la hora de Lima que ve el panel (el día sigue siendo hoy)."""
-    monkeypatch.setattr(panel, "ahora_lima", lambda: en(HOY, hh, mm))
+    monkeypatch.setattr(panel, "ahora_lima", lambda: en(hoy(), hh, mm))
 
 
-def _marcar(db, e, alumno, hh, mm, equipo=None, dia=HOY, personal=None):
+def _marcar(db, e, alumno, hh, mm, equipo=None, dia=None, personal=None):
+    dia = dia or hoy()
     lectura = asistencia.Lectura(id_cliente=uuid.uuid4().hex, momento=en(dia, hh, mm), origen="qr",
                                  codigo=None if personal else contenido_qr(alumno.codigo),
                                  usuario_id=personal.id if personal else None, equipo=equipo)
@@ -75,7 +76,7 @@ def test_personal_presentes_y_listas_cortas(client, db, monkeypatch):
     ajeno = crear_personal(db, otro.colegio, "20000005")
     ajeno.turno_id = otro.turno.id
     db.add(LicenciaPersonal(colegio_id=e.colegio.id, usuario_id=nombres["Dino"].id, tipo="salud",
-                            desde=HOY, hasta=HOY))
+                            desde=hoy(), hasta=hoy()))
     db.commit()
     _marcar(db, e, None, 7, 40, personal=nombres["Ana"])
     _marcar(db, e, None, 8, 5, personal=nombres["Beto"])  # 20 min tarde
@@ -88,7 +89,7 @@ def test_personal_presentes_y_listas_cortas(client, db, monkeypatch):
     # Sin marcar: solo Carla (Dino está de licencia); ni el de otro colegio ni quien no tiene turno.
     assert p["sin_marcar"] == 1 and p["lista"]["sin_marcar"] == [{"nombre": "Carla 20000003"}]
     # Si a Carla ya le cayó la falta automática, sigue sin marcar.
-    asistencia.marcar_faltas(db, HOY, time(23, 59), e.colegio.id, avisar=False)
+    asistencia.marcar_faltas(db, hoy(), time(23, 59), e.colegio.id, avisar=False)
     db.commit()
     p = _panel(client)["personal"]
     assert p["sin_marcar"] == 1 and p["falta"] == 1
@@ -103,11 +104,11 @@ def test_permisos_de_salida_de_hoy(client, db):
         db.add(EntradaCuaderno(colegio_id=esc.colegio.id, tipo="permiso_salida", alcance="alumno",
                                alumno_id=alumno.id, seccion_id=esc.seccion.id, titulo="Permiso de salida",
                                desde=dia, hora_salida=hora, estado=estado))
-    permiso(e, e.alumnos[0], HOY, time(11, 30))
-    permiso(e, e.alumnos[1], HOY, time(10, 0), "pendiente")
-    permiso(e, e.alumnos[1], HOY, time(9, 0), "rechazada")  # no sale
-    permiso(e, e.alumnos[0], HOY + timedelta(days=1), time(9, 0))  # mañana
-    permiso(otro, otro.alumnos[0], HOY, time(8, 0))  # otro colegio
+    permiso(e, e.alumnos[0], hoy(), time(11, 30))
+    permiso(e, e.alumnos[1], hoy(), time(10, 0), "pendiente")
+    permiso(e, e.alumnos[1], hoy(), time(9, 0), "rechazada")  # no sale
+    permiso(e, e.alumnos[0], hoy() + timedelta(days=1), time(9, 0))  # mañana
+    permiso(otro, otro.alumnos[0], hoy(), time(8, 0))  # otro colegio
     db.commit()
 
     salidas = _panel(client)["cuaderno"]["permisos_salida_hoy"]
@@ -121,27 +122,27 @@ def test_menu_con_anio_y_contadores_segun_permisos(client, db):
     for esc in (e, otro):
         db.add(EntradaCuaderno(colegio_id=esc.colegio.id, tipo="justificacion", alcance="alumno",
                                alumno_id=esc.alumnos[0].id, seccion_id=esc.seccion.id, titulo="Falta",
-                               desde=HOY, hasta=HOY, estado="pendiente"))
+                               desde=hoy(), hasta=hoy(), estado="pendiente"))
     db.commit()
     crear_familia(db, e.colegio, "41111111", estado="pendiente")
     crear_familia(db, otro.colegio, "42222222", estado="pendiente")
     crear_familia(db, otro.colegio, "43333333", estado="pendiente")
 
     m = client.get("/api/panel/menu", headers=auth("uno", token(client, "uno"))).json()
-    assert m == {"anio": HOY.year, "cuaderno_pendientes": 1, "padres_por_aprobar": 1}
+    assert m == {"anio": hoy().year, "cuaderno_pendientes": 1, "padres_por_aprobar": 1}
     crear_personal(db, e.colegio, "20000000", {"asistencia": "ver"})
     m = client.get("/api/panel/menu", headers=auth("uno", token(client, "uno", "20000000"))).json()
-    assert m == {"anio": HOY.year}
+    assert m == {"anio": hoy().year}
     assert client.get("/api/panel/menu", headers=host("uno")).status_code == 401
 
 
 def test_tarjeta_de_la_familia_con_puerta_salida_y_tardanzas_del_mes(client, db):
     e = preparar(db, "uno", alumnos=2)
     crear_familia(db, e.colegio, alumnos=[e.alumnos[0]])
-    inicio = HOY.replace(day=1)
+    inicio = hoy().replace(day=1)
     # Una tardanza antes en el mes (si hoy no es el primero) y otra hoy.
     previas = 0
-    if HOY > inicio:
+    if hoy() > inicio:
         db.add(AsistenciaAlumno(colegio_id=e.colegio.id, alumno_id=e.alumnos[0].id, fecha=inicio,
                                 seccion_id=e.seccion.id, estado="tarde", minutos_tarde=5))
         db.add(AsistenciaAlumno(colegio_id=e.colegio.id, alumno_id=e.alumnos[0].id,
@@ -167,14 +168,14 @@ def test_asistencia_del_mes_solo_de_sus_hijos(client, db):
     r = client.get(f"/api/familia/hijos/{e.alumnos[0].id}/asistencia", headers=auth("uno", tok))
     assert r.status_code == 200, r.text
     d = r.json()
-    assert d["mes"] == HOY.strftime("%Y-%m") and d["resumen"]["tarde"] == 1
-    assert d["dias"] == [{"fecha": HOY.isoformat(), "estado": "tarde", "entrada": "08:00", "salida": None,
+    assert d["mes"] == hoy().strftime("%Y-%m") and d["resumen"]["tarde"] == 1
+    assert d["dias"] == [{"fecha": hoy().isoformat(), "estado": "tarde", "entrada": "08:00", "salida": None,
                           "minutos_tarde": 15}]
     # El compañero de aula y el alumno de otro colegio: no existen para esta cuenta.
     for alumno in (e.alumnos[1], otro.alumnos[0]):
         assert client.get(f"/api/familia/hijos/{alumno.id}/asistencia", headers=auth("uno", tok)).status_code == 404
     # Un mes anterior sin datos y un mes mal escrito.
-    previo = (HOY.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+    previo = (hoy().replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
     r = client.get(f"/api/familia/hijos/{e.alumnos[0].id}/asistencia?mes={previo}", headers=auth("uno", tok))
     assert r.json()["dias"] == []
     assert client.get(f"/api/familia/hijos/{e.alumnos[0].id}/asistencia?mes=2026-13",
@@ -288,7 +289,7 @@ def test_docente_con_solo_sus_secciones_ve_solo_lo_suyo(client, db):
     _marcar(db, e, e.alumnos[3], 7, 52, "Puerta B")             # sección B
     _marcar(db, e, e.alumnos[4], 8, 5, "Puerta B")              # sección B, tarde y la última
     for a, sec in ((e.alumnos[1], e.seccion.id), (e.alumnos[2], e.seccion.id)):
-        db.add(AsistenciaAlumno(colegio_id=e.colegio.id, alumno_id=a.id, fecha=HOY, seccion_id=sec,
+        db.add(AsistenciaAlumno(colegio_id=e.colegio.id, alumno_id=a.id, fecha=hoy(), seccion_id=sec,
                                 estado="falta", minutos_tarde=0))
     db.commit()
 

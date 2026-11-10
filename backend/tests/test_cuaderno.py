@@ -14,13 +14,11 @@ from sqlalchemy.exc import IntegrityError
 
 from app import avisos
 from app.config import get_settings
-from app.fechas import hoy_lima
 from app.models import (AdjuntoCuaderno, Alumno, AnioEscolar, Apoderado, ColaAviso, Colegio, DestinoCuaderno,
                         EntradaCuaderno, EntregaAviso, Grado, Matricula, Nivel, Rol, Seccion, SuscripcionPush, Turno,
                         Usuario)
-from tests.conftest import (auth, crear_colegio, crear_familia, crear_personal, host, token, token_familia)
+from tests.conftest import auth, crear_colegio, crear_familia, crear_personal, host, hoy, token, token_familia
 
-HOY = hoy_lima()
 PDF = b"%PDF-1.4\n%prueba\n"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 20
 
@@ -43,7 +41,7 @@ class Escuela:
 
 def preparar(db, sub: str, dni_madre: str = "41234567", dni_otro: str = "42222222") -> Escuela:
     c = crear_colegio(db, sub)
-    anio = AnioEscolar(colegio_id=c.id, anio=HOY.year, inicio=date(HOY.year, 1, 1), fin=date(HOY.year, 12, 31),
+    anio = AnioEscolar(colegio_id=c.id, anio=hoy().year, inicio=date(hoy().year, 1, 1), fin=date(hoy().year, 12, 31),
                        dias_semana="1234567", activo=True)
     prim, secu = Nivel(colegio_id=c.id, nombre="Primaria", orden=1), Nivel(colegio_id=c.id, nombre="Secundaria", orden=2)
     turno = Turno(colegio_id=c.id, nombre="Mañana", hora_entrada=time(0, 5), tolerancia_minutos=0,
@@ -240,7 +238,7 @@ def test_hasta_cinco_adjuntos(client, e, h):
 
 def test_citacion_con_confirmacion_del_padre(client, db, e, h, hf):
     r = escribir(client, h, tipo="citacion", alumno_id=e.a1.id, titulo="Rendimiento",
-                 cita_en=f"{HOY + timedelta(days=2)}T10:30", lugar="Dirección")
+                 cita_en=f"{hoy() + timedelta(days=2)}T10:30", lugar="Dirección")
     assert r.status_code == 201, r.text
     ent = db.get(EntradaCuaderno, r.json()["id"])
     assert ent.seccion_id == e.sec_a.id  # para que la vea el tutor de la sección
@@ -272,7 +270,7 @@ def test_respuestas_en_el_hilo(client, db, e, h, hf):
 
 def test_justificacion_del_padre_y_aprobacion(client, db, e, h, hf):
     r = client.post("/api/familia/cuaderno/justificaciones", headers=hf, data={"datos": json.dumps({
-        "alumno_id": e.a1.id, "desde": str(HOY - timedelta(days=2)), "hasta": str(HOY - timedelta(days=1)),
+        "alumno_id": e.a1.id, "desde": str(hoy() - timedelta(days=2)), "hasta": str(hoy() - timedelta(days=1)),
         "motivo": "Fiebre"})}, files=[("archivos", ("certificado.pdf", PDF, "application/pdf"))])
     assert r.status_code == 201, r.text
     eid = r.json()["id"]
@@ -296,13 +294,13 @@ def test_justificacion_del_padre_y_aprobacion(client, db, e, h, hf):
 
 def test_justificacion_solo_de_sus_hijos_y_en_fechas_validas(client, e, hf):
     def justificar(**datos):
-        base = {"alumno_id": e.a1.id, "desde": str(HOY), "motivo": "Cita médica"}
+        base = {"alumno_id": e.a1.id, "desde": str(hoy()), "motivo": "Cita médica"}
         return client.post("/api/familia/cuaderno/justificaciones", headers=hf,
                            data={"datos": json.dumps(base | datos)})
 
     assert justificar(alumno_id=e.a3.id).status_code == 404  # no es su hijo
-    assert justificar(desde=str(HOY - timedelta(days=200))).status_code == 422
-    assert justificar(hasta=str(HOY - timedelta(days=1))).status_code == 422
+    assert justificar(desde=str(hoy() - timedelta(days=200))).status_code == 422
+    assert justificar(hasta=str(hoy() - timedelta(days=1))).status_code == 422
     assert justificar().status_code == 201
 
 
@@ -313,18 +311,18 @@ def test_resolver_solo_justificaciones_y_permisos(client, e, h):
 
 
 def test_lo_que_registra_el_colegio_ya_queda_aprobado(client, db, e, h):
-    r = escribir(client, h, tipo="justificacion", alumno_id=e.a1.id, desde=str(HOY), titulo="Trajo constancia")
+    r = escribir(client, h, tipo="justificacion", alumno_id=e.a1.id, desde=str(hoy()), titulo="Trajo constancia")
     assert db.get(EntradaCuaderno, r.json()["id"]).estado == "aprobada"
 
 
 def test_permiso_de_salida_en_la_porteria(client, db, e, h, hf):
     r = client.post("/api/familia/cuaderno/permisos-salida", headers=hf, json={
-        "alumno_id": e.a1.id, "fecha": str(HOY), "hora": "10:30", "recoge": "Rosa Mamani (madre)",
+        "alumno_id": e.a1.id, "fecha": str(hoy()), "hora": "10:30", "recoge": "Rosa Mamani (madre)",
         "motivo": "Cita médica"})
     assert r.status_code == 201, r.text
     eid = r.json()["id"]
     assert client.post("/api/familia/cuaderno/permisos-salida", headers=hf, json={
-        "alumno_id": e.a1.id, "fecha": str(HOY - timedelta(days=1)), "hora": "10:30", "recoge": "X",
+        "alumno_id": e.a1.id, "fecha": str(hoy() - timedelta(days=1)), "hora": "10:30", "recoge": "X",
         "motivo": "Y"}).status_code == 422
 
     padron = client.get("/api/asistencia/porteria", headers=h).json()
@@ -342,7 +340,7 @@ def test_permiso_de_salida_en_la_porteria(client, db, e, h, hf):
             {"id_cliente": uuid.uuid4().hex, "alumno_id": e.a1.id, "momento": momento}]}).json()["resultados"][0]
 
     entrada, salida = marca(60), marca(0)
-    if HOY != (__import__("datetime").datetime.now(__import__("app.fechas", fromlist=["LIMA"]).LIMA)
+    if hoy() != (__import__("datetime").datetime.now(__import__("app.fechas", fromlist=["LIMA"]).LIMA)
                - timedelta(minutes=60)).date():
         pytest.skip("Corre justo después de medianoche")
     assert entrada["resultado"] == "entrada" and "permiso_salida" not in entrada
@@ -448,7 +446,7 @@ def test_aviso_del_cuaderno_no_llega_a_cuenta_bloqueada(client, db, e, h):
 def test_otro_colegio_no_ve_ni_toca_el_cuaderno(client, db, e, h, hf):
     beta = preparar(db, "beta")
     eid = escribir(client, h, archivos=[("archivos", ("a.pdf", PDF, "application/pdf"))],
-                   tipo="justificacion", alumno_id=e.a1.id, desde=str(HOY)).json()["id"]
+                   tipo="justificacion", alumno_id=e.a1.id, desde=str(hoy())).json()["id"]
     adj = db.scalar(select(AdjuntoCuaderno.id))
     hb = auth("beta", token(client, "beta"))
     assert client.get("/api/cuaderno/entradas", headers=hb).json()["entradas"] == []
@@ -485,7 +483,7 @@ def test_familia_de_otro_colegio_no_ve_el_cuaderno(client, db, e, h):
         assert client.request(metodo, ruta, headers=hfb).status_code == 404, ruta
     # Pedir algo para un hijo de alfa desde beta.
     r = client.post("/api/familia/cuaderno/permisos-salida", headers=hfb, json={
-        "alumno_id": e.a1.id, "fecha": str(HOY), "hora": "10:00", "recoge": "X", "motivo": "Y"})
+        "alumno_id": e.a1.id, "fecha": str(hoy()), "hora": "10:00", "recoge": "X", "motivo": "Y"})
     assert r.status_code == 404
     assert beta.a1.id != e.a1.id
 
@@ -558,7 +556,7 @@ def _justificar(client, hf, alumno, desde, hasta=None):
 
 
 def test_justificacion_aprobada_cambia_la_falta_y_se_revierte_al_anular(client, db, e, h, hf):
-    ayer, anteayer = HOY - timedelta(days=1), HOY - timedelta(days=2)
+    ayer, anteayer = hoy() - timedelta(days=1), hoy() - timedelta(days=2)
     _falta(db, e, e.a1, ayer)
     _falta(db, e, e.a1, anteayer)
     eid = _justificar(client, hf, e.a1, anteayer, ayer)
@@ -593,18 +591,18 @@ def test_justificacion_aprobada_cambia_la_falta_y_se_revierte_al_anular(client, 
 
 def test_falta_marcada_despues_ya_nace_justificada(client, db, e, h, hf):
     from app import asistencia
-    eid = _justificar(client, hf, e.a1, HOY)
+    eid = _justificar(client, hf, e.a1, hoy())
     client.post(f"/api/cuaderno/entradas/{eid}/resolver", json={"estado": "aprobada"}, headers=h)
-    asistencia.marcar_faltas(db, HOY)
+    asistencia.marcar_faltas(db, hoy())
     db.commit()
-    assert _estado(db, e.a1, HOY) == ("justificada", eid)
-    assert _estado(db, e.a2, HOY) == ("falta", None)
+    assert _estado(db, e.a1, hoy()) == ("justificada", eid)
+    assert _estado(db, e.a2, hoy()) == ("falta", None)
     avisos_falta = db.scalars(select(ColaAviso.alumno_id).where(ColaAviso.tipo == "falta")).all()
     assert sorted(avisos_falta) == [e.a2.id, e.a3.id]  # al justificado no se le avisa falta
 
 
 def test_anular_una_deja_la_otra_justificacion(client, db, e, h, hf):
-    ayer = HOY - timedelta(days=1)
+    ayer = hoy() - timedelta(days=1)
     _falta(db, e, e.a1, ayer)
     primera = _justificar(client, hf, e.a1, ayer)
     segunda = _justificar(client, hf, e.a1, ayer - timedelta(days=1), ayer)
@@ -617,7 +615,7 @@ def test_anular_una_deja_la_otra_justificacion(client, db, e, h, hf):
 
 def test_si_llega_el_dia_justificado_queda_presente(client, db, e, h, hf):
     from datetime import UTC, datetime
-    eid = _justificar(client, hf, e.a1, HOY)
+    eid = _justificar(client, hf, e.a1, hoy())
     client.post(f"/api/cuaderno/entradas/{eid}/resolver", json={"estado": "aprobada"}, headers=h)
     r = client.post("/api/asistencia/marcaciones", headers=h, json={"marcaciones": [
         {"id_cliente": uuid.uuid4().hex, "alumno_id": e.a1.id, "momento": datetime.now(UTC).isoformat()}]})
@@ -625,7 +623,7 @@ def test_si_llega_el_dia_justificado_queda_presente(client, db, e, h, hf):
 
 
 def test_solo_se_anula_lo_aprobado(client, db, e, h, hf):
-    pendiente = _justificar(client, hf, e.a1, HOY)
+    pendiente = _justificar(client, hf, e.a1, hoy())
     assert client.post(f"/api/cuaderno/entradas/{pendiente}/anular", json={"motivo": "x"},
                        headers=h).status_code == 409
     incidencia = escribir(client, h, tipo="incidencia", alumno_id=e.a1.id).json()["id"]
@@ -635,7 +633,7 @@ def test_solo_se_anula_lo_aprobado(client, db, e, h, hf):
 
 def test_otro_colegio_no_anula(client, db, e, h, hf):
     preparar(db, "beta")
-    eid = _justificar(client, hf, e.a1, HOY)
+    eid = _justificar(client, hf, e.a1, hoy())
     client.post(f"/api/cuaderno/entradas/{eid}/resolver", json={"estado": "aprobada"}, headers=h)
     hb = auth("beta", token(client, "beta"))
     assert client.post(f"/api/cuaderno/entradas/{eid}/anular", json={"motivo": "x"}, headers=hb).status_code == 404
@@ -646,10 +644,10 @@ def test_base_rechaza_justificacion_de_otro_colegio_en_la_asistencia(db, e):
     from app.models import AsistenciaAlumno
     beta = preparar(db, "beta")
     j = EntradaCuaderno(colegio_id=beta.colegio.id, tipo="justificacion", alcance="alumno", alumno_id=beta.a1.id,
-                        titulo="x", desde=HOY, hasta=HOY, estado="aprobada")
+                        titulo="x", desde=hoy(), hasta=hoy(), estado="aprobada")
     db.add(j)
     db.commit()
-    db.add(AsistenciaAlumno(colegio_id=e.colegio.id, alumno_id=e.a1.id, fecha=HOY, estado="justificada",
+    db.add(AsistenciaAlumno(colegio_id=e.colegio.id, alumno_id=e.a1.id, fecha=hoy(), estado="justificada",
                             justificacion_id=j.id))
     with pytest.raises(IntegrityError):
         db.commit()

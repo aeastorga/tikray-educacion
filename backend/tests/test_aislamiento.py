@@ -11,8 +11,8 @@ from app.db import Base, get_engine
 from app.main import app
 from app.models import Rol, Usuario
 from app.models.colegio import CONTRATABLES
-from tests.conftest import (auth, crear_admin, crear_colegio, crear_familia, crear_personal, host, token,
-                            token_familia, token_plataforma)
+from tests.conftest import (auth, crear_admin, crear_colegio, crear_familia, crear_personal, host, hoy, token,
+                           token_familia, token_plataforma)
 
 # Globales a propósito: la cuenta de familia (y sus passkeys) une hijos de varios colegios.
 SIN_COLEGIO = {"colegio", "admin_plataforma", "cuenta_familia", "passkey_familia",
@@ -226,7 +226,7 @@ def test_pensiones_y_caja_aisladas_por_colegio(client, db):
     import json
 
     from app.models import CuotaAlumno, Gasto, Pago
-    from tests.test_pensiones import HOY, abrir, armar, cobrar, cuotas, preparar
+    from tests.test_pensiones import abrir, armar, cobrar, cuotas, preparar
 
     ea, eb = preparar(db, "alfa"), preparar(db, "beta", dni_madre="45555555")
     ha, hb = auth("alfa", token(client, "alfa")), auth("beta", token(client, "beta"))
@@ -240,7 +240,7 @@ def test_pensiones_y_caja_aisladas_por_colegio(client, db):
     db.commit()
     cat_b = client.get("/api/caja/categorias", headers=hb).json()[0]["id"]
     gasto_b = client.post("/api/caja/gastos", headers=hb, data={"datos": json.dumps({
-        "fecha": HOY.isoformat(), "categoria_id": cat_b, "descripcion": "Luz", "monto": "5", "medio": "efectivo"})},
+        "fecha": hoy().isoformat(), "categoria_id": cat_b, "descripcion": "Luz", "monto": "5", "medio": "efectivo"})},
         files={"archivo": ("a.pdf", b"%PDF-1.4", "application/pdf")}).json()
 
     # Listados: solo lo propio.

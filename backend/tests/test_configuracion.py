@@ -12,15 +12,14 @@ from sqlalchemy import func, select
 from app import activacion, avisos, configuracion
 from app.asistencia import marcar_faltas
 from app.db import Base
-from app.fechas import LIMA, hoy_lima
+from app.fechas import LIMA
 from app.models import (Alumno, AlumnoApoderado, Apoderado, AsistenciaAlumno, CategoriaIncidencia, ColaAviso,
                         Colegio, CuentaFamilia, EntradaCuaderno, Grado, Marcacion, Nivel, PlantillaComunicado,
                         RegistroActividad, Rol, Seccion, Turno, Usuario)
-from tests.conftest import (auth, crear_admin, crear_colegio, crear_familia, crear_personal, host, token,
-                            token_familia, token_plataforma)
+from tests.conftest import (auth, crear_admin, crear_colegio, crear_familia, crear_personal, host, hoy, token,
+                           token_familia, token_plataforma)
 from tests.test_cuaderno import cola_cuaderno, escribir, preparar
 
-HOY = hoy_lima()
 
 
 @pytest.fixture
@@ -139,7 +138,7 @@ def test_asistencia_apagada_no_marca_ni_pone_faltas(client, db, e, b, h):
     assert r.status_code == 403
     assert client.get("/api/asistencia/marcaciones", headers=h).status_code == 403
     db.expire_all()  # el proceso de fondo abre una sesión nueva en cada vuelta
-    marcar_faltas(db, HOY, avisar=False)
+    marcar_faltas(db, hoy(), avisar=False)
     db.commit()
     assert db.scalar(select(func.count()).select_from(AsistenciaAlumno)
                      .where(AsistenciaAlumno.colegio_id == e.colegio.id)) == 0
@@ -171,7 +170,7 @@ def test_el_administrador_solo_prende_lo_contratado(client, db, e, h, hp):
 # --- Avisos a los padres -------------------------------------------------------------------
 
 def _aviso(db, colegio, alumno, tipo: str) -> ColaAviso:
-    a = ColaAviso(colegio_id=colegio.id, alumno_id=alumno.id, fecha=HOY, tipo=tipo, momento=datetime.now(UTC),
+    a = ColaAviso(colegio_id=colegio.id, alumno_id=alumno.id, fecha=hoy(), tipo=tipo, momento=datetime.now(UTC),
                   datos={"hora": "07:50"})
     db.add(a)
     db.commit()
@@ -388,11 +387,11 @@ def test_historial_solo_el_administrador_y_sin_datos_sensibles(client, db, e, b,
     claves.append(client.post(f"/api/personal/{uid}/reiniciar-clave", headers=h).json()["clave_temporal"])
     # Licencia con motivo de salud: el motivo no se guarda en el historial.
     r = client.post("/api/asistencia/licencias", headers=h, json={
-        "usuario_id": uid, "tipo": "salud", "desde": str(HOY), "hasta": str(HOY), "motivo": "Diagnóstico secreto"})
+        "usuario_id": uid, "tipo": "salud", "desde": str(hoy()), "hasta": str(hoy()), "motivo": "Diagnóstico secreto"})
     assert r.status_code == 201, r.text
     # Justificación del padre, aprobada: el texto tampoco.
     r = client.post("/api/familia/cuaderno/justificaciones", headers=hf, data={"datos": json.dumps({
-        "alumno_id": e.a1.id, "desde": str(HOY), "motivo": "Texto privado de la familia"})})
+        "alumno_id": e.a1.id, "desde": str(hoy()), "motivo": "Texto privado de la familia"})})
     assert client.post(f"/api/cuaderno/entradas/{r.json()['id']}/resolver", headers=h,
                        json={"estado": "aprobada"}).status_code == 200
     # Invitación a un padre: ni el enlace ni el PIN.
@@ -443,9 +442,9 @@ def test_historial_filtros_y_paginas(client, db, e, h):
     assert {m["clave"] for m in r["modulos"]} == {"padron", "cuaderno", "configuracion"}
     assert client.get(f"/api/configuracion/historial?usuario_id={otro.id}", headers=h).json()["total"] == 1
     assert client.get("/api/configuracion/historial?modulo=padron", headers=h).json()["total"] == 55
-    desde = HOY - timedelta(days=7)
+    desde = hoy() - timedelta(days=7)
     assert client.get(f"/api/configuracion/historial?desde={desde}", headers=h).json()["total"] == 56
-    hasta = HOY - timedelta(days=30)
+    hasta = hoy() - timedelta(days=30)
     assert client.get(f"/api/configuracion/historial?hasta={hasta}", headers=h).json()["total"] == 1
 
 
@@ -471,7 +470,7 @@ def test_toda_tabla_del_colegio_esta_clasificada_para_la_activacion():
 
 
 def _en_prueba(db, colegio):
-    colegio.estado, colegio.vence_en = "prueba", HOY + timedelta(days=15)
+    colegio.estado, colegio.vence_en = "prueba", hoy() + timedelta(days=15)
     db.commit()
 
 
@@ -529,7 +528,7 @@ def test_activar_sin_borrar_conserva_todo(client, db, e, hp):
 def test_activar_solo_colegios_en_prueba_y_nunca_la_demo(client, db, e, hp):
     assert client.post(f"/plataforma/colegios/{e.colegio.id}/activar", headers=hp,
                        json={"borrar_ejemplo": True, "confirmar": "alfa"}).status_code == 409  # ya activo
-    demo = crear_colegio(db, "demo", es_demo=True, estado="prueba", vence_en=HOY + timedelta(days=5))
+    demo = crear_colegio(db, "demo", es_demo=True, estado="prueba", vence_en=hoy() + timedelta(days=5))
     assert client.post(f"/plataforma/colegios/{demo.id}/activar", headers=hp,
                        json={"borrar_ejemplo": True, "confirmar": "demo"}).status_code == 409
     assert client.post("/plataforma/colegios/99999/activar", headers=hp,

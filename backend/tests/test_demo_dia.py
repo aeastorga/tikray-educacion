@@ -10,7 +10,7 @@ from app.fechas import LIMA, hoy_lima
 from app.models import (AsistenciaAlumno, AsistenciaPersonal, ColaAviso, Colegio, DestinoCuaderno, EntradaCuaderno,
                         EntregaAviso, Marcacion, SuscripcionPush)
 from app.routers.estructura import es_dia_lectivo
-from tests.conftest import crear_colegio
+from tests.conftest import crear_colegio, hoy
 
 
 def _dia_limpio(db, cid):
@@ -110,7 +110,7 @@ def test_cuaderno_de_la_demo_en_horario_escolar(db):
 def test_si_la_demo_falla_las_faltas_reales_igual_se_marcan(db, monkeypatch, caplog):
     from app import asistencia, demo_dia
     from app.db import get_sessionmaker
-    from tests.test_asistencia import HOY, en, preparar
+    from tests.test_asistencia import en, preparar
 
     e = preparar(db, "real", alumnos=2, dias_semana="1234567")
     monkeypatch.setattr(asistencia.log, "disabled", False)  # la config de Alembic de las pruebas lo apaga
@@ -122,12 +122,12 @@ def test_si_la_demo_falla_las_faltas_reales_igual_se_marcan(db, monkeypatch, cap
     original = asistencia.marcar_faltas
     monkeypatch.setattr(asistencia, "marcar_faltas", lambda *a, **k: llamadas.append(a) or original(*a, **k))
 
-    ahora = en(HOY, 10, 0)  # pasó el corte de 9:15
+    ahora = en(hoy(), 10, 0)  # pasó el corte de 9:15
     assert asistencia.vuelta_faltas(None, ahora, get_sessionmaker()) == ahora  # las faltas se dan por hechas
     assert llamadas
     assert "Día simulado de la demo" in caplog.text
     db.expire_all()
-    assert _estados(db, e.colegio.id, HOY) == {"falta": 2}
+    assert _estados(db, e.colegio.id, hoy()) == {"falta": 2}
 
 
 def test_la_demo_corrige_faltas_automaticas_de_quien_si_llego(db):

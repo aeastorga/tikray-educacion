@@ -15,7 +15,7 @@ os.environ["TAREAS_EN_FONDO"] = "false"
 os.environ["CARPETA_ARCHIVOS"] = tempfile.mkdtemp(prefix="tikray-archivos-")
 os.environ["CARPETA_PRIVADA"] = tempfile.mkdtemp(prefix="tikray-privados-")
 
-from datetime import UTC, datetime, time  # noqa: E402
+from datetime import UTC, date, datetime, time, timedelta  # noqa: E402
 
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402
@@ -24,6 +24,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
 from app.db import Base, get_engine, get_sessionmaker  # noqa: E402
+from app.fechas import hoy_lima  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import (AdminPlataforma, Alumno, AlumnoApoderado, Apoderado, Colegio, CuentaFamilia,  # noqa: E402
                         PermisoRol, Rol, Usuario)
@@ -53,6 +54,30 @@ def limpiar():
         conn.execute(text(f"TRUNCATE {tablas} RESTART IDENTITY CASCADE"))
     limpiar_limites()
 
+
+_hoy: date | None = None
+
+
+@pytest.fixture(autouse=True)
+def fijar_hoy():
+    """"Hoy" en Lima se calcula al inicio de cada prueba, no al cargar el archivo: si la suite cruza la medianoche,
+    la prueba y el sistema deben hablar del mismo día."""
+    global _hoy
+    _hoy = hoy_lima()
+    yield
+    _hoy = None
+
+
+def hoy() -> date:
+    """El día (Lima) en que empezó la prueba en curso."""
+    assert _hoy is not None, "hoy() solo vale dentro de una prueba"
+    return _hoy
+
+
+def lunes() -> date:
+    """Primer lunes de junio del año de hoy() (un día lectivo fijo para las pruebas de asistencia)."""
+    junio = date(hoy().year, 6, 1)
+    return junio + timedelta(days=(7 - junio.weekday()) % 7)
 
 @pytest.fixture
 def db():

@@ -15,8 +15,8 @@ from app.config import get_settings
 from app.db import get_engine
 from app.main import app
 from app.models import ColaComprobante, Comprobante, ConfigFacturacion, RegistroActividad
-from tests.conftest import auth, crear_admin, crear_personal, token, token_plataforma
-from tests.test_pensiones import HOY, abrir, armar, cobrar, concepto, cuotas, linea, montos, preparar
+from tests.conftest import auth, crear_admin, crear_personal, hoy, token, token_plataforma
+from tests.test_pensiones import abrir, armar, cobrar, concepto, cuotas, linea, montos, preparar
 
 D = Decimal
 RUC = "20999999990"  # ficticio, con dígito verificador válido
@@ -367,7 +367,7 @@ def test_igv_de_un_concepto_gravado_y_uno_inafecto_en_el_mismo_pago(client, db, 
     assert uniforme["igv"] == "gravado"
     montos(client, h, uniforme["id"], [{"nivel_id": e.primaria.id, "monto": "118.00"},
                                        {"nivel_id": e.secundaria.id, "monto": "118.00"}])
-    linea(client, h, uniforme["id"], 1, HOY + timedelta(days=5), "Uniforme")
+    linea(client, h, uniforme["id"], 1, hoy() + timedelta(days=5), "Uniforme")
     assert client.post("/api/pensiones/generar", headers=h).status_code == 200
     c = cuotas(client, h, e.a1.id)
     pension = next(x for x in c if x["concepto"] == "Pensión")
@@ -392,7 +392,7 @@ def test_activar_un_colegio_de_prueba_borra_comprobantes_y_conserva_la_configura
     armar(client, h, e)
     abrir(client, h)
     cobrar(client, h, e.a1.id, [(cuotas(client, h, e.a1.id)[0]["id"], "10")])
-    e.colegio.estado, e.colegio.vence_en = "prueba", HOY + timedelta(days=10)
+    e.colegio.estado, e.colegio.vence_en = "prueba", hoy() + timedelta(days=10)
     db.commit()
     ht = _plataforma(client, db)
     r = client.post(f"/plataforma/colegios/{e.colegio.id}/activar", headers=ht, json={"borrar_ejemplo": True, "confirmar": e.colegio.subdominio})

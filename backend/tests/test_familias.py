@@ -11,8 +11,8 @@ from app.codigos import contenido_qr
 from app.models import (Apoderado, AsistenciaAlumno, CambioApoderado, ColaAviso, ConsentimientoApoderado,
                         CuentaFamilia, EntregaAviso, InvitacionFamilia, PasskeyFamilia, SuscripcionPush, Usuario)
 from app.routers import familia as rutas_familia
-from tests.conftest import PIN, auth, crear_colegio, crear_familia, host, token, token_familia
-from tests.test_asistencia import LUNES, en, marcar, preparar
+from tests.conftest import PIN, auth, crear_colegio, crear_familia, host, lunes, token, token_familia
+from tests.test_asistencia import en, marcar, preparar
 from tests.test_importacion import excel, fila, madre, subir
 from tests.test_padron import armar
 
@@ -200,7 +200,7 @@ def test_pin_nuevo_en_otro_colegio_deja_pendiente_y_avisa(client, db):
     assert [h["colegio"] for h in hijos["hijos"]] == ["Colegio beta"]
     assert hijos["pendientes_aprobacion"] == ["Colegio alfa"]
     # Los avisos de asistencia de alfa ya no le salen; el del PIN sí, a todos sus celulares.
-    marcar(db, a, en(LUNES, 7, 40))
+    marcar(db, a, en(lunes(), 7, 40))
     push = Push()
     avisos.procesar_cola(db, push, ahora=pronto())
     assert len(push.enviados) == 1
@@ -413,7 +413,7 @@ def test_aviso_de_ingreso_llega_a_quien_recibe_avisos(client, db):
     db.get(AlumnoApoderado, (e.alumnos[0].id, otro_v.id)).recibe_avisos = False
     db.commit()
     hf = suscribir(client, "alfa")
-    marcar(db, e, en(LUNES, 7, 40))
+    marcar(db, e, en(lunes(), 7, 40))
     push = Push()
     assert avisos.procesar_cola(db, push, ahora=pronto()) == 1
     assert [(ep, m["cuerpo"]) for ep, m in push.enviados] == [
@@ -426,8 +426,8 @@ def test_aviso_de_ingreso_llega_a_quien_recibe_avisos(client, db):
 def test_aviso_sin_destinatarios_y_sin_notificaciones(client, db):
     e = preparar(db, "alfa", alumnos=2)
     crear_familia(db, e.colegio, alumnos=e.alumnos[1:])  # activa pero sin aceptar notificaciones
-    marcar(db, e, en(LUNES, 7, 40), e.alumnos[0])
-    marcar(db, e, en(LUNES, 7, 41), e.alumnos[1])
+    marcar(db, e, en(lunes(), 7, 40), e.alumnos[0])
+    marcar(db, e, en(lunes(), 7, 41), e.alumnos[1])
     avisos.procesar_cola(db, Push(), ahora=pronto())
     estados = dict(db.execute(select(ColaAviso.alumno_id, ColaAviso.estado)).all())
     assert estados == {e.alumnos[0].id: "sin_destinatarios", e.alumnos[1].id: "enviado"}
@@ -439,7 +439,7 @@ def test_aviso_de_falta_solo_si_sigue_con_falta(client, db):
     for i, a in enumerate(e.alumnos):
         crear_familia(db, e.colegio, dni=f"4100000{i}", alumnos=[a])
         suscribir(client, "alfa", dni=f"4100000{i}", endpoint=f"https://push.example/{i}")
-    asistencia.marcar_faltas(db, LUNES)
+    asistencia.marcar_faltas(db, lunes())
     db.commit()
     # Entre la falta y el envío, el primero llegó (p. ej. una marcación que se sincronizó tarde).
     fila_ = db.scalar(select(AsistenciaAlumno).where(AsistenciaAlumno.alumno_id == e.alumnos[0].id))
@@ -461,7 +461,7 @@ def test_reintento_sin_repetir_y_suscripcion_expirada(client, db):
     suscribir(client, "alfa", dni="41234567", endpoint="https://push.example/madre")
     suscribir(client, "alfa", dni="42222222", endpoint="https://push.example/padre")
     suscribir(client, "alfa", dni="42222222", endpoint="https://push.example/padre-viejo")
-    marcar(db, e, en(LUNES, 7, 40))
+    marcar(db, e, en(lunes(), 7, 40))
     push = Push({"https://push.example/madre": "error", "https://push.example/padre-viejo": "expirada"})
     avisos.procesar_cola(db, push, ahora=pronto())
     aviso = db.scalar(select(ColaAviso))
@@ -479,7 +479,7 @@ def test_aviso_viejo_se_descarta(client, db):
     e = preparar(db, "alfa")
     crear_familia(db, e.colegio, alumnos=e.alumnos[:1])
     suscribir(client, "alfa")
-    marcar(db, e, en(LUNES, 7, 40))
+    marcar(db, e, en(lunes(), 7, 40))
     aviso = db.scalar(select(ColaAviso))
     aviso.creado_en = datetime.now(UTC) - timedelta(hours=7)
     db.commit()
@@ -492,7 +492,7 @@ def test_avisos_de_un_colegio_no_salen_a_familias_de_otro(client, db):
     a, b = preparar(db, "alfa"), preparar(db, "beta")
     crear_familia(db, b.colegio, dni="49999999", alumnos=b.alumnos[:1])
     suscribir(client, "beta", dni="49999999")
-    marcar(db, a, en(LUNES, 7, 40))
+    marcar(db, a, en(lunes(), 7, 40))
     push = Push()
     avisos.procesar_cola(db, push, ahora=pronto())
     assert push.enviados == []
@@ -581,7 +581,7 @@ def test_aviso_de_cuenta_llega_al_apoderado(client, db):
     e = preparar(db, "alfa")
     ap = crear_familia(db, e.colegio, alumnos=e.alumnos[:1])
     suscribir(client, "alfa")
-    db.add(ColaAviso(colegio_id=e.colegio.id, tipo="cuenta", apoderado_id=ap.id, fecha=LUNES,
+    db.add(ColaAviso(colegio_id=e.colegio.id, tipo="cuenta", apoderado_id=ap.id, fecha=lunes(),
                      datos={"mensaje": "El celular registrado en el colegio cambió."}))
     db.commit()
     push = Push()

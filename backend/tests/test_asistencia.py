@@ -15,15 +15,13 @@ from sqlalchemy.exc import IntegrityError
 
 from app import asistencia
 from app.codigos import contenido_qr
-from app.fechas import LIMA, hoy_lima
+from app.fechas import LIMA
 from app.models import (Alumno, AnioEscolar, AsistenciaAlumno, AsistenciaPersonal, ColaAviso, Colegio,
                         ConfigAsistencia,
                         DiaNoLectivo, Grado, Marcacion, Matricula, Nivel, Seccion, Turno, Usuario)
-from tests.conftest import auth, crear_colegio, crear_personal, token
+from tests.conftest import auth, crear_colegio, crear_personal, hoy, lunes, token
 
-HOY = hoy_lima()
 # Un lunes fijo del año en curso: las pruebas no dependen de la hora en que corren.
-LUNES = date(HOY.year, 6, 1) + timedelta(days=(7 - date(HOY.year, 6, 1).weekday()) % 7)
 
 
 @dataclass
@@ -37,7 +35,7 @@ class Escuela:
 def preparar(db, sub: str, alumnos: int = 2, dias_semana: str = "12345") -> Escuela:
     """Año en curso activo, un turno 07:45 con 10 min de tolerancia, una sección y sus alumnos."""
     c = crear_colegio(db, sub)
-    anio = AnioEscolar(colegio_id=c.id, anio=HOY.year, inicio=date(HOY.year, 1, 1), fin=date(HOY.year, 12, 31),
+    anio = AnioEscolar(colegio_id=c.id, anio=hoy().year, inicio=date(hoy().year, 1, 1), fin=date(hoy().year, 12, 31),
                        dias_semana=dias_semana, activo=True)
     nivel = Nivel(colegio_id=c.id, nombre="Primaria")
     db.add_all([anio, nivel])
@@ -75,9 +73,9 @@ def marcar(db, e: Escuela, momento: datetime, alumno: Alumno | None = None, codi
     return r
 
 
-def dia_de(db, alumno: Alumno, fecha: date = LUNES) -> AsistenciaAlumno | None:
+def dia_de(db, alumno: Alumno, fecha: date | None = None) -> AsistenciaAlumno | None:
     return db.scalar(select(AsistenciaAlumno).where(AsistenciaAlumno.alumno_id == alumno.id,
-                                                    AsistenciaAlumno.fecha == fecha))
+                                                    AsistenciaAlumno.fecha == (fecha or lunes())))
 
 
 def cola(db, alumno: Alumno) -> list[tuple[str, str | None]]:
@@ -89,7 +87,7 @@ def cola(db, alumno: Alumno) -> list[tuple[str, str | None]]:
 
 def test_entrada_a_tiempo_y_aviso_en_cola(db):
     e = preparar(db, "alfa")
-    r = marcar(db, e, en(LUNES, 7, 40))
+    r = marcar(db, e, en(lunes(), 7, 40))
     assert r["estado"] == "ok" and r["resultado"] == "entrada" and r["estado_dia"] == "presente"
     assert r["persona"]["nombre"] == "Apellido000, Niño0" and r["hora"] == "07:40"
     assert cola(db, e.alumnos[0]) == [("ingreso", "07:40")]
@@ -97,16 +95,16 @@ def test_entrada_a_tiempo_y_aviso_en_cola(db):
 
 def test_tardanza_segun_tolerancia_del_turno(db):
     e = preparar(db, "alfa")
-    assert marcar(db, e, en(LUNES, 7, 55), e.alumnos[0])["estado_dia"] == "presente"  # 10 min: dentro
-    r = marcar(db, e, en(LUNES, 7, 56), e.alumnos[1])
+    assert marcar(db, e, en(lunes(), 7, 55), e.alumnos[0])["estado_dia"] == "presente"  # 10 min: dentro
+    r = marcar(db, e, en(lunes(), 7, 56), e.alumnos[1])
     assert r["estado_dia"] == "tarde" and r["minutos_tarde"] == 11
     assert cola(db, e.alumnos[1]) == [("tarde", "07:56")]
 
 
 def test_doble_marcacion_se_descarta(db):
     e = preparar(db, "alfa")
-    marcar(db, e, en(LUNES, 7, 40))
-    r = marcar(db, e, en(LUNES, 7, 45))
+    marcar(db, e, en(lunes(), 7, 40))
+    r = marcar(db, e, en(lunes(), 7, 45))
     assert r["resultado"] == "duplicada" and r["entrada"] == "07:40"
     assert cola(db, e.alumnos[0]) == [("ingreso", "07:40")]
     assert [m.resultado for m in db.scalars(select(Marcacion).order_by(Marcacion.id))] == ["entrada", "duplicada"]
@@ -114,47 +112,47 @@ def test_doble_marcacion_se_descarta(db):
 
 def test_salida_y_su_aviso_con_la_ultima_hora(db):
     e = preparar(db, "alfa")
-    marcar(db, e, en(LUNES, 7, 40))
-    r = marcar(db, e, en(LUNES, 13, 5))
+    marcar(db, e, en(lunes(), 7, 40))
+    r = marcar(db, e, en(lunes(), 13, 5))
     assert r["resultado"] == "salida" and r["salida"] == "13:05"
-    marcar(db, e, en(LUNES, 13, 30))
+    marcar(db, e, en(lunes(), 13, 30))
     assert cola(db, e.alumnos[0]) == [("ingreso", "07:40"), ("salida", "13:30")]
-    assert dia_de(db, e.alumnos[0]).salida == en(LUNES, 13, 30)
+    assert dia_de(db, e.alumnos[0]).salida == en(lunes(), 13, 30)
 
 
 def test_reenvio_con_mismo_id_no_duplica(db):
     e = preparar(db, "alfa")
-    a = marcar(db, e, en(LUNES, 7, 40), id_cliente="porteria-1-0001")
-    b = marcar(db, e, en(LUNES, 7, 40), id_cliente="porteria-1-0001")
+    a = marcar(db, e, en(lunes(), 7, 40), id_cliente="porteria-1-0001")
+    b = marcar(db, e, en(lunes(), 7, 40), id_cliente="porteria-1-0001")
     assert a == b
     assert len(db.scalars(select(Marcacion)).all()) == 1
 
 
 def test_marcaciones_sin_internet_llegan_desordenadas(db):
     e = preparar(db, "alfa")
-    tarde = en(LUNES, 18, 0)  # la portería sincroniza al final del día
-    marcar(db, e, en(LUNES, 13, 0), ahora=tarde)
-    marcar(db, e, en(LUNES, 7, 50), ahora=tarde)
+    tarde = en(lunes(), 18, 0)  # la portería sincroniza al final del día
+    marcar(db, e, en(lunes(), 13, 0), ahora=tarde)
+    marcar(db, e, en(lunes(), 7, 50), ahora=tarde)
     fila = dia_de(db, e.alumnos[0])
-    assert (fila.entrada, fila.salida, fila.estado) == (en(LUNES, 7, 50), en(LUNES, 13, 0), "presente")
+    assert (fila.entrada, fila.salida, fila.estado) == (en(lunes(), 7, 50), en(lunes(), 13, 0), "presente")
     assert cola(db, e.alumnos[0]) == []  # ya no es momento de avisar "ingresó a las 7:50"
 
 
 def test_hora_adelantada_o_codigo_desconocido(db):
     e = preparar(db, "alfa")
-    lectura = asistencia.Lectura("x" * 10, en(LUNES, 9, 0), "qr", codigo=contenido_qr(e.alumnos[0].codigo))
-    assert asistencia.registrar(db, e.colegio.id, lectura, None, ahora=en(LUNES, 8, 0))["estado"] == "rechazada"
-    assert marcar(db, e, en(LUNES, 7, 40), codigo="TK1:ZZZZZZZZ")["estado"] == "desconocido"
-    assert marcar(db, e, en(LUNES, 7, 40), codigo="cualquier cosa")["estado"] == "desconocido"
+    lectura = asistencia.Lectura("x" * 10, en(lunes(), 9, 0), "qr", codigo=contenido_qr(e.alumnos[0].codigo))
+    assert asistencia.registrar(db, e.colegio.id, lectura, None, ahora=en(lunes(), 8, 0))["estado"] == "rechazada"
+    assert marcar(db, e, en(lunes(), 7, 40), codigo="TK1:ZZZZZZZZ")["estado"] == "desconocido"
+    assert marcar(db, e, en(lunes(), 7, 40), codigo="cualquier cosa")["estado"] == "desconocido"
     assert db.scalars(select(Marcacion)).all() == []
 
 
 def test_carnet_de_otro_colegio_no_se_reconoce(db):
     a, b = preparar(db, "alfa"), preparar(db, "beta")
-    r = marcar(db, a, en(LUNES, 7, 40), codigo=contenido_qr(b.alumnos[0].codigo))
+    r = marcar(db, a, en(lunes(), 7, 40), codigo=contenido_qr(b.alumnos[0].codigo))
     assert r["estado"] == "desconocido"
-    lectura = asistencia.Lectura("manual-0001", en(LUNES, 7, 40), "manual", alumno_id=b.alumnos[0].id)
-    assert asistencia.registrar(db, a.colegio.id, lectura, None, ahora=en(LUNES, 8, 0))["estado"] == "desconocido"
+    lectura = asistencia.Lectura("manual-0001", en(lunes(), 7, 40), "manual", alumno_id=b.alumnos[0].id)
+    assert asistencia.registrar(db, a.colegio.id, lectura, None, ahora=en(lunes(), 8, 0))["estado"] == "desconocido"
     assert db.scalars(select(AsistenciaAlumno)).all() == []
 
 
@@ -162,17 +160,17 @@ def test_alumno_retirado_no_marca(db):
     e = preparar(db, "alfa")
     e.alumnos[0].activo = False
     db.commit()
-    assert marcar(db, e, en(LUNES, 7, 40))["estado"] == "desconocido"
+    assert marcar(db, e, en(lunes(), 7, 40))["estado"] == "desconocido"
 
 
 def test_base_rechaza_marcacion_cruzada_o_sin_persona(db):
     a, b = preparar(db, "alfa"), preparar(db, "beta")
     db.add(Marcacion(colegio_id=a.colegio.id, id_cliente="cruzada-01", alumno_id=b.alumnos[0].id,
-                     momento=en(LUNES, 7, 40), fecha=LUNES, origen="qr", resultado="entrada"))
+                     momento=en(lunes(), 7, 40), fecha=lunes(), origen="qr", resultado="entrada"))
     with pytest.raises(IntegrityError):
         db.commit()
     db.rollback()
-    db.add(Marcacion(colegio_id=a.colegio.id, id_cliente="nadie-0001", momento=en(LUNES, 7, 40), fecha=LUNES,
+    db.add(Marcacion(colegio_id=a.colegio.id, id_cliente="nadie-0001", momento=en(lunes(), 7, 40), fecha=lunes(),
                      origen="qr", resultado="entrada"))
     with pytest.raises(IntegrityError):
         db.commit()
@@ -182,50 +180,50 @@ def test_base_rechaza_marcacion_cruzada_o_sin_persona(db):
 
 def test_faltas_despues_del_corte_y_llegada_tardia(db):
     e = preparar(db, "alfa")
-    marcar(db, e, en(LUNES, 7, 40), e.alumnos[0])
-    assert asistencia.marcar_faltas(db, LUNES, time(9, 0)) == 0  # corte: 07:45 + 90 min = 09:15
-    assert asistencia.marcar_faltas(db, LUNES, time(9, 15)) == 1
+    marcar(db, e, en(lunes(), 7, 40), e.alumnos[0])
+    assert asistencia.marcar_faltas(db, lunes(), time(9, 0)) == 0  # corte: 07:45 + 90 min = 09:15
+    assert asistencia.marcar_faltas(db, lunes(), time(9, 15)) == 1
     db.commit()
     assert dia_de(db, e.alumnos[0]).estado == "presente"
     assert dia_de(db, e.alumnos[1]).estado == "falta"
     assert cola(db, e.alumnos[1]) == [("falta", None)]
-    assert asistencia.marcar_faltas(db, LUNES, time(10, 0)) == 0  # repetir no duplica
+    assert asistencia.marcar_faltas(db, lunes(), time(10, 0)) == 0  # repetir no duplica
     db.commit()
     assert len(cola(db, e.alumnos[1])) == 1
     # Llega a las 10: queda tarde y el aviso de falta pendiente se retira.
-    r = marcar(db, e, en(LUNES, 10, 0), e.alumnos[1])
+    r = marcar(db, e, en(lunes(), 10, 0), e.alumnos[1])
     assert r["estado_dia"] == "tarde" and cola(db, e.alumnos[1]) == [("tarde", "10:00")]
 
 
 def test_sin_faltas_en_dias_no_lectivos(db):
     e = preparar(db, "alfa")
-    sabado = LUNES + timedelta(days=5)
+    sabado = lunes() + timedelta(days=5)
     assert asistencia.marcar_faltas(db, sabado) == 0
     anio = db.scalar(select(AnioEscolar))
-    db.add(DiaNoLectivo(colegio_id=e.colegio.id, anio_id=anio.id, fecha=LUNES, motivo="Feriado"))
+    db.add(DiaNoLectivo(colegio_id=e.colegio.id, anio_id=anio.id, fecha=lunes(), motivo="Feriado"))
     db.commit()
-    assert asistencia.marcar_faltas(db, LUNES) == 0
-    assert asistencia.marcar_faltas(db, LUNES + timedelta(days=1)) == 2
-    assert asistencia.marcar_faltas(db, date(HOY.year + 1, 3, 2)) == 0  # fuera del año escolar
+    assert asistencia.marcar_faltas(db, lunes()) == 0
+    assert asistencia.marcar_faltas(db, lunes() + timedelta(days=1)) == 2
+    assert asistencia.marcar_faltas(db, date(hoy().year + 1, 3, 2)) == 0  # fuera del año escolar
 
 
 def test_faltas_por_colegio_con_su_calendario_y_su_corte(client, db):
     a, b = preparar(db, "alfa"), preparar(db, "beta")
     anio_b = db.scalar(select(AnioEscolar).where(AnioEscolar.colegio_id == b.colegio.id))
-    db.add(DiaNoLectivo(colegio_id=b.colegio.id, anio_id=anio_b.id, fecha=LUNES, motivo="Aniversario"))
+    db.add(DiaNoLectivo(colegio_id=b.colegio.id, anio_id=anio_b.id, fecha=lunes(), motivo="Aniversario"))
     db.commit()
     h = auth("alfa", token(client, "alfa"))
     assert client.put("/api/asistencia/configuracion", headers=h,
                       json={"minutos_duplicado": 5, "minutos_corte_falta": 30}).status_code == 200
-    assert asistencia.marcar_faltas(db, LUNES, time(8, 20)) == 2  # alfa: corte 08:15; beta: feriado
+    assert asistencia.marcar_faltas(db, lunes(), time(8, 20)) == 2  # alfa: corte 08:15; beta: feriado
     db.commit()
     assert {f.colegio_id for f in db.scalars(select(AsistenciaAlumno))} == {a.colegio.id}
     hb = auth("beta", token(client, "beta"))
     assert client.get("/api/asistencia/configuracion", headers=hb).json()["minutos_corte_falta"] == 90
     # Solo un colegio
-    assert asistencia.marcar_faltas(db, LUNES + timedelta(days=1), colegio_id=b.colegio.id) == 2
+    assert asistencia.marcar_faltas(db, lunes() + timedelta(days=1), colegio_id=b.colegio.id) == 2
     assert {f.colegio_id for f in db.scalars(select(AsistenciaAlumno).where(
-        AsistenciaAlumno.fecha == LUNES + timedelta(days=1)))} == {b.colegio.id}
+        AsistenciaAlumno.fecha == lunes() + timedelta(days=1)))} == {b.colegio.id}
 
 
 def test_faltas_solo_de_los_turnos_cuyo_corte_acaba_de_pasar(db):
@@ -236,15 +234,15 @@ def test_faltas_solo_de_los_turnos_cuyo_corte_acaba_de_pasar(db):
     b.turno.hora_entrada, b.turno.hora_salida = time(13, 0), time(18, 0)
     db.commit()
     # Vuelta de las 09:15 a las 09:16: solo el turno mañana de alfa (corte 09:15 exacto, 90 min tras 07:45).
-    assert asistencia.turnos_por_cortar(db, LUNES, time(9, 14), time(9, 15)) == {a.colegio.id: [a.turno.id]}
-    assert asistencia.marcar_faltas(db, LUNES, time(9, 15), desde=time(9, 14)) == 2
+    assert asistencia.turnos_por_cortar(db, lunes(), time(9, 14), time(9, 15)) == {a.colegio.id: [a.turno.id]}
+    assert asistencia.marcar_faltas(db, lunes(), time(9, 15), desde=time(9, 14)) == 2
     db.commit()
     assert {f.colegio_id for f in db.scalars(select(AsistenciaAlumno))} == {a.colegio.id}
     # Vueltas en las que no corta ningún turno: nada que hacer, en ningún colegio.
-    assert asistencia.turnos_por_cortar(db, LUNES, time(9, 15), time(14, 29)) == {}
-    assert asistencia.marcar_faltas(db, LUNES, time(14, 29), desde=time(9, 15)) == 0
+    assert asistencia.turnos_por_cortar(db, lunes(), time(9, 15), time(14, 29)) == {}
+    assert asistencia.marcar_faltas(db, lunes(), time(14, 29), desde=time(9, 15)) == 0
     # La de las 14:30 toma a beta.
-    assert asistencia.marcar_faltas(db, LUNES, time(14, 30), desde=time(14, 29)) == 2
+    assert asistencia.marcar_faltas(db, lunes(), time(14, 30), desde=time(14, 29)) == 2
     db.commit()
     assert {f.colegio_id for f in db.scalars(select(AsistenciaAlumno))} == {a.colegio.id, b.colegio.id}
     # Solo avisa a los recién marcados, una vez.
@@ -289,21 +287,21 @@ def test_revision_nocturna_cubre_un_corte_adelantado_durante_el_dia(db):
     otro = preparar(db, "beta")
     db.add(ConfigAsistencia(colegio_id=a.colegio.id, minutos_corte_falta=150))  # corte 10:15
     db.commit()
-    assert asistencia.marcar_faltas(db, LUNES, time(9, 30), desde=time(9, 29)) == 0
+    assert asistencia.marcar_faltas(db, lunes(), time(9, 30), desde=time(9, 29)) == 0
     db.get(ConfigAsistencia, a.colegio.id).minutos_corte_falta = 75  # corte 09:00, ya pasó
     db.commit()
     for minuto in range(30, 59):  # el resto de la mañana: el corte nuevo quedó atrás
-        asistencia.marcar_faltas(db, LUNES, time(9, minuto + 1), desde=time(9, minuto), colegio_id=a.colegio.id)
+        asistencia.marcar_faltas(db, lunes(), time(9, minuto + 1), desde=time(9, minuto), colegio_id=a.colegio.id)
     db.commit()
     assert not db.scalars(select(AsistenciaAlumno).where(AsistenciaAlumno.colegio_id == a.colegio.id)).all()
 
-    assert asistencia.marcar_faltas(db, LUNES, time(22, 0), avisar=False) == 4  # alfa y beta (sus 2 alumnos)
+    assert asistencia.marcar_faltas(db, lunes(), time(22, 0), avisar=False) == 4  # alfa y beta (sus 2 alumnos)
     db.commit()
     assert {f.estado for f in db.scalars(select(AsistenciaAlumno).where(
         AsistenciaAlumno.colegio_id == a.colegio.id))} == {"falta"}
     assert not db.scalars(select(ColaAviso)).all()
     # Repetirla no cambia nada.
-    assert asistencia.marcar_faltas(db, LUNES, time(22, 0), avisar=False) == 0
+    assert asistencia.marcar_faltas(db, lunes(), time(22, 0), avisar=False) == 0
     assert otro.colegio.id != a.colegio.id
 
 
@@ -311,7 +309,7 @@ def test_colegio_suspendido_no_recibe_faltas(db):
     e = preparar(db, "alfa")
     e.colegio.estado = "suspendido"
     db.commit()
-    assert asistencia.marcar_faltas(db, LUNES) == 0
+    assert asistencia.marcar_faltas(db, lunes()) == 0
 
 
 def test_corte_no_pasa_de_medianoche():
@@ -414,8 +412,8 @@ def test_personal_con_turno_marca_con_su_carnet(client, db):
     r = client.put(f"/api/personal/{yo['id']}", headers=h, json={
         "nombres": yo["nombres"], "apellidos": yo["apellidos"], "rol_id": yo["rol_id"], "turno_id": e.turno.id})
     assert r.status_code == 200 and r.json()["turno_id"] == e.turno.id
-    lectura = asistencia.Lectura("personal-01", en(LUNES, 8, 0), "qr", codigo=contenido_qr(yo["codigo"], True))
-    r = asistencia.registrar(db, e.colegio.id, lectura, None, ahora=en(LUNES, 8, 1))
+    lectura = asistencia.Lectura("personal-01", en(lunes(), 8, 0), "qr", codigo=contenido_qr(yo["codigo"], True))
+    r = asistencia.registrar(db, e.colegio.id, lectura, None, ahora=en(lunes(), 8, 1))
     db.commit()
     assert r["persona"]["tipo"] == "personal" and r["estado_dia"] == "tarde" and r["minutos_tarde"] == 15
     assert db.scalars(select(ColaAviso)).all() == []  # el personal no genera avisos a familias
@@ -443,19 +441,19 @@ def test_licencia_antes_y_despues_de_la_falta(client, db):
     docente.turno_id = e.turno.id
     db.commit()
     h = auth("alfa", token(client, "alfa"))
-    martes = LUNES + timedelta(days=1)
+    martes = lunes() + timedelta(days=1)
     # Falta automática el lunes; la licencia se registra después y la corrige.
-    asistencia.marcar_faltas(db, LUNES)
+    asistencia.marcar_faltas(db, lunes())
     db.commit()
     estado = lambda d: db.scalar(select(AsistenciaPersonal.estado).where(  # noqa: E731
         AsistenciaPersonal.usuario_id == docente.id, AsistenciaPersonal.fecha == d))
-    assert estado(LUNES) == "falta"
+    assert estado(lunes()) == "falta"
     r = client.post("/api/asistencia/licencias", headers=h, json={
-        "usuario_id": docente.id, "tipo": "salud", "desde": LUNES.isoformat(), "hasta": martes.isoformat(),
+        "usuario_id": docente.id, "tipo": "salud", "desde": lunes().isoformat(), "hasta": martes.isoformat(),
         "motivo": "Descanso médico"})
     assert r.status_code == 201
     db.expire_all()
-    assert estado(LUNES) == "licencia"
+    assert estado(lunes()) == "licencia"
     asistencia.marcar_faltas(db, martes)  # con licencia vigente queda "licencia", no falta
     db.commit()
     assert estado(martes) == "licencia"
@@ -467,7 +465,7 @@ def test_licencia_antes_y_despues_de_la_falta(client, db):
     assert fila["estado"] == "licencia" and fila["licencia"] == "salud"
     assert client.delete(f"/api/asistencia/licencias/{r.json()['id']}", headers=h).status_code == 204
     db.expire_all()
-    assert estado(LUNES) == "falta" and estado(martes) == "falta"
+    assert estado(lunes()) == "falta" and estado(martes) == "falta"
 
 
 def test_licencias_aisladas_entre_colegios(client, db):
@@ -475,13 +473,13 @@ def test_licencias_aisladas_entre_colegios(client, db):
     otro = db.scalar(select(Usuario).where(Usuario.colegio_id == b.colegio.id))
     hb = auth("beta", token(client, "beta"))
     lic = client.post("/api/asistencia/licencias", headers=hb, json={
-        "usuario_id": otro.id, "tipo": "vacaciones", "desde": LUNES.isoformat(), "hasta": LUNES.isoformat()}).json()
+        "usuario_id": otro.id, "tipo": "vacaciones", "desde": lunes().isoformat(), "hasta": lunes().isoformat()}).json()
     h = auth("alfa", token(client, "alfa"))
     assert client.get("/api/asistencia/licencias", headers=h).json() == []
     assert client.delete(f"/api/asistencia/licencias/{lic['id']}", headers=h).status_code == 404
     assert client.post("/api/asistencia/licencias", headers=h, json={
-        "usuario_id": otro.id, "tipo": "salud", "desde": LUNES.isoformat(),
-        "hasta": LUNES.isoformat()}).status_code == 404
+        "usuario_id": otro.id, "tipo": "salud", "desde": lunes().isoformat(),
+        "hasta": lunes().isoformat()}).status_code == 404
     assert client.post("/api/asistencia/licencias", headers=h, json={
         "usuario_id": 1, "tipo": "salud", "desde": "2026-05-02", "hasta": "2026-05-01"}).status_code == 422
 
@@ -490,41 +488,41 @@ def test_licencias_aisladas_entre_colegios(client, db):
 
 def test_reporte_del_dia_y_del_mes(client, db):
     e = preparar(db, "alfa", alumnos=3)
-    marcar(db, e, en(LUNES, 7, 40), e.alumnos[0])
-    marcar(db, e, en(LUNES, 8, 5), e.alumnos[1])
-    asistencia.marcar_faltas(db, LUNES)
+    marcar(db, e, en(lunes(), 7, 40), e.alumnos[0])
+    marcar(db, e, en(lunes(), 8, 5), e.alumnos[1])
+    asistencia.marcar_faltas(db, lunes())
     db.commit()
     h = auth("alfa", token(client, "alfa"))
-    r = client.get(f"/api/asistencia/dia?fecha={LUNES}", headers=h).json()
+    r = client.get(f"/api/asistencia/dia?fecha={lunes()}", headers=h).json()
     assert r["lectivo"] is True
     assert r["totales"] == {"total": 3, "presente": 1, "tarde": 1, "falta": 1, "justificada": 0, "sin_registro": 0}
-    detalle = client.get(f"/api/asistencia/dia?fecha={LUNES}&seccion_id={e.seccion.id}", headers=h).json()
+    detalle = client.get(f"/api/asistencia/dia?fecha={lunes()}&seccion_id={e.seccion.id}", headers=h).json()
     assert [(x["estado"], x["entrada"]) for x in detalle["alumnos"]] == [
         ("presente", "07:40"), ("tarde", "08:05"), ("falta", None)]
-    x = client.get(f"/api/asistencia/mensual.xlsx?anio={LUNES.year}&mes={LUNES.month}", headers=h)
+    x = client.get(f"/api/asistencia/mensual.xlsx?anio={lunes().year}&mes={lunes().month}", headers=h)
     assert x.status_code == 200
     ws = load_workbook(BytesIO(x.content)).active
-    columna = [c.value for c in ws[2]].index(LUNES.day) + 1
+    columna = [c.value for c in ws[2]].index(lunes().day) + 1
     assert [ws.cell(fila, columna).value for fila in (3, 4, 5)] == ["P", "T", "F"]
     assert [c.value for c in ws[2]][-4:] == ["Asistió", "Tardanzas", "Faltas", "Justificadas"]
     assert client.get("/api/asistencia/mensual.xlsx?anio=2026&mes=13", headers=h).status_code == 422
-    xp = client.get(f"/api/asistencia/personal/mensual.xlsx?anio={LUNES.year}&mes={LUNES.month}", headers=h)
+    xp = client.get(f"/api/asistencia/personal/mensual.xlsx?anio={lunes().year}&mes={lunes().month}", headers=h)
     assert xp.status_code == 200 and load_workbook(BytesIO(xp.content)).active.title == "Personal"
-    marcas = client.get(f"/api/asistencia/marcaciones?fecha={LUNES}", headers=h).json()
+    marcas = client.get(f"/api/asistencia/marcaciones?fecha={lunes()}", headers=h).json()
     assert [m["hora"] for m in marcas] == ["08:05", "07:40"]
 
 
 def test_reportes_aislados_entre_colegios(client, db):
     a, b = preparar(db, "alfa"), preparar(db, "beta")
-    marcar(db, b, en(LUNES, 7, 40), b.alumnos[0])
+    marcar(db, b, en(lunes(), 7, 40), b.alumnos[0])
     h = auth("alfa", token(client, "alfa"))
-    r = client.get(f"/api/asistencia/dia?fecha={LUNES}", headers=h).json()
+    r = client.get(f"/api/asistencia/dia?fecha={lunes()}", headers=h).json()
     assert r["totales"]["total"] == 2 and r["totales"]["presente"] == 0
-    assert client.get(f"/api/asistencia/dia?fecha={LUNES}&seccion_id={b.seccion.id}", headers=h).status_code == 404
-    assert client.get(f"/api/asistencia/marcaciones?fecha={LUNES}", headers=h).json() == []
-    assert client.get(f"/api/asistencia/mensual.xlsx?anio={LUNES.year}&mes={LUNES.month}"
+    assert client.get(f"/api/asistencia/dia?fecha={lunes()}&seccion_id={b.seccion.id}", headers=h).status_code == 404
+    assert client.get(f"/api/asistencia/marcaciones?fecha={lunes()}", headers=h).json() == []
+    assert client.get(f"/api/asistencia/mensual.xlsx?anio={lunes().year}&mes={lunes().month}"
                       f"&seccion_id={b.seccion.id}", headers=h).status_code == 404
-    personal = client.get(f"/api/asistencia/personal/dia?fecha={LUNES}", headers=h).json()["personal"]
+    personal = client.get(f"/api/asistencia/personal/dia?fecha={lunes()}", headers=h).json()["personal"]
     assert [p["nombre"] for p in personal] == ["alfa, Dir"]
 
 
@@ -541,7 +539,7 @@ def test_motivo_de_licencia_solo_con_permiso_de_personal(client, db):
     crear_personal(db, e.colegio, "20000002", {"asistencia": "ver", "personal": "ver"})
     h = auth("alfa", token(client, "alfa"))
     client.post("/api/asistencia/licencias", headers=h, json={
-        "usuario_id": docente.id, "tipo": "salud", "desde": HOY.isoformat(), "hasta": HOY.isoformat(),
+        "usuario_id": docente.id, "tipo": "salud", "desde": hoy().isoformat(), "hasta": hoy().isoformat(),
         "motivo": "Descanso médico"})
     sin = client.get("/api/asistencia/licencias", headers=auth("alfa", token(client, "alfa", "20000001"))).json()
     con = client.get("/api/asistencia/licencias", headers=auth("alfa", token(client, "alfa", "20000002"))).json()
@@ -573,18 +571,18 @@ def test_nadie_marca_su_propia_asistencia(client, db):
 def test_marcacion_recibida_tarde_figura_como_registrada_despues(client, db):
     e = preparar(db, "alfa")
     yo = db.scalar(select(Usuario).where(Usuario.colegio_id == e.colegio.id))
-    marcar(db, e, en(LUNES, 7, 40), e.alumnos[0])
-    marcar(db, e, en(LUNES, 7, 42), e.alumnos[1])
-    marcar(db, e, en(LUNES, 7, 44), codigo=contenido_qr(yo.codigo, True))
+    marcar(db, e, en(lunes(), 7, 40), e.alumnos[0])
+    marcar(db, e, en(lunes(), 7, 42), e.alumnos[1])
+    marcar(db, e, en(lunes(), 7, 44), codigo=contenido_qr(yo.codigo, True))
     # La del primer alumno llegó a los 2 minutos; las demás, meses después (recibido_en = ahora).
     m0 = db.scalar(select(Marcacion).where(Marcacion.alumno_id == e.alumnos[0].id))
     m0.recibido_en = m0.momento + timedelta(minutes=2)
     db.commit()
     h = auth("alfa", token(client, "alfa"))
-    detalle = client.get(f"/api/asistencia/dia?fecha={LUNES}&seccion_id={e.seccion.id}", headers=h).json()
+    detalle = client.get(f"/api/asistencia/dia?fecha={lunes()}&seccion_id={e.seccion.id}", headers=h).json()
     assert [x["registrada_despues"] for x in detalle["alumnos"]] == [False, True]
-    marcas = client.get(f"/api/asistencia/marcaciones?fecha={LUNES}", headers=h).json()
+    marcas = client.get(f"/api/asistencia/marcaciones?fecha={lunes()}", headers=h).json()
     assert [(m["hora"], m["registrada_despues"]) for m in marcas] == [("07:44", True), ("07:42", True),
                                                                        ("07:40", False)]
-    personal = client.get(f"/api/asistencia/personal/dia?fecha={LUNES}", headers=h).json()["personal"]
+    personal = client.get(f"/api/asistencia/personal/dia?fecha={lunes()}", headers=h).json()["personal"]
     assert personal[0]["registrada_despues"] is True

@@ -1,5 +1,7 @@
 import ipaddress
+from datetime import datetime, timedelta
 
+import jwt.api_jwt
 import pytest
 from pydantic import ValidationError
 
@@ -118,6 +120,33 @@ def test_token_manipulado(client, db):
     crear_colegio(db, "alfa")
     tok = token(client, "alfa")
     assert client.get("/api/auth/yo", headers=auth("alfa", tok[:-2] + "xx")).status_code == 401
+
+
+def _reloj_de_jwt(monkeypatch, desfase: timedelta) -> None:
+    """Mueve el reloj con que la librería JWT revisa las horas del token (iat, exp)."""
+    class Reloj(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.now(tz) + desfase
+    monkeypatch.setattr(jwt.api_jwt, "datetime", Reloj)
+
+
+def test_token_recien_emitido_entra_aunque_el_reloj_retroceda(client, db, monkeypatch):
+    """El reloj del servidor puede retroceder un poco al sincronizarse: el token recién emitido parece emitido
+    "en el futuro". Antes se rechazaba con 401 "Sesión no válida" (fallas al azar en la suite)."""
+    crear_colegio(db, "alfa")
+    h = auth("alfa", token(client, "alfa"))
+    _reloj_de_jwt(monkeypatch, timedelta(seconds=-1))
+    assert client.get("/api/auth/yo", headers=h).status_code == 200
+
+
+def test_token_vencido_hace_mas_de_30_segundos_se_rechaza(client, db, monkeypatch):
+    from app.config import get_settings
+    crear_colegio(db, "alfa")
+    h = auth("alfa", token(client, "alfa"))
+    _reloj_de_jwt(monkeypatch, timedelta(minutes=get_settings().token_colegio_minutos, seconds=31))
+    r = client.get("/api/auth/yo", headers=h)
+    assert r.status_code == 401 and r.json() == {"detail": "Sesión no válida"}
 
 
 def test_limite_de_intentos_queda_en_la_base(client, db):
