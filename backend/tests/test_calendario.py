@@ -9,14 +9,13 @@ from sqlalchemy import select, text
 
 from app import asistencia, avisos, calendario
 from app.db import get_engine
-from app.fechas import LIMA, hoy_lima
+from app.fechas import LIMA
 from app.models import AsistenciaAlumno, ColaAviso, Colegio, DiaNoLectivo, EventoCalendario, RegistroActividad
 from app.models.colegio import INCLUIDOS
-from tests.conftest import auth, crear_familia, crear_personal, token, token_familia
+from tests.conftest import auth, crear_familia, crear_personal, hoy, token, token_familia
 from tests.test_familias import Push, suscribir
 from tests.test_pensiones import preparar as preparar_escuela
 
-HOY = hoy_lima()
 
 
 def preparar(db, sub: str, otra: bool = False):
@@ -29,7 +28,7 @@ def preparar(db, sub: str, otra: bool = False):
 
 
 def evento(client, h, titulo="Actuación", inicio: date | None = None, esperado=201, **extra) -> dict:
-    datos = {"titulo": titulo, "inicio": (inicio or HOY + timedelta(days=10)).isoformat(), "tipo": "actuacion",
+    datos = {"titulo": titulo, "inicio": (inicio or hoy() + timedelta(days=10)).isoformat(), "tipo": "actuacion",
              **extra}
     r = client.post("/api/calendario/eventos", headers=h, json=datos)
     assert r.status_code == esperado, r.text
@@ -60,7 +59,7 @@ def enviar(db, ahora: datetime | None = None) -> list[str]:
 def test_crear_editar_y_ver_en_el_mes_con_a_quien_va(client, db):
     e = preparar(db, "alfa")
     h = auth("alfa", token(client, "alfa"))
-    dia = HOY + timedelta(days=10)
+    dia = hoy() + timedelta(days=10)
     a = evento(client, h, "Aniversario", dia, hora="10:00", descripcion="  En el patio.\nTraer uniforme.  ")
     assert (a["para"], a["hora"], a["descripcion"], a["fin"], a["tipo_nombre"], a["anulado"]) == (
         "Todo el colegio", "10:00", "En el patio.\nTraer uniforme.", dia.isoformat(), "Actuación", False)
@@ -91,7 +90,7 @@ def test_crear_editar_y_ver_en_el_mes_con_a_quien_va(client, db):
 def test_anular_queda_visible_y_no_se_edita(client, db):
     e = preparar(db, "alfa")
     h = auth("alfa", token(client, "alfa"))
-    dia = HOY + timedelta(days=5)
+    dia = hoy() + timedelta(days=5)
     x = evento(client, h, "Feria", dia)
     assert client.post(f"/api/calendario/eventos/{x['id']}/anular", headers=h, json={"motivo": " "}).status_code == 422
     r = client.post(f"/api/calendario/eventos/{x['id']}/anular", headers=h, json={"motivo": "Lluvia"})
@@ -124,7 +123,7 @@ def test_secciones_de_otro_anio_o_colegio_no_se_aceptan(client, db):
 def test_dias_no_lectivos_en_el_calendario_y_siguen_evitando_faltas(client, db):
     e = preparar(db, "alfa")
     h = auth("alfa", token(client, "alfa"))
-    feriado = HOY + timedelta(days=3)
+    feriado = hoy() + timedelta(days=3)
     r = client.post("/api/padron/dias-no-lectivos", headers=h, json={"desde": feriado.isoformat(),
                                                                        "motivo": "Feriado regional"})
     assert r.status_code in (200, 201), r.text
@@ -150,7 +149,7 @@ def test_dias_no_lectivos_en_el_calendario_y_siguen_evitando_faltas(client, db):
 def test_la_familia_solo_ve_lo_del_colegio_su_nivel_o_su_seccion(client, db):
     e = preparar(db, "alfa", otra=True)
     h = auth("alfa", token(client, "alfa"))
-    dia = HOY + timedelta(days=7)
+    dia = hoy() + timedelta(days=7)
     evento(client, h, "Todos", dia)
     evento(client, h, "Primaria", dia, alcance="niveles", niveles=[e.primaria.id])
     evento(client, h, "Secundaria", dia, alcance="niveles", niveles=[e.secundaria.id])
@@ -178,7 +177,7 @@ def test_aviso_al_publicar_solo_con_avisar_y_a_quien_va(client, db):
     h = auth("alfa", token(client, "alfa"))
     suscribir(client, "alfa")
     suscribir(client, "alfa", dni="42222222", endpoint="https://push.example/2")
-    dia = date(HOY.year + 1, 3, 13) if HOY.month > 2 else HOY + timedelta(days=20)
+    dia = date(hoy().year + 1, 3, 13) if hoy().month > 2 else hoy() + timedelta(days=20)
     evento(client, h, "Sin aviso", dia)
     assert cola(db) == []
     x = evento(client, h, "Paseo", dia, hora="08:30", tipo="salida", alcance="secciones", secciones=[e.s2.id],
@@ -209,11 +208,15 @@ def test_aviso_respeta_el_horario_sin_molestar_y_se_apaga_en_configuracion(clien
     h = auth("alfa", token(client, "alfa"))
     suscribir(client, "alfa")
     evento(client, h, "Actuación", avisar=True)
-    noche = datetime.combine(HOY, time(23, 0), LIMA).astimezone(UTC)
+    noche = datetime.combine(hoy(), time(23, 0), LIMA).astimezone(UTC)
+    # El aviso se encola con la hora real: si la prueba corre después de las 23:00, aún no le tocaría a las 23:00.
+    [aviso] = cola(db)
+    aviso.procesar_desde = noche - timedelta(minutes=1)
+    db.commit()
     assert enviar(db, noche) == []
     [aviso] = cola(db)
     assert aviso.estado == "pendiente"
-    assert aviso.procesar_desde == datetime.combine(HOY + timedelta(days=1), time(6, 0), LIMA).astimezone(UTC)
+    assert aviso.procesar_desde == datetime.combine(hoy() + timedelta(days=1), time(6, 0), LIMA).astimezone(UTC)
     assert enviar(db, aviso.procesar_desde + timedelta(minutes=1)) != []
     # Apagado en Configuración › Avisos: no sale (ni al publicar ni el recordatorio).
     r = client.put("/api/configuracion/avisos", headers=h, json={"tipos": {"calendario": False}, "silencio_desde": "21:00", "silencio_hasta": "06:00"})
@@ -221,8 +224,8 @@ def test_aviso_respeta_el_horario_sin_molestar_y_se_apaga_en_configuracion(clien
     evento(client, h, "Otro", avisar=True)
     assert len(cola(db)) == 1
     db.expire_all()
-    manana = evento(client, h, "Mañana", HOY + timedelta(days=5), avisar=True)
-    assert calendario.revisar_recordatorios(db, HOY + timedelta(days=4)) == 0
+    manana = evento(client, h, "Mañana", hoy() + timedelta(days=5), avisar=True)
+    assert calendario.revisar_recordatorios(db, hoy() + timedelta(days=4)) == 0
     assert len(cola(db)) == 1 and manana
 
 
@@ -230,7 +233,7 @@ def test_recordatorio_del_dia_anterior_solo_con_avisar_y_sin_repetir(client, db)
     e = preparar(db, "alfa")
     h = auth("alfa", token(client, "alfa"))
     suscribir(client, "alfa")
-    dia = HOY + timedelta(days=6)
+    dia = hoy() + timedelta(days=6)
     con = evento(client, h, "Actuación", dia, hora="09:00", avisar=True)
     evento(client, h, "Sin avisar", dia)
     enviar(db)  # sale el aviso de publicación
@@ -253,9 +256,9 @@ def test_evento_de_hoy_o_manana_solo_lleva_el_aviso_de_publicacion(client, db):
     e = preparar(db, "alfa")
     h = auth("alfa", token(client, "alfa"))
     suscribir(client, "alfa")
-    evento(client, h, "Mañana", HOY + timedelta(days=1), avisar=True)
-    evento(client, h, "Pasó", HOY - timedelta(days=3), avisar=True)  # ya terminó: sin aviso
-    assert calendario.revisar_recordatorios(db, HOY) == 0
+    evento(client, h, "Mañana", hoy() + timedelta(days=1), avisar=True)
+    evento(client, h, "Pasó", hoy() - timedelta(days=3), avisar=True)  # ya terminó: sin aviso
+    assert calendario.revisar_recordatorios(db, hoy()) == 0
     assert [a.datos["que"] for a in cola(db)] == ["publicado"]
     assert e
 
@@ -266,7 +269,7 @@ def test_anular_no_manda_recordatorio_y_descarta_lo_pendiente(client, db):
     db.commit()
     h = auth("alfa", token(client, "alfa"))
     suscribir(client, "alfa")
-    dia = HOY + timedelta(days=4)
+    dia = hoy() + timedelta(days=4)
     x = evento(client, h, "Paseo", dia, avisar=True)
     [aviso] = cola(db)
     assert aviso.estado == "pendiente"
@@ -280,7 +283,7 @@ def test_anular_no_manda_recordatorio_y_descarta_lo_pendiente(client, db):
 def test_recordatorio_no_sale_con_el_modulo_apagado(client, db):
     e = preparar(db, "alfa")
     h = auth("alfa", token(client, "alfa"))
-    dia = HOY + timedelta(days=5)
+    dia = hoy() + timedelta(days=5)
     evento(client, h, "Actuación", dia, avisar=True)
     e.colegio.modulos_apagados = ["calendario"]
     db.commit()
@@ -292,7 +295,7 @@ def test_recordatorio_no_sale_con_el_modulo_apagado(client, db):
 def test_pdf_del_mes(client, db):
     e = preparar(db, "alfa")
     h = auth("alfa", token(client, "alfa"))
-    dia = HOY + timedelta(days=2)
+    dia = hoy() + timedelta(days=2)
     evento(client, h, "Aniversario del colegio con un título bastante largo para recortar", dia, hora="10:00")
     db.add(DiaNoLectivo(colegio_id=e.colegio.id, anio_id=e.anio.id, fecha=dia + timedelta(days=1), motivo="Feriado"))
     db.commit()
@@ -369,7 +372,7 @@ def test_aislamiento_entre_colegios(client, db):
     b = preparar(db, "beta")
     ha = auth("alfa", token(client, "alfa"))
     hb = auth("beta", token(client, "beta"))
-    dia = HOY + timedelta(days=8)
+    dia = hoy() + timedelta(days=8)
     x = evento(client, ha, "Solo de alfa", dia, avisar=True)
     suscribir(client, "beta")
     # Beta no lo ve en el mes, ni en próximos, ni en el PDF, ni con el id adivinado.
@@ -425,10 +428,10 @@ def test_inicio_del_panel_muestra_los_tres_proximos(client, db):
     e = preparar(db, "alfa")
     h = auth("alfa", token(client, "alfa"))
     for i, titulo in enumerate(["Uno", "Dos", "Tres", "Cuatro"], 1):
-        evento(client, h, titulo, HOY + timedelta(days=i))
-    x = evento(client, h, "Anulado", HOY)
+        evento(client, h, titulo, hoy() + timedelta(days=i))
+    x = evento(client, h, "Anulado", hoy())
     client.post(f"/api/calendario/eventos/{x['id']}/anular", headers=h, json={"motivo": "x"})
-    evento(client, h, "Pasado", HOY - timedelta(days=2))
+    evento(client, h, "Pasado", hoy() - timedelta(days=2))
     assert [x["titulo"] for x in client.get("/api/panel/resumen", headers=h).json()["calendario"]] == [
         "Uno", "Dos", "Tres"]
     crear_personal(db, e.colegio, "20000003", {"asistencia": "ver"})

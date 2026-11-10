@@ -64,10 +64,15 @@ def emitir_token(tipo: TipoToken, sub: int, version_sesion: int, minutos: int, *
     return jwt.encode(datos, _llave(tipo), algorithm=ALGORITMO)
 
 
+# Margen para las horas del token (iat, exp): si el reloj del servidor retrocede un poco al sincronizarse, un
+# token recién emitido parecería "del futuro" y se rechazaría con "Sesión no válida".
+MARGEN_RELOJ_SEGUNDOS = 30
+
+
 def leer_token(tipo: TipoToken, token: str) -> dict | None:
     try:
         return jwt.decode(
-            token, _llave(tipo), algorithms=[ALGORITMO], audience=tipo,
+            token, _llave(tipo), algorithms=[ALGORITMO], audience=tipo, leeway=MARGEN_RELOJ_SEGUNDOS,
             options={"require": ["sub", "aud", "exp", "ver"]},
         )
     except jwt.PyJWTError:

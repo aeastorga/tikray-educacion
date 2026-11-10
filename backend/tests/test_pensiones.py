@@ -15,16 +15,15 @@ from sqlalchemy.exc import IntegrityError
 
 from app import avisos, pensiones
 from app.db import get_engine
-from app.fechas import LIMA, hoy_lima
+from app.fechas import LIMA
 from app.main import app
 from app.models import (Alumno, AlumnoApoderado, AnioEscolar, Apoderado, ColaAviso, Colegio, ConfigPensiones,
                         CuotaAlumno, CuotaProgramada, Gasto, Grado, Matricula, Nivel, Pago, PagoDetalle,
                         RegistroActividad, Seccion, SuscripcionPush, Turno)
 from app.models.colegio import CONTRATABLES
 from app.routers.pensiones import desde_vencimiento
-from tests.conftest import auth, crear_colegio, crear_familia, crear_personal, token, token_familia
+from tests.conftest import auth, crear_colegio, crear_familia, crear_personal, hoy, token, token_familia
 
-HOY = hoy_lima()
 D = Decimal
 PDF = b"%PDF-1.4\n%prueba\n"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 20
@@ -52,8 +51,8 @@ class Escuela:
 def preparar(db, sub: str, dni_madre: str = "41234567") -> Escuela:
     c = crear_colegio(db, sub, modulos_contratados=list(CONTRATABLES))  # pensiones y caja se contratan aparte
     # Año escolar que rodea a hoy, para tener cuotas vencidas y por vencer.
-    anio = AnioEscolar(colegio_id=c.id, anio=HOY.year, inicio=HOY - timedelta(days=200),
-                       fin=HOY + timedelta(days=200), dias_semana="1234567", activo=True)
+    anio = AnioEscolar(colegio_id=c.id, anio=hoy().year, inicio=hoy() - timedelta(days=200),
+                       fin=hoy() + timedelta(days=200), dias_semana="1234567", activo=True)
     prim, secu = Nivel(colegio_id=c.id, nombre="Primaria", orden=1), Nivel(colegio_id=c.id, nombre="Secundaria", orden=2)
     turno = Turno(colegio_id=c.id, nombre="Mañana", hora_entrada=time(0, 5), tolerancia_minutos=0,
                   hora_salida=time(23, 0))
@@ -120,7 +119,7 @@ def armar(client, h, e, monto="350.50", vences=(-40, -10, 3, 30)) -> dict:
     montos(client, h, c["id"], [{"nivel_id": e.primaria.id, "monto": monto},
                                 {"nivel_id": e.secundaria.id, "monto": "420.00"}])
     for i, dias in enumerate(vences, 1):
-        c = linea(client, h, c["id"], i, HOY + timedelta(days=dias), f"Cuota {i}")
+        c = linea(client, h, c["id"], i, hoy() + timedelta(days=dias), f"Cuota {i}")
     r = client.post("/api/pensiones/generar", headers=h)
     assert r.status_code == 200, r.text
     return c
@@ -164,7 +163,7 @@ def test_montos_no_repiten_grado_y_el_grado_manda_sobre_el_nivel(client, db, e, 
         {"grado_id": e.g1.id, "nivel_id": e.primaria.id, "monto": "300"}]})
     assert r.status_code == 422
     montos(client, h, c["id"], [{"nivel_id": e.primaria.id, "monto": "350.00"}, {"grado_id": e.g2.id, "monto": "380.25"}])
-    linea(client, h, c["id"], 1, HOY + timedelta(days=5))
+    linea(client, h, c["id"], 1, hoy() + timedelta(days=5))
     client.post("/api/pensiones/generar", headers=h)
     assert cuotas(client, h, e.a1.id)[0]["monto"] == "350.00"  # 1°: el del nivel
     assert cuotas(client, h, e.a2.id)[0]["monto"] == "380.25"  # 2°: el del grado manda
@@ -182,7 +181,7 @@ def test_vencimiento_dentro_del_anio_escolar_y_serie(client, e, h):
                     json={"numero": 1, "mes": "X", "vence": (e.anio.fin + timedelta(days=1)).isoformat()})
     assert r.status_code == 422
     # Serie de meses del año calendario del año escolar: vence el día pedido o el último del mes.
-    meses = [m for m in range(1, 13) if date(HOY.year, m, 1) >= e.anio.inicio and date(HOY.year, m, 28) <= e.anio.fin]
+    meses = [m for m in range(1, 13) if date(hoy().year, m, 1) >= e.anio.inicio and date(hoy().year, m, 28) <= e.anio.fin]
     desde, hasta = meses[0], meses[2]
     r = client.post(f"/api/pensiones/conceptos/{c['id']}/cronograma/serie", headers=h,
                     json={"desde": desde, "hasta": hasta, "dia": 31})
@@ -338,7 +337,7 @@ def test_caja_de_otro_dia_obliga_a_cerrarla(client, db, e, h):
     armar(client, h, e)
     caja = abrir(client, h)
     from app.models import CajaSesion
-    db.get(CajaSesion, caja["id"]).fecha = HOY - timedelta(days=1)
+    db.get(CajaSesion, caja["id"]).fecha = hoy() - timedelta(days=1)
     db.commit()
     c = cuotas(client, h, e.a1.id)
     r = cobrar(client, h, e.a1.id, [(c[0]["id"], "10")])
@@ -483,7 +482,7 @@ def test_caja_cerrada_no_deja_anular_al_cajero_pero_si_al_administrador(client, 
 # --- Gastos -----------------------------------------------------------------------------------------
 
 def _gasto(client, h, categoria_id, archivo=None, **extra):
-    datos = {"fecha": HOY.isoformat(), "categoria_id": categoria_id, "descripcion": "Recibo de luz",
+    datos = {"fecha": hoy().isoformat(), "categoria_id": categoria_id, "descripcion": "Recibo de luz",
              "monto": "120.40", "medio": "transferencia", "comprobante_tipo": "Recibo", "comprobante_numero": "001-9",
              **extra}
     return client.post("/api/caja/gastos", headers=h, data={"datos": json.dumps(datos)},
@@ -648,12 +647,12 @@ def _cobros(db, colegio) -> list[ColaAviso]:
 
 def test_aviso_de_cobro_uno_por_apoderado_y_dia_sin_repetir(client, db, e, h):
     armar(client, h, e, vences=(-10, 0, 3, 30))
-    assert pensiones.revisar_cobros(db, HOY) == 1  # la madre: a1 y a2, la que vence hoy y la de 3 días
+    assert pensiones.revisar_cobros(db, hoy()) == 1  # la madre: a1 y a2, la que vence hoy y la de 3 días
     db.expire_all()
     cola = _cobros(db, e.colegio)
     assert len(cola) == 1 and cola[0].apoderado_id == e.madre.id
     assert len(cola[0].datos["cuotas"]) == 4 and "4 cuotas" in cola[0].datos["mensaje"]
-    assert pensiones.revisar_cobros(db, HOY) == 0  # mismo día: nada nuevo
+    assert pensiones.revisar_cobros(db, hoy()) == 0  # mismo día: nada nuevo
     marcadas = db.scalars(select(CuotaAlumno).where(CuotaAlumno.alumno_id == e.a1.id)).all()
     assert sum(c.aviso_previo_en is not None for c in marcadas) == 1
     assert sum(c.aviso_vencido_en is not None for c in marcadas) == 1
@@ -667,7 +666,7 @@ def test_aviso_de_cobro_no_sale_si_ya_pago_o_si_el_administrador_lo_apago(client
     for a in (e.a1, e.a2):
         c = cuotas(client, h, a.id)
         cobrar(client, h, a.id, [(c[1]["id"], c[1]["saldo"]), (c[2]["id"], c[2]["saldo"])])
-    assert pensiones.revisar_cobros(db, HOY) == 0  # a1 y a2 pagaron: no hay a quién recordar
+    assert pensiones.revisar_cobros(db, hoy()) == 0  # a1 y a2 pagaron: no hay a quién recordar
 
 
 def test_aviso_de_cobro_apagado_por_el_administrador(client, db, e, h):
@@ -676,9 +675,9 @@ def test_aviso_de_cobro_apagado_por_el_administrador(client, db, e, h):
         "tipos": {"cobro": False}, "silencio_desde": "21:00", "silencio_hasta": "06:00"})
     assert r.status_code == 200 and r.json()["tipos"]["cobro"] is False
     db.expire_all()
-    assert pensiones.revisar_cobros(db, HOY) == 0
+    assert pensiones.revisar_cobros(db, hoy()) == 0
     # Uno que ya estaba en la cola tampoco sale.
-    db.add(ColaAviso(colegio_id=e.colegio.id, tipo="cobro", apoderado_id=e.madre.id, fecha=HOY,
+    db.add(ColaAviso(colegio_id=e.colegio.id, tipo="cobro", apoderado_id=e.madre.id, fecha=hoy(),
                      datos={"mensaje": "x"}))
     db.commit()
     avisos.procesar_cola(db, enviar=lambda sus, m: "ok")
@@ -690,8 +689,8 @@ def test_aviso_de_cobro_respeta_el_horario_sin_molestar(client, db, e, h):
     db.commit()
     armar(client, h, e, vences=(-10, 0, 3, 30))
     _push(db, e.madre)
-    pensiones.revisar_cobros(db, HOY)
-    noche = datetime.combine(HOY, time(22, 30), LIMA).astimezone(UTC)
+    pensiones.revisar_cobros(db, hoy())
+    noche = datetime.combine(hoy(), time(22, 30), LIMA).astimezone(UTC)
     enviados = []
     db.expire_all()
     aviso = _cobros(db, e.colegio)[0]
@@ -701,7 +700,7 @@ def test_aviso_de_cobro_respeta_el_horario_sin_molestar(client, db, e, h):
     db.expire_all()
     aviso = _cobros(db, e.colegio)[0]
     assert enviados == [] and aviso.estado == "pendiente"
-    manana = datetime.combine(HOY + timedelta(days=1), time(6, 0), LIMA).astimezone(UTC)
+    manana = datetime.combine(hoy() + timedelta(days=1), time(6, 0), LIMA).astimezone(UTC)
     assert aviso.procesar_desde == manana
     avisos.procesar_cola(db, enviar=lambda sus, m: enviados.append(m) or "ok", ahora=manana + timedelta(minutes=1))
     assert len(enviados) == 1 and enviados[0]["url"] == "/familia/pagos"
@@ -783,9 +782,9 @@ def test_demo_trae_pagos_variados_y_consistentes(db):
     lista = db.scalars(select(CuotaAlumno).where(CuotaAlumno.colegio_id == cid)).all()
     assert all(c.pagado == pagado.get(c.id, 0) for c in lista)
     cfg = pensiones.config(db, cid)
-    estados = {pensiones.situacion(c, db.get(CuotaProgramada, c.cuota_programada_id).vence, cfg, HOY).estado
+    estados = {pensiones.situacion(c, db.get(CuotaProgramada, c.cuota_programada_id).vence, cfg, hoy()).estado
                for c in lista}
-    if HOY.month >= 4:  # con varias cuotas vencidas ya hay de todo
+    if hoy().month >= 4:  # con varias cuotas vencidas ya hay de todo
         assert {"pagada", "vencida", "pendiente"} <= estados
     assert db.scalar(select(func.count()).select_from(Gasto).where(Gasto.colegio_id == cid)) > 0
 
@@ -860,16 +859,16 @@ def test_anular_gastos_con_la_misma_regla(client, db, e, h):
         return client.post(f"/api/caja/gastos/{g['id']}/anular", headers=cabecera, json={"motivo": "Duplicado"})
 
     # Del mismo día: quien lo registró sí; otro sin casilla no.
-    hoy = _gasto(client, quien, servicios).json()
-    r = anular(otro, hoy)
+    del_dia = _gasto(client, quien, servicios).json()
+    r = anular(otro, del_dia)
     assert r.status_code == 403 and "quien lo registró" in r.json()["detail"]
-    assert anular(quien, hoy).status_code == 200
+    assert anular(quien, del_dia).status_code == 200
     # De un día anterior: quien lo registró ya no; un rol con la casilla sí.
-    ayer = _gasto(client, quien, servicios, fecha=(HOY - timedelta(days=1)).isoformat()).json()
+    ayer = _gasto(client, quien, servicios, fecha=(hoy() - timedelta(days=1)).isoformat()).json()
     r = anular(quien, ayer)
     assert r.status_code == 403 and "día anterior" in r.json()["detail"]
     assert anular(autorizado, ayer).status_code == 200
-    antes = _gasto(client, quien, servicios, fecha=(HOY - timedelta(days=3)).isoformat()).json()
+    antes = _gasto(client, quien, servicios, fecha=(hoy() - timedelta(days=3)).isoformat()).json()
     assert anular(h, antes).status_code == 200  # el administrador siempre
 
 
@@ -916,7 +915,7 @@ def test_excel_sin_si_deja_al_apoderado_1_aunque_el_2_ya_exista_por_un_hermano(c
 
 
 def test_vencimiento_hasta_3_meses_antes_del_inicio_de_clases(client, db, e, h):
-    e.anio.inicio = date(HOY.year, 3, 1)
+    e.anio.inicio = date(hoy().year, 3, 1)
     db.commit()
     c = concepto(client, h, "Matrícula", "matricula")
 
@@ -924,14 +923,14 @@ def test_vencimiento_hasta_3_meses_antes_del_inicio_de_clases(client, db, e, h):
         return client.post(f"/api/pensiones/conceptos/{c['id']}/cronograma", headers=h,
                            json={"numero": 1, "mes": "Matrícula", "vence": vence.isoformat()})
 
-    assert agregar(date(HOY.year - 1, 11, 30)).status_code == 422  # noviembre del año anterior: no
+    assert agregar(date(hoy().year - 1, 11, 30)).status_code == 422  # noviembre del año anterior: no
     r = agregar(e.anio.fin + timedelta(days=1))  # después del fin: no
     assert r.status_code == 422 and "3 meses antes del inicio" in r.json()["detail"]
-    assert agregar(date(HOY.year - 1, 12, 1)).status_code == 201  # justo 3 meses antes: sí
+    assert agregar(date(hoy().year - 1, 12, 1)).status_code == 201  # justo 3 meses antes: sí
     r = client.put(f"/api/pensiones/cronograma/{client.get('/api/pensiones/conceptos', headers=h).json()['conceptos'][0]['cronograma'][0]['id']}",
-                   headers=h, json={"numero": 1, "mes": "Matrícula", "vence": date(HOY.year, 1, 15).isoformat()})
+                   headers=h, json={"numero": 1, "mes": "Matrícula", "vence": date(hoy().year, 1, 15).isoformat()})
     assert r.status_code == 200, r.text  # enero, antes de marzo: sí
-    assert client.get("/api/pensiones/conceptos", headers=h).json()["anio"]["vence_desde"] == f"{HOY.year - 1}-12-01"
+    assert client.get("/api/pensiones/conceptos", headers=h).json()["anio"]["vence_desde"] == f"{hoy().year - 1}-12-01"
     assert desde_vencimiento(date(2026, 5, 31)) == date(2026, 2, 28)  # el día que no existe: último del mes
 
 
