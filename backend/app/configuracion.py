@@ -20,7 +20,8 @@ CATEGORIAS_GASTO_POR_DEFECTO = ("Servicios", "Materiales", "Mantenimiento", "Pla
 AVISO_DE_COLA = {"ingreso": ("ingreso", "asistencia"), "tarde": ("tardanza", "asistencia"),
                  "falta": ("falta", "asistencia"), "salida": ("salida", "asistencia"),
                  "cuaderno": ("cuaderno", "cuaderno"), "cobro": ("cobro", "pensiones"),
-                 "calendario": ("calendario", "calendario")}
+                 "calendario": ("calendario", "calendario"),
+                 "autorizar": ("autorizaciones", "autorizaciones")}
 
 
 def crear_categorias_por_defecto(db: Session, colegio_id: int) -> None:

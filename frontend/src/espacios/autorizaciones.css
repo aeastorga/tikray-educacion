@@ -1,0 +1,56 @@
+/* Autorizaciones (panel). Todo sale de los tokens del tema, para que se lea en claro y oscuro. */
+.form-autorizacion { display: grid; gap: 12px; margin-bottom: 16px; }
+.form-autorizacion label { display: grid; gap: 4px; }
+.form-autorizacion .fila-form { margin-top: 0; }
+.form-autorizacion .fila-form > label { flex: 1 1 180px; }
+.form-autorizacion textarea { min-height: 88px; resize: vertical; }
+.form-autorizacion fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; min-width: 0; }
+.form-autorizacion fieldset:disabled { opacity: .7; }
+.form-autorizacion legend { font-weight: 600; margin-bottom: 4px; padding: 0; }
+.form-autorizacion .opciones-para { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.form-autorizacion .opciones-para label, .form-autorizacion .destinos label {
+  display: flex; flex-direction: row; align-items: center; gap: 8px; color: var(--texto); font-weight: 500;
+}
+.form-autorizacion .opciones-para input, .form-autorizacion .destinos input { flex: none; }
+.form-autorizacion .destinos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 12px;
+  padding: 10px 12px; border: 1px solid var(--borde); border-radius: var(--radio-chico); max-height: 260px; overflow: auto; }
+.form-autorizacion .destinos h5 { grid-column: 1 / -1; margin: 6px 0 0; font-size: .8rem; color: var(--tenue);
+  text-transform: uppercase; letter-spacing: .03em; }
+.form-autorizacion .destinos h5:first-child { margin-top: 0; }
+
+.elegir-alumnos { display: grid; gap: 8px; }
+.elegir-alumnos .chips { margin: 0; padding: 0; list-style: none; }
+.elegir-alumnos .chips li {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border-radius: 999px; font-size: .85rem;
+  background: var(--acento-suave); color: var(--texto); max-width: 100%;
+}
+.elegir-alumnos .chips button {
+  border: 0; background: none; color: inherit; font-size: 1.1rem; line-height: 1; width: 24px; height: 24px; border-radius: 999px; cursor: pointer;
+}
+.elegir-alumnos .chips button:hover { background: var(--fondo); }
+.resultados-alumnos { margin: 0; padding: 6px 10px; list-style: none; border: 1px solid var(--borde); border-radius: var(--radio-chico);
+  display: grid; gap: 4px; max-height: 220px; overflow: auto; }
+
+.barra-respuestas { display: grid; gap: 4px; min-width: 120px; }
+.barra-pista { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--fondo); border: 1px solid var(--borde); }
+.barra-pista .si { background: var(--bien); }
+.barra-pista .no { background: var(--falta-barra); }
+.barra-respuestas small { color: var(--tenue); font-variant-numeric: tabular-nums; }
+
+.autorizaciones .volver { margin-bottom: 4px; }
+.detalle-autorizacion { display: grid; gap: 10px; margin-bottom: 12px; }
+.datos-autorizacion { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 0; }
+.datos-autorizacion dt { font-size: .8rem; color: var(--tenue); }
+.datos-autorizacion dd { margin: 0; font-weight: 600; }
+.detalle-autorizacion .descripcion { margin: 0; white-space: pre-line; }
+.aviso-anulada { margin: 0; padding: 8px 12px; border-radius: var(--radio-chico); background: var(--falta-fondo); color: var(--falta-texto); font-weight: 600; }
+.barra-acciones, .barra-descargas { flex-wrap: wrap; margin: 4px 0 12px; }
+.barra-descargas { margin-top: 16px; }
+
+.seccion-autorizacion { margin-top: 18px; }
+.seccion-autorizacion header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
+.seccion-autorizacion h3 { margin: 0; font-size: 1.05rem; }
+.seccion-autorizacion header .acciones { margin-left: auto; gap: 12px; }
+.historial-respuestas { margin-top: 4px; font-size: .85rem; }
+.historial-respuestas summary { cursor: pointer; color: var(--acento-texto); }
+.historial-respuestas ul { margin: 4px 0 0; padding-left: 18px; color: var(--tenue); }

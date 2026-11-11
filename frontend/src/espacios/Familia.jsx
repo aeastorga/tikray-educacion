@@ -7,6 +7,7 @@ import { DetalleCuaderno, PedidoCuaderno } from '../familia/Cuaderno.jsx'
 import PagosFamilia from '../familia/Pagos.jsx'
 import RecojoFamilia from '../familia/Recojo.jsx'
 import CalendarioFamilia from '../familia/Calendario.jsx'
+import AutorizacionesFamilia from '../familia/Autorizaciones.jsx'
 import Reunion from '../familia/Reunion.jsx'
 import { hayPasskeys, usarPasskey } from '../familia/webauthn.js'
 import Acceso from './Acceso.jsx'
@@ -28,6 +29,7 @@ export default function Familia({ colegio }) {
         <Route path="pagos" element={<PagosFamilia />} />
         <Route path="recojo" element={<RecojoFamilia />} />
         <Route path="calendario" element={<CalendarioFamilia />} />
+        <Route path="autorizaciones" element={<AutorizacionesFamilia />} />
         <Route path="perfil" element={<Perfil />} />
         <Route path="cuaderno/nuevo/:tipo" element={<PedidoCuaderno />} />
         <Route path="cuaderno/:id" element={<DetalleCuaderno />} />

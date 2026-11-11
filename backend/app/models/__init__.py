@@ -1,5 +1,7 @@
 from app.models.asistencia import (AsistenciaAlumno, AsistenciaPersonal, ColaAviso, ConfigAsistencia,
                                    LicenciaPersonal, Marcacion)
+from app.models.autorizaciones import (AlumnoAutorizacion, Autorizacion, DestinoAutorizacion,
+                                        RespuestaAutorizacion)
 from app.models.calendario import DestinoEvento, EventoCalendario
 from app.models.colegio import Colegio
 from app.models.configuracion import CategoriaIncidencia, PlantillaComunicado, RegistroActividad
@@ -25,6 +27,7 @@ __all__ = [
     "FichaReunion", "ReunionPadres",
     "AutorizacionRecojoDia", "AutorizadoRecojo", "Recojo",
     "DestinoEvento", "EventoCalendario",
+    "AlumnoAutorizacion", "Autorizacion", "DestinoAutorizacion", "RespuestaAutorizacion",
     "AdjuntoCuaderno", "DestinoCuaderno", "EntradaCuaderno", "MensajeCuaderno", "SeccionDocente",
     "AdminPlataforma", "Alumno", "AlumnoApoderado", "AnioEscolar", "Apoderado", "AsistenciaAlumno",
     "AsistenciaPersonal", "CambioApoderado", "ColaAviso", "Colegio", "ConfigAsistencia", "ConfigFamilias",

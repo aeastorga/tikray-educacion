@@ -10,11 +10,13 @@ COLOR = r"^#[0-9a-fA-F]{6}$"
 ESTADOS = ("prueba", "activo", "suspendido")
 GESTIONES = ("particular", "estatal")
 # Módulos que se contratan aparte; el resto (configuración, roles, personal, padrón) viene siempre.
-CONTRATABLES = ("asistencia", "cuaderno", "familias", "reuniones", "pensiones", "caja", "recojo", "calendario")
-# Lo que trae un colegio nuevo; pensiones, caja, recojo seguro y calendario escolar se contratan aparte.
+CONTRATABLES = ("asistencia", "cuaderno", "familias", "reuniones", "pensiones", "caja", "recojo", "calendario",
+               "autorizaciones")
+# Lo que trae un colegio nuevo; pensiones, caja, recojo seguro, calendario escolar y autorizaciones se contratan
+# aparte.
 INCLUIDOS = ("asistencia", "cuaderno", "familias", "reuniones")
 # Avisos a los padres que el administrador puede apagar uno por uno.
-TIPOS_AVISO = ("ingreso", "tardanza", "falta", "salida", "cuaderno", "cobro", "calendario")
+TIPOS_AVISO = ("ingreso", "tardanza", "falta", "salida", "cuaderno", "cobro", "calendario", "autorizaciones")
 
 
 class Colegio(Base):
@@ -71,7 +73,7 @@ class Colegio(Base):
     avisos_tipos: Mapped[dict] = mapped_column(
         JSONB, default=lambda: {t: True for t in TIPOS_AVISO},
         server_default='{"ingreso": true, "tardanza": true, "falta": true, "salida": true, "cuaderno": true, '
-                       '"cobro": true, "calendario": true}')
+                       '"cobro": true, "calendario": true, "autorizaciones": true}')
     # Horario sin molestar (hora de Lima): los avisos del cuaderno esperan a que termine.
     silencio_desde: Mapped[time] = mapped_column(Time, default=time(21, 0), server_default="21:00")
     silencio_hasta: Mapped[time] = mapped_column(Time, default=time(6, 0), server_default="06:00")

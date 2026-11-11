@@ -26,7 +26,7 @@ MAX_INTENTOS = 5
 # Un aviso que no pudo salir en este tiempo ya no sirve ("ingresó a las 7:40" a la noche).
 VIGENCIA = timedelta(hours=6)
 # Respetan el horario sin molestar (la asistencia sale siempre) y solo llegan a quien ya tiene acceso.
-ESPERAN_SILENCIO = ("cuaderno", "cobro", "calendario")
+ESPERAN_SILENCIO = ("cuaderno", "cobro", "calendario", "autorizar")
 
 # Resultado de enviar a un navegador: "ok", "expirada" (el navegador la dio de baja) o "error".
 Enviador = Callable[[SuscripcionPush, dict], str]
@@ -71,6 +71,8 @@ def mensaje(aviso: ColaAviso, colegio: Colegio, alumno: Alumno | None) -> dict:
         titulo, cuerpo = colegio.nombre, aviso.datos.get("mensaje", "Tienes cuotas por pagar.")
     elif aviso.tipo == "calendario":
         titulo, cuerpo = colegio.nombre, aviso.datos.get("mensaje", "Hay una novedad en el calendario.")
+    elif aviso.tipo == "autorizar":
+        titulo, cuerpo = colegio.nombre, aviso.datos.get("mensaje", "El colegio te pide una autorización.")
     else:
         n = _primer_nombre(alumno)
         cuerpo = {

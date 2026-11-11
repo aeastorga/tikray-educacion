@@ -14,6 +14,7 @@ MODULOS: dict[str, str] = {
     "caja": "Caja y gastos",
     "recojo": "Recojo seguro",
     "calendario": "Calendario escolar",
+    "autorizaciones": "Autorizaciones",
 }
 
 NIVELES = ("ver", "editar")
