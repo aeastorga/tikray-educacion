@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Mensaje } from '../espacios/comun/index.js'
 
 const PAUSA_MISMO_CODIGO_MS = 4000 // el carnet sigue frente a la cámara: no es otra marcación
 
@@ -65,6 +66,6 @@ export default function Camara({ alLeer }) {
     }
   }, [])
 
-  if (error) return <p className="error">{error}</p>
+  if (error) return <Mensaje tipo="error">{error}</Mensaje>
   return <video ref={video} className="porteria-video" muted playsInline />
 }

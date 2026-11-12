@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { api, descargar } from '../api.js'
 import { EnlaceGenerado } from './CuentasPadres.jsx'
-import { Encabezado, fechaHora, Insignia, plural, Tabla, useConfirmar, Vacio } from './comun/index.js'
+import { Cargando, Encabezado, Insignia, Mensaje, Tabla, Vacio, fechaHora, plural, useConfirmar } from './comun/index.js'
 import './reunion.css'
 
 // Modo reunión, lado del tutor: abre la reunión de su aula, muestra el QR, ve llegar las fichas
@@ -92,7 +92,7 @@ function Inicio({ editar }) {
                       </select>
                     </label>
                   )} />
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       {secciones && !secciones.length && (
         <Vacio icono={School} titulo="No tienes secciones a tu cargo" texto="Dirección asigna las secciones en Cuaderno › Docentes por sección." />
       )}
@@ -189,7 +189,7 @@ function EnVivo({ colegio, editar }) {
     if (motivo) await accion(`/fichas/${f.id}/rechazar`, { motivo })
   }
 
-  if (!r) return <p className="tenue">{error || 'Cargando…'}</p>
+  if (!r) return (error ? <Mensaje tipo="error">{error}</Mensaje> : <Cargando />)
   const pendientes = r.fichas.filter((f) => f.estado === 'pendiente')
   const revisadas = r.fichas.filter((f) => f.estado !== 'pendiente')
 
@@ -202,7 +202,7 @@ function EnVivo({ colegio, editar }) {
         {r.estado === 'abierta' ? `El QR vence a las ${hora(r.vence_en)}` : `Abierta a las ${hora(r.creado_en)}`}
         {' · '}{r.fichas.filter((f) => f.estado === 'aprobada').length} de {plural(r.alumnos, 'alumno', 'alumnos')} con ficha aprobada
       </p>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
 
       {activacion && (
         <div className="aviso activacion-reunion">
@@ -368,10 +368,10 @@ function Faltan({ id, colegio, editar }) {
     } catch (err) { setError(err.message) }
   }
 
-  if (!lista) return <p className="tenue">{error || 'Cargando…'}</p>
+  if (!lista) return (error ? <Mensaje tipo="error">{error}</Mensaje> : <Cargando />)
   return (
     <div>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       {enlace && <EnlaceGenerado enlace={enlace} colegio={colegio} cerrar={() => setEnlace(null)} />}
       {!lista.length && <p>Todos los alumnos tienen su ficha.</p>}
       <ul className="lista-faltan">
@@ -436,10 +436,11 @@ function Papel({ id, listo }) {
             {['DNI', 'CE', 'PAS', 'OTRO'].map((t) => <option key={t}>{t}</option>)}
           </select>
         </label>
-        <label>Número<input value={p.numero_documento} required onChange={campo('numero_documento')} /></label>
+        <label>Número<input value={p.numero_documento} required inputMode={p.tipo_documento === 'DNI' ? 'numeric' : 'text'}
+                             onChange={campo('numero_documento')} /></label>
         <label>Nombres<input value={p.nombres} required onChange={campo('nombres')} /></label>
         <label>Apellidos<input value={p.apellidos} required onChange={campo('apellidos')} /></label>
-        <label>Celular<input value={p.celular} required onChange={campo('celular')} /></label>
+        <label>Celular<input value={p.celular} required inputMode="tel" onChange={campo('celular')} /></label>
         <label>Correo<input value={p.correo} type="email" onChange={campo('correo')} /></label>
         <label>Parentesco
           <select value={p.parentesco} onChange={campo('parentesco')}>
@@ -452,7 +453,7 @@ function Papel({ id, listo }) {
         <input type="checkbox" checked={firmo} onChange={(e) => setFirmo(e.target.checked)} />
         El apoderado firmó el consentimiento en la hoja (guárdala)
       </label>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       <button className="boton" disabled={!firmo}>Registrar ficha</button>
     </form>
   )

@@ -51,7 +51,7 @@
 @media (max-width: 759px) {
   .filtros { flex-direction: column; align-items: stretch; }
   .buscador { flex-basis: 100%; }
-  .selector { flex: 1 1 0; }
+  .selector { flex: 1 1 140px; }
   .filtros-total { align-self: flex-end; }
 }
 
@@ -206,3 +206,14 @@ table.tabla { border: 0; border-radius: 0; width: 100%; table-layout: auto; back
 
 /* Destino de una entrada: el nombre arriba y, si es un alumno, su sección debajo y sin partirse. */
 .destino-seccion { display: block; font-size: .85rem; color: var(--tenue); white-space: nowrap; }
+
+/* Celular: todo lo que se toca mide al menos 44 px (botones chicos, menú de acciones y tamaño de página). */
+@media (max-width: 600px) {
+  .boton.chico, .paginacion-tamano select { min-height: 44px; }
+  .boton-icono.chico { width: 44px; height: 44px; }
+}
+
+/* Dentro de una tarjeta, la pantalla vacía no lleva su propio recuadro. */
+.tarjeta .vacio, .tarjeta-app .vacio { border: 0; background: transparent; padding: 20px 8px 8px; margin: 0; }
+/* Campos dentro de una celda (p. ej. la fecha de vencimiento en Plataforma): no se salen de la tarjeta en celular. */
+.tabla td :is(input, select) { max-width: 100%; min-width: 0; }

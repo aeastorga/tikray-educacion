@@ -8,7 +8,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api.js'
 import { hora12, LIMA, saludo } from '../tema.js'
 import { cuando } from './CalendarioMes.jsx'
-import { plural, soles } from './comun/index.js'
+import { Cargando, Mensaje, plural, soles } from './comun/index.js'
 import './calendario.css'
 import './inicio.css'
 
@@ -53,8 +53,8 @@ export default function Resumen({ yo, puede }) {
           )}
         </div>
       </header>
-      {error && <p className="error">{error}</p>}
-      {!d && !error && <p className="tenue">Cargando…</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
+      {!d && !error && <Cargando />}
       {d && <Tablero d={d} puede={puede} />}
     </div>
   )

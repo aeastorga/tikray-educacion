@@ -1,13 +1,13 @@
 // Configuración del colegio (administrador o quien tenga el permiso): imagen, perfil, módulos, avisos a los
 // padres, plantillas de comunicados y categorías de incidencias. Más el historial de actividad y los
 // comprobantes electrónicos (solo administrador; Tikray Labs usa el mismo formulario en su panel).
-import { Award, History, Pencil, Plus, Trash2, TrendingUp } from 'lucide-react'
+import { Award, FileText, History, Pencil, Plus, Trash2, TrendingUp } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 import { api } from '../api.js'
 import { aplicarImagen } from '../App.jsx'
 import { LIMA } from '../tema.js'
-import { Encabezado, fechaHora as fechaHoraComun, Insignia, Paginacion, Tabla, useConfirmar, usePaginado } from './comun/index.js'
+import { CampoArchivo, Cargando, Encabezado, Insignia, Mensaje, Paginacion, Tabla, Vacio, fechaHora as fechaHoraComun, useConfirmar, usePaginado } from './comun/index.js'
 import './configuracion.css'
 
 const TIPOS_AVISO = [
@@ -114,7 +114,7 @@ function Imagen({ editar, colegio, setColegio }) {
         {editar && (
           <div className="fila-form">
             <label>Logo (PNG, JPG o WEBP, hasta 200 KB)
-              <input type="file" accept="image/png,image/jpeg,image/webp" onChange={subirLogo} />
+              <CampoArchivo texto="Elegir logo" accept="image/png,image/jpeg,image/webp" onChange={subirLogo} />
             </label>
             {colegio.logo_url && <button className="enlace" onClick={quitarLogo}>Quitar logo</button>}
           </div>
@@ -167,7 +167,7 @@ function Perfil({ editar }) {
   const [perfil, setPerfil] = useState(null)
   const [mensaje, guardar] = useGuardar()
   useEffect(() => { api('/api/configuracion/perfil').then(setPerfil) }, [])
-  if (!perfil) return <p className="tenue">Cargando…</p>
+  if (!perfil) return <Cargando />
 
   async function enviar(e) {
     e.preventDefault()
@@ -193,8 +193,8 @@ export function FormFacturacion({ url, alGuardar }) {
   const [token, setToken] = useState('')
   const [mensaje, guardar] = useGuardar()
   useEffect(() => { api(url).then(setCfg).catch(() => setCfg(false)) }, [url])
-  if (cfg === false) return <p className="error">No se pudo cargar la configuración.</p>
-  if (!cfg) return <p className="tenue">Cargando…</p>
+  if (cfg === false) return <Mensaje tipo="error">No se pudo cargar la configuración.</Mensaje>
+  if (!cfg) return <Cargando />
   const campo = (k) => ({ value: cfg[k] ?? '', onChange: (e) => setCfg({ ...cfg, [k]: e.target.value }) })
 
   async function enviar(e) {
@@ -253,7 +253,7 @@ function Modulos({ editar, alCambiar }) {
   const [modulos, setModulos] = useState(null)
   const [mensaje, guardar] = useGuardar()
   useEffect(() => { api('/api/configuracion/modulos').then(setModulos) }, [])
-  if (!modulos) return <p className="tenue">Cargando…</p>
+  if (!modulos) return <Cargando />
 
   async function cambiar(clave, activo) {
     const activos = modulos.filter((m) => (m.clave === clave ? activo : m.activo)).map((m) => m.clave)
@@ -302,7 +302,7 @@ function Avisos({ editar }) {
   const [avisos, setAvisos] = useState(null)
   const [mensaje, guardar] = useGuardar()
   useEffect(() => { api('/api/configuracion/avisos').then(setAvisos) }, [])
-  if (!avisos) return <p className="tenue">Cargando…</p>
+  if (!avisos) return <Cargando />
 
   async function enviar(datos, ok) {
     const r = await guardar(() => api('/api/configuracion/avisos', { metodo: 'PUT', datos }), ok)
@@ -358,7 +358,7 @@ function Plantillas({ editar }) {
   const [mensaje, guardar] = useGuardar()
   const cargar = useCallback(() => api('/api/configuracion/plantillas').then(setLista), [])
   useEffect(() => { cargar() }, [cargar])
-  if (!lista) return <p className="tenue">Cargando…</p>
+  if (!lista) return <Cargando />
 
   async function enviar(e) {
     e.preventDefault()
@@ -397,7 +397,7 @@ function Plantillas({ editar }) {
           </div>
         </form>
       )}
-      {lista.length === 0 ? <p className="tenue">Aún no hay plantillas.</p> : (
+      {lista.length === 0 ? <Vacio icono={FileText} titulo="Aún no hay plantillas" texto="Cree una con «Nueva plantilla» para escribir más rápido los comunicados que se repiten." /> : (
         <ul className="lista-plantillas">
           {lista.map((p) => (
             <li key={p.id}>
@@ -430,7 +430,7 @@ function Categorias({ editar }) {
   const [mensaje, guardar] = useGuardar()
   const cargar = useCallback(() => api('/api/configuracion/categorias').then(setLista), [])
   useEffect(() => { cargar() }, [cargar])
-  if (!lista) return <p className="tenue">Cargando…</p>
+  if (!lista) return <Cargando />
 
   async function crear(e, tipo) {
     e.preventDefault()
@@ -543,7 +543,7 @@ export function Historial() {
         <label>Hasta<input type="date" value={filtros.hasta} onChange={(e) => filtrar('hasta', e.target.value)} /></label>
         {hayFiltros && <button className="enlace" onClick={() => setFiltros({ usuario_id: '', modulo: '', desde: '', hasta: '' })}>Quitar filtros</button>}
       </div>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       <Tabla etiqueta="Historial de actividad" cargando={cargando} filas={datos?.items}
              vacio={{ icono: History, titulo: hayFiltros ? 'Nada con esos filtros' : 'Aún no hay actividad registrada',
                       texto: hayFiltros ? 'Prueba con otra persona, módulo o fechas.' : null }}

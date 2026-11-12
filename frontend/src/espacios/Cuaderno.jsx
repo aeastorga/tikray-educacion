@@ -4,7 +4,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, descargar } from '../api.js'
-import { Buscador, Encabezado, fechaHora as fechaHoraTabla, Filtros, Insignia, Paginacion, plural, Selector, Tabla, useConfirmar, usePaginado } from './comun/index.js'
+import { Buscador, CampoArchivo, Cargando, Encabezado, Filtros, Insignia, Mensaje, Paginacion, Selector, Tabla, fechaHora as fechaHoraTabla, plural, useConfirmar, usePaginado } from './comun/index.js'
 import './cuaderno.css'
 
 export const TIPOS = {
@@ -145,7 +145,7 @@ function Bandeja() {
           Solo lo que espera al colegio
         </label>
       </Filtros>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       <Tabla etiqueta="Bandeja del cuaderno" cargando={cargando} filas={datos?.entradas} columnas={columnas}
              alFila={(e) => navegar(`/panel/cuaderno/${e.id}`)}
              claseFila={(e) => (e.espera_al_colegio ? 'destacada' : '')}
@@ -206,8 +206,8 @@ function Detalle({ editar }) {
     } catch (err) { setError(err.message) }
   }
 
-  if (error && !e) return <p className="error">{error}</p>
-  if (!e) return <p className="tenue">Cargando…</p>
+  if (error && !e) return <Mensaje tipo="error">{error}</Mensaje>
+  if (!e) return <Cargando />
 
   return (
     <article className="cuaderno-detalle">
@@ -233,7 +233,7 @@ function Detalle({ editar }) {
         <div className="aviso">
           <p className="sin-margen"><b>{e.tipo === 'justificacion' ? '¿Se acepta esta justificación?' : '¿Se autoriza esta salida?'}</b></p>
           <div className="fila-form">
-            <input placeholder="Nota para la familia (opcional)" value={nota} maxLength={300} onChange={(ev) => setNota(ev.target.value)} />
+            <input aria-label="Nota para la familia" placeholder="Nota para la familia (opcional)" value={nota} maxLength={300} onChange={(ev) => setNota(ev.target.value)} />
             <button className="boton" onClick={() => resolver('aprobada')}>Aprobar</button>
             <button className="boton secundario" onClick={() => resolver('rechazada')}>Rechazar</button>
           </div>
@@ -256,12 +256,12 @@ function Detalle({ editar }) {
       </ul>
       {editar && (
         <form className="fila-form" onSubmit={responder}>
-          <textarea value={respuesta} required maxLength={4000} rows={2} placeholder="Responder a la familia"
+          <textarea aria-label="Responder a la familia" value={respuesta} required maxLength={4000} rows={2} placeholder="Responder a la familia"
                     onChange={(ev) => setRespuesta(ev.target.value)} />
           <button className="boton">Responder</button>
         </form>
       )}
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
 
       <Lectores e={e} />
     </article>
@@ -292,7 +292,7 @@ function Lectores({ e }) {
           Solo quienes aún no {e.pide_firma ? 'firman' : 'lo ven'}
         </label>
       </Filtros>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       <Tabla etiqueta="Familias de la entrada" cargando={cargando} filas={datos?.filas} vacio={vacio}
              clave={(l) => `${l.alumno}-${l.apoderado}-${l.parentesco}`}
              columnas={[
@@ -325,7 +325,7 @@ export function Adjuntos({ lista, ruta }) {
       {lista.map((a) => (
         <button key={a.id} className="chip" onClick={() => bajar(a)}><Paperclip size={14} aria-hidden="true" /> {a.nombre} <span className="tenue">({tamano(a.tamano)})</span></button>
       ))}
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
     </div>
   )
 }
@@ -397,7 +397,7 @@ function Escribir() {
     } catch (err) { setError(err.message) } finally { setEnviando(false) }
   }
 
-  if (!op) return error ? <p className="error">{error}</p> : <p className="tenue">Cargando…</p>
+  if (!op) return error ? <Mensaje tipo="error">{error}</Mensaje> : <Cargando />
   if (!op.todo_el_colegio && op.secciones.length === 0) {
     return <p className="tenue">Aún no tienes secciones a tu cargo. Pide a la dirección que te asigne en “Docentes por sección”.</p>
   }
@@ -494,10 +494,10 @@ function Escribir() {
       )}
 
       <label>Adjuntos (PDF, imágenes, Word o Excel; hasta 5 de 10 MB)
-        <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx"
+        <CampoArchivo multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx"
                onChange={(ev) => setArchivos([...ev.target.files].slice(0, 5))} />
       </label>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       <p className="tenue pequeno">
         {['justificacion', 'permiso_salida'].includes(f.tipo) ? 'Lo que registra el colegio queda aprobado. ' : ''}
         {f.tipo === 'comunicado' && f.programar
@@ -544,7 +544,7 @@ function ElegirAlumno({ valor, onChange, secciones }) {
   return (
     <div className="elegir-alumno">
       <div className="fila-form sin-margen">
-        <input placeholder="Buscar alumno por nombre o DNI" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input aria-label="Buscar alumno por nombre o DNI" placeholder="Buscar alumno por nombre o DNI" value={q} onChange={(e) => setQ(e.target.value)} />
         <select value={seccion} onChange={(e) => setSeccion(e.target.value)} aria-label="Sección">
           <option value="">Todas las secciones</option>
           {secciones.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
@@ -576,14 +576,14 @@ function Docentes() {
     } catch (e) { setError(e.message) }
   }
 
-  if (!datos) return error ? <p className="error">{error}</p> : <p className="tenue">Cargando…</p>
+  if (!datos) return error ? <Mensaje tipo="error">{error}</Mensaje> : <Cargando />
   const nombres = Object.fromEntries(datos.personal.map((p) => [p.id, p.nombre]))
   return (
     <>
       <p className="tenue">
         Quien tenga un rol con “Solo ve las secciones a su cargo” (en Roles) solo verá y escribirá en el cuaderno de estas secciones.
       </p>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       <Tabla etiqueta="Docentes por sección" filas={datos.secciones}
              vacio={{ icono: Users, titulo: 'No hay secciones en el año activo', texto: 'Créalas en Padrón › Secciones.' }}
              columnas={[

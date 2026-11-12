@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 import { api, descargar } from '../api.js'
 import { DetalleDia, ListaProximos, MesCalendario, NavegarMes } from './CalendarioMes.jsx'
-import { Encabezado } from './comun/index.js'
+import { Cargando, Encabezado, Mensaje } from './comun/index.js'
 import './calendario.css'
 
 const VACIO = { titulo: '', tipo: 'actuacion', inicio: '', fin: '', hora: '', descripcion: '', alcance: 'colegio',
@@ -42,7 +42,7 @@ export default function Calendario({ editar }) {
         <NavLink to="/panel/calendario" end>Mes</NavLink>
         <NavLink to="/panel/calendario/proximos">Próximos</NavLink>
       </nav>
-      {mensaje && <p className="tenue" role="status">{mensaje}</p>}
+      <Mensaje tipo="ok">{mensaje}</Mensaje>
       {form && opciones && <FormEvento form={form} setForm={setForm} opciones={opciones} alGuardar={alGuardar} />}
       <Routes>
         <Route index element={<VistaMes version={version} opciones={opciones} acciones={acciones}
@@ -79,15 +79,15 @@ function VistaMes({ version, opciones, acciones, nuevo }) {
     try { await descargar(`/api/calendario/mes.pdf?mes=${d.mes}`, `calendario-${d.mes}.pdf`) } catch (e) { setError(e.message) }
   }
 
-  if (error && !d) return <p className="error">{error}</p>
-  if (!d) return <p className="tenue">Cargando…</p>
+  if (error && !d) return <Mensaje tipo="error">{error}</Mensaje>
+  if (!d) return <Cargando />
   return (
     <>
       <div className="acciones calendario-barra">
         <NavegarMes mes={d.mes} hoy={d.hoy} cambiar={(m) => { setMes(m); setDia(null) }} />
         <button type="button" className="boton secundario" onClick={pdf}><FileDown size={18} aria-hidden="true" /> PDF del mes</button>
       </div>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       <MesCalendario mes={d.mes} hoy={d.hoy} eventos={d.eventos} sinClases={d.sin_clases} elegido={dia} elegir={setDia} />
       <Leyenda opciones={opciones} />
       {dia && (
@@ -106,8 +106,8 @@ function VistaProximos({ version, acciones }) {
   const [d, setD] = useState(null)
   const [error, setError] = useState(null)
   useEffect(() => { api('/api/calendario/proximos').then(setD).catch((e) => setError(e.message)) }, [version])
-  if (error) return <p className="error">{error}</p>
-  if (!d) return <p className="tenue">Cargando…</p>
+  if (error) return <Mensaje tipo="error">{error}</Mensaje>
+  if (!d) return <Cargando />
   return <ListaProximos eventos={d.eventos} sinClases={d.sin_clases} accionesDe={acciones} />
 }
 
@@ -135,7 +135,7 @@ function AccionesEvento({ e, editar, alAnular }) {
           <button className="boton">Anular evento</button>
           <button type="button" className="enlace" onClick={() => setAnulando(false)}>Cancelar</button>
         </div>
-        {error && <p className="error">{error}</p>}
+        {error && <Mensaje tipo="error">{error}</Mensaje>}
       </form>
     )
   }
@@ -236,7 +236,7 @@ function FormEvento({ form, setForm, opciones, alGuardar }) {
         <button className="boton" disabled={enviando}>{form.id ? 'Guardar cambios' : 'Publicar evento'}</button>
         <button type="button" className="enlace" onClick={() => setForm(null)}>Cancelar</button>
       </div>
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
     </form>
   )
 }

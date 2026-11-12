@@ -4,7 +4,7 @@ import { api, descargar } from '../api.js'
 import Porteria from '../porteria/Porteria.jsx'
 import { fechaLima } from '../porteria/reglas.js'
 import { CalendarOff, Users } from 'lucide-react'
-import { Cifras, Encabezado, Insignia, MenuAcciones, Paginacion, Persona, plural, Tabla, useConfirmar, usePaginaLocal } from './comun/index.js'
+import { Cifras, Encabezado, Insignia, Mensaje, MenuAcciones, Paginacion, Persona, Tabla, plural, useConfirmar, usePaginaLocal } from './comun/index.js'
 import './asistencia.css'
 
 const ESTADOS = { presente: 'A tiempo', tarde: 'Tarde', falta: 'Falta', justificada: 'Justificada', licencia: 'Licencia' }
@@ -71,7 +71,7 @@ function Mensual({ ruta, nombre }) {
     <div className="fila-form">
       <label>Registro del mes<input type="month" value={mes} onChange={(e) => setMes(e.target.value)} /></label>
       <button className="boton secundario" onClick={bajar}>Descargar Excel</button>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
     </div>
   )
 }
@@ -93,7 +93,7 @@ function Alumnos() {
                       <label className="en-linea">Día<input type="date" value={fecha} onChange={(e) => { setFecha(e.target.value); setSeccion(null) }} /></label>
                     </>
                   )} />
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       {dia && (
         <Cifras items={[
           { etiqueta: 'A tiempo', valor: dia.totales.presente, tono: 'bien' },
@@ -160,7 +160,7 @@ function Recojos({ fecha }) {
         <input type="checkbox" checked={fuera} onChange={(e) => setFuera(e.target.checked)} />
         Solo recogidos por alguien fuera de la lista
       </label>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       <Tabla etiqueta="Salidas y recojos" cargando={!datos && !error} filas={filas.filas} clave={(r) => r.id}
              vacio={fuera
                ? { icono: Users, titulo: 'Nadie fuera de la lista', texto: 'Todas las salidas de este día fueron con alguien autorizado.' }
@@ -213,7 +213,7 @@ function Personal({ licencias: editar }) {
                       <label className="en-linea">Día<input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></label>
                     </>
                   )} />
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       <Tabla etiqueta="Asistencia del personal" cargando={!dia && !error} filas={personal.filas} clave={(p) => p.usuario_id}
              vacio={{ icono: Users, titulo: 'Sin personal registrado', texto: 'Agrégalo en la pestaña Personal.' }}
              columnas={[
@@ -240,18 +240,18 @@ function Personal({ licencias: editar }) {
              ].filter(Boolean)} />
       {editar && dia && (
         <form className="fila-form" onSubmit={crear}>
-          <select required value={form.usuario_id} onChange={(e) => setForm({ ...form, usuario_id: e.target.value })}>
+          <select aria-label="Persona" required value={form.usuario_id} onChange={(e) => setForm({ ...form, usuario_id: e.target.value })}>
             <option value="">Persona…</option>
             {dia.personal.map((p) => <option key={p.usuario_id} value={p.usuario_id}>{p.nombre}</option>)}
           </select>
-          <select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}>
+          <select aria-label="Tipo de licencia" value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}>
             {Object.entries(TIPOS_LICENCIA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
           <label>Desde<input type="date" required value={form.desde} onChange={(e) => setForm({ ...form, desde: e.target.value })} /></label>
           <label>Hasta<input type="date" required value={form.hasta} min={form.desde} onChange={(e) => setForm({ ...form, hasta: e.target.value })} /></label>
-          <input placeholder="Motivo (opcional)" maxLength={200} value={form.motivo} onChange={(e) => setForm({ ...form, motivo: e.target.value })} />
+          <input aria-label="Motivo" placeholder="Motivo (opcional)" maxLength={200} value={form.motivo} onChange={(e) => setForm({ ...form, motivo: e.target.value })} />
           <button className="boton">Registrar licencia</button>
-          {errorForm && <p className="error">{errorForm}</p>}
+          {errorForm && <Mensaje tipo="error">{errorForm}</Mensaje>}
         </form>
       )}
     </>

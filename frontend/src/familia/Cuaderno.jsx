@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, Check, MessageCircle, Paperclip } from 'lucide-react'
+import { ArrowLeft, Check, MessageCircle, NotebookPen, Paperclip } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api.js'
 import { Adjuntos, Categoria, Detalles, fechaHora, TIPOS } from '../espacios/Cuaderno.jsx'
 import '../espacios/cuaderno.css'
+import { CampoArchivo, Mensaje, Vacio } from '../espacios/comun/index.js'
 
 // Lo que dice el botón de firma según el tipo.
 const BOTON_FIRMA = { comunicado: 'Firmar: leí el comunicado', incidencia: 'Enterado', citacion: 'Confirmo que asistiré' }
@@ -24,7 +25,7 @@ export function ListaCuaderno({ recargar }) {
     api('/api/familia/cuaderno').then(setDatos).catch((e) => setError(e.estado === 403 ? null : e.message))
   }, [recargar])
 
-  if (error) return <p className="error">{error}</p>
+  if (error) return <Mensaje tipo="error">{error}</Mensaje>
   if (!datos) return null
   const porFirmar = datos.entradas.filter((e) => e.pide_firma && !e.firmado_en)
   const visibles = todo ? datos.entradas : datos.entradas.slice(0, 8)
@@ -40,7 +41,7 @@ export function ListaCuaderno({ recargar }) {
           <Link className="boton secundario" to="/familia/cuaderno/nuevo/permiso">Pedir permiso de salida</Link>
         </div>
       )}
-      {datos.entradas.length === 0 ? <p className="tenue">Aún no hay nada en el cuaderno.</p> : (
+      {datos.entradas.length === 0 ? <Vacio icono={NotebookPen} titulo="Aún no hay nada en el cuaderno" texto="Aquí llegan los comunicados del colegio. Use los botones de arriba para justificar una falta o pedir un permiso." /> : (
         <ul className="lista-cuaderno">
           {visibles.map((e) => (
             <li key={e.id} className={[!e.visto || (e.pide_firma && !e.firmado_en) ? 'nueva' : '',
@@ -98,7 +99,7 @@ export function DetalleCuaderno() {
   return (
     <main className="familia-contenido cuaderno-detalle">
       <Link to="/familia/cuaderno" className="enlace acceso-volver"><ArrowLeft size={18} aria-hidden="true" /> Volver</Link>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       {e && <>
         <p className="tenue">
           <span className={`tipo-cuaderno ${e.tipo}`}>{TIPOS[e.tipo]}</span> <Categoria c={e.categoria} />
@@ -128,7 +129,7 @@ export function DetalleCuaderno() {
           ))}
         </ul>
         <form className="fila-form" onSubmit={responder}>
-          <textarea value={respuesta} required maxLength={4000} rows={2} placeholder="Escribe al colegio"
+          <textarea aria-label="Escribe al colegio" value={respuesta} required maxLength={4000} rows={2} placeholder="Escribe al colegio"
                     onChange={(ev) => setRespuesta(ev.target.value)} />
           <button className="boton" disabled={enviando}>Enviar</button>
         </form>
@@ -211,7 +212,7 @@ export function PedidoCuaderno() {
             <textarea value={f.detalle} onChange={cambiar('detalle')} rows={3} maxLength={4000} />
           </label>
           <label>Certificado o constancia (opcional; foto o PDF)
-            <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp"
+            <CampoArchivo multiple accept=".pdf,.jpg,.jpeg,.png,.webp"
                    onChange={(ev) => setArchivos([...ev.target.files].slice(0, 5))} />
           </label>
         </> : (
@@ -219,7 +220,7 @@ export function PedidoCuaderno() {
             <input value={f.recoge} onChange={cambiar('recoge')} required maxLength={120} />
           </label>
         )}
-        {error && <p className="error">{error}</p>}
+        {error && <Mensaje tipo="error">{error}</Mensaje>}
         <p className="tenue pequeno">
           {justificacion ? 'El colegio la revisará y te avisaremos cuando la apruebe.'
             : 'La portería verá el permiso al momento de la salida. Te avisaremos cuando el colegio lo apruebe.'}

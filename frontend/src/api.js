@@ -29,6 +29,13 @@ export class ErrorApi extends Error {
   }
 }
 
+// Peticiones en curso: el envío de formularios (envio.js) espera a que terminen las que inició.
+const enCurso = new Set()
+const oyentes = new Set()
+export const peticionesEnCurso = () => new Set(enCurso)
+export function seguirPeticiones(fn) { oyentes.add(fn); return () => oyentes.delete(fn) }
+function avisar() { for (const fn of oyentes) fn() }
+
 // `sinSalir`: ante un 401 la pantalla se queda (la portería sigue marcando sin sesión y avisa).
 // `formulario`: un FormData ya armado (datos + varios archivos).
 export async function api(ruta, { metodo = 'GET', datos, archivo, formulario, sinSalir = false } = {}) {
@@ -46,7 +53,10 @@ export async function api(ruta, { metodo = 'GET', datos, archivo, formulario, si
     cabeceras['Content-Type'] = 'application/json'
     cuerpo = JSON.stringify(datos)
   }
-  const r = await fetch(ruta, { method: metodo, headers: cabeceras, body: cuerpo })
+  const pedido = fetch(ruta, { method: metodo, headers: cabeceras, body: cuerpo })
+  enCurso.add(pedido); avisar()
+  let r
+  try { r = await pedido } finally { enCurso.delete(pedido); setTimeout(avisar) }
   if (r.status === 401 && token) {
     guardarToken(null, clave)
     if (!sinSalir) window.dispatchEvent(new Event(deFamilia(ruta) ? 'sesion-familia-cerrada' : 'sesion-cerrada'))

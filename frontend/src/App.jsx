@@ -8,6 +8,7 @@ import PanelColegio from './espacios/PanelColegio.jsx'
 import Plataforma from './espacios/Plataforma.jsx'
 import { Ayuda, Privacidad } from './espacios/Paginas.jsx'
 import { aplicarTema } from './tema.js'
+import { Cargando } from './espacios/comun/index.js'
 
 export function aplicarImagen(imagen) {
   aplicarTema(imagen)
@@ -38,7 +39,7 @@ export default function App() {
 
   if (esPlataforma) return <Plataforma />
   if (error) return <main className="centro"><p>{error}</p></main>
-  if (!colegio) return <main className="centro"><p className="tenue">Cargando…</p></main>
+  if (!colegio) return <main className="centro"><Cargando /></main>
 
   return (
     <Routes>

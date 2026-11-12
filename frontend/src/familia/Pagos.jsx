@@ -4,7 +4,7 @@ import { Receipt } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { api, descargar } from '../api.js'
-import { fechaCorta, soles } from '../espacios/comun/index.js'
+import { Cargando, Mensaje, fechaCorta, soles } from '../espacios/comun/index.js'
 
 const ESTADO = { pendiente: ['Pendiente', 'neutro'], parcial: ['Pago parcial', 'justificada'], pagada: ['Pagada', 'a-tiempo'],
   vencida: ['Vencida', 'falta'] }
@@ -25,8 +25,8 @@ export default function PagosFamilia() {
   return (
     <>
       <div className="saludo"><h1>Pagos</h1></div>
-      {error && <p className="error">{error}</p>}
-      {!d && !error && <p className="tenue">Cargando…</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
+      {!d && !error && <Cargando />}
       {d && d.hijos.length === 0 && (
         <section className="tarjeta-app">
           <p className="tenue">Los pagos los ve el apoderado responsable de pago. Si debe ser usted, pídalo en secretaría.</p>
@@ -78,7 +78,7 @@ function PagosHijo({ h, varios }) {
           </ul>
         </>
       )}
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       <p className="tenue nota-pagos">Se paga en la caja del colegio. Si ve algo que no cuadra, consulte en secretaría.</p>
     </section>
   )

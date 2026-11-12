@@ -6,7 +6,7 @@ import { FileDown, FileSpreadsheet, Paperclip, Plus, Send, ShieldCheck } from 'l
 import { useCallback, useEffect, useState } from 'react'
 import { Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { api, descargar } from '../api.js'
-import { Cifras, Encabezado, Insignia, Tabla, fechaCorta, fechaHora, plural } from './comun/index.js'
+import { CampoArchivo, Cargando, Cifras, Encabezado, Insignia, Mensaje, Tabla, fechaCorta, fechaHora, plural } from './comun/index.js'
 import './autorizaciones.css'
 
 const ESTADOS = { borrador: ['Borrador', 'neutro'], publicada: ['Abierta', 'info'], cerrada: ['Cerrada', 'neutro'],
@@ -61,7 +61,7 @@ function Lista({ editar }) {
         acciones={editar && (
           <button type="button" className="boton" onClick={() => ir('/panel/autorizaciones/nueva')}>
             <Plus size={18} aria-hidden="true" /> Nueva autorización</button>)} />
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       <Tabla etiqueta="Autorizaciones" cargando={!filas && !error} filas={filas || []}
         alFila={(a) => ir(`/panel/autorizaciones/${a.id}`)}
         vacio={{ icono: ShieldCheck, titulo: 'Aún no hay autorizaciones',
@@ -95,8 +95,8 @@ function Formulario() {
         niveles: a.niveles, secciones: a.secciones, alumnos: a.alumnos.map((x) => ({ id: x, nombre: nombres[x] || `Alumno ${x}` })) })
     }).catch((e) => setError(e.message))
   }, [id])
-  if (error && !form) return <p className="error">{error}</p>
-  if (!form || !opciones) return <p className="tenue">Cargando…</p>
+  if (error && !form) return <Mensaje tipo="error">{error}</Mensaje>
+  if (!form || !opciones) return <Cargando />
 
   const set = (k, v) => setForm({ ...form, [k]: v })
   const alternar = (k, x) => set(k, form[k].includes(x) ? form[k].filter((y) => y !== x) : [...form[k], x])
@@ -175,7 +175,7 @@ function Formulario() {
           {form.alcance === 'alumnos' && <ElegirAlumnos elegidos={form.alumnos} cambiar={(v) => set('alumnos', v)} />}
         </fieldset>
         <label>Adjunto (opcional, PDF o imagen de hasta 5 MB)
-          <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp"
+          <CampoArchivo accept="application/pdf,image/jpeg,image/png,image/webp"
                  onChange={(e) => setArchivo(e.target.files[0] || null)} />
           {form.adjunto && !archivo && <small className="tenue">Actual: {form.adjunto.nombre}. Si elige otro, lo reemplaza.</small>}
         </label>
@@ -187,7 +187,7 @@ function Formulario() {
             {publicada ? 'Guardar cambios' : 'Guardar borrador'}</button>
           <button type="button" className="enlace" onClick={() => ir(id ? `/panel/autorizaciones/${id}` : '/panel/autorizaciones')}>Cancelar</button>
         </div>
-        {error && <p className="error" role="alert">{error}</p>}
+        {error && <Mensaje tipo="error">{error}</Mensaje>}
       </form>
     </>
   )
@@ -263,8 +263,8 @@ function Detalle({ editar }) {
     try { await descargar(`/api/autorizaciones/${id}/adjunto`, a.adjunto.nombre) } catch (e) { setError(e.message) }
   }
 
-  if (error && !a) return <p className="error">{error}</p>
-  if (!a) return <p className="tenue">Cargando…</p>
+  if (error && !a) return <Mensaje tipo="error">{error}</Mensaje>
+  if (!a) return <Cargando />
   const abierta = a.estado === 'publicada'
   const avisos = (r) => `${plural(r.avisos, 'familia', 'familias')}`
   return (
@@ -298,8 +298,8 @@ function Detalle({ editar }) {
       )}
       {anulando && <Anular anular={(motivo) => accion('anular', () => 'Anulada. Sigue visible como anulada.', { motivo })}
                            cancelar={() => setAnulando(false)} />}
-      {mensaje && <p className="tenue" role="status">{mensaje}</p>}
-      {error && <p className="error" role="alert">{error}</p>}
+      <Mensaje tipo="ok">{mensaje}</Mensaje>
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       {a.recordado_en && abierta && <p className="tenue">Último recordatorio: {fechaHora(a.recordado_en)}.</p>}
 
       <Cifras items={[

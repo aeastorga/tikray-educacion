@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, guardarToken, leerToken } from '../api.js'
 import Acceso from './Acceso.jsx'
+import { Mensaje } from './comun/index.js'
 
 export default function IngresoPersonal({ colegio }) {
   const navegar = useNavigate()
@@ -45,7 +46,7 @@ export default function IngresoPersonal({ colegio }) {
           <input type="password" value={clave} onChange={(e) => setClave(e.target.value)}
                  autoComplete="current-password" required />
         </label>
-        {error && <p className="error" role="alert">{error}</p>}
+        {error && <Mensaje tipo="error">{error}</Mensaje>}
         <button className="boton grande" disabled={enviando}>{enviando ? 'Ingresando…' : 'Ingresar'}</button>
       </form>
       <p className="acceso-nota">¿Olvidó su clave? Dirección o secretaría le da una nueva.</p>

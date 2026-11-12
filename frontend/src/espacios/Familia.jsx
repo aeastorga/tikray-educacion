@@ -13,6 +13,7 @@ import { hayPasskeys, usarPasskey } from '../familia/webauthn.js'
 import Acceso from './Acceso.jsx'
 import Cabecera from './Cabecera.jsx'
 import './familia.css'
+import { Mensaje } from './comun/index.js'
 
 const guardar = (t) => guardarToken(t, CLAVE_TOKEN_FAMILIA)
 
@@ -90,7 +91,7 @@ function Ingreso({ colegio }) {
           <input type="password" value={pin} onChange={(e) => setPin(e.target.value)} inputMode="numeric"
                  maxLength={6} autoComplete="current-password" required />
         </label>
-        {error && <p className="error" role="alert">{error}</p>}
+        {error && <Mensaje tipo="error">{error}</Mensaje>}
         <button className={hayPasskeys() ? 'boton grande secundario' : 'boton grande'} disabled={enviando}>Ingresar</button>
       </form>
       <button type="button" className="enlace" aria-expanded={olvido} onClick={() => setOlvido(!olvido)}>Olvidé mi PIN</button>
@@ -180,7 +181,7 @@ function Activar({ colegio }) {
             <input value={docs.documento_apoderado} inputMode="numeric" required
                    onChange={(e) => setDocs({ ...docs, documento_apoderado: e.target.value })} />
           </label>
-          {error && <p className="error">{error}</p>}
+          {error && <Mensaje tipo="error">{error}</Mensaje>}
           <button className="boton" disabled={enviando}>Continuar</button>
         </form>
       </main>
@@ -216,7 +217,7 @@ function Activar({ colegio }) {
             </label>
           </>
         )}
-        {error && <p className="error">{error}</p>}
+        {error && <Mensaje tipo="error">{error}</Mensaje>}
         <button className="boton" disabled={enviando || !acepto}>Activar mi cuenta</button>
       </form>
     </main>

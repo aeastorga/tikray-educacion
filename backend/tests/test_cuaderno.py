@@ -425,10 +425,13 @@ def test_la_cola_envia_el_aviso_del_cuaderno(client, db, e, h):
     eid = escribir(client, h, tipo="comunicado", alcance="alumno", alumno_id=e.a1.id, titulo="Paseo").json()["id"]
     enviados = []
     avisos.procesar_cola(db, enviar=lambda sus, m: enviados.append(m) or "ok")
-    assert enviados == [{"titulo": "Colegio alfa", "cuerpo": "Comunicado: Paseo",
-                         "url": f"/familia/cuaderno/{eid}", "etiqueta": f"cuaderno-{cola_cuaderno(db, e.colegio)[0].id}"}]
+    aviso = cola_cuaderno(db, e.colegio)[0]
+    assert enviados == [{"titulo": "Cuaderno · Colegio alfa", "cuerpo": "Comunicado: Paseo",
+                         "icono": "/icono-192.png", "insignia": "/insignia-96.png",
+                         "momento": int(aviso.creado_en.timestamp() * 1000),
+                         "url": f"/familia/cuaderno/{eid}", "etiqueta": f"cuaderno-{aviso.id}"}]
     entrega = db.scalar(select(EntregaAviso).where(EntregaAviso.apoderado_id == e.madre.id))
-    assert entrega.estado == "enviado"
+    assert entrega.estado == "enviado" and entrega.titulo == "Cuaderno · Colegio alfa"
 
 
 def test_aviso_del_cuaderno_no_llega_a_cuenta_bloqueada(client, db, e, h):

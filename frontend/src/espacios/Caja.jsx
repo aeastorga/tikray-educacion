@@ -7,7 +7,7 @@ import { ArrowLeft, FileSpreadsheet, FileWarning, Lock, Paperclip, Plus, Receipt
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 import { api, descargar } from '../api.js'
-import { Buscador, Cifras, Encabezado, fechaCorta, fechaHora, Filtros, Insignia, MenuAcciones, Paginacion, Persona, plural, Selector, soles, Tabla, useConfirmar, usePaginado } from './comun/index.js'
+import { Buscador, CampoArchivo, Cargando, Cifras, Encabezado, Filtros, Insignia, Mensaje, MenuAcciones, Paginacion, Persona, Selector, Tabla, fechaCorta, fechaHora, plural, soles, useConfirmar, usePaginado } from './comun/index.js'
 import { MEDIO, TablaCuotas } from './Pensiones.jsx'
 import './configuracion.css'
 import './pensiones.css'
@@ -68,7 +68,7 @@ function Cobrar() {
     try { await api('/api/caja/abrir', { metodo: 'POST' }); cargar() } catch (err) { setError(err.message) }
   }
 
-  if (!estado) return error ? <p className="error">{error}</p> : <p className="tenue">Cargando…</p>
+  if (!estado) return error ? <Mensaje tipo="error">{error}</Mensaje> : <Cargando />
   const caja = estado.caja
   if (!caja) {
     return (
@@ -80,7 +80,7 @@ function Cobrar() {
           <p className="tenue">Hoy es {fechaCorta(estado.hoy)}.</p>
           <button className="boton" onClick={abrir}>Abrir mi caja</button>
         </div>
-        {error && <p className="error" role="alert">{error}</p>}
+        {error && <Mensaje tipo="error">{error}</Mensaje>}
       </>
     )
   }
@@ -100,7 +100,7 @@ function Cobrar() {
             : <BuscarAlumno elegir={(id) => { setRecibo(null); setAlumno(id) }} />}
         </>
       )}
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
     </>
   )
 }
@@ -152,7 +152,7 @@ function ResumenCaja({ caja, alCerrar }) {
             <button className="boton">Cerrar caja</button>
             <button type="button" className="enlace" onClick={() => setCierre(null)}>Cancelar</button>
           </div>
-          {error && <p className="error" role="alert">{error}</p>}
+          {error && <Mensaje tipo="error">{error}</Mensaje>}
         </form>
       )}
     </div>
@@ -178,7 +178,7 @@ function BuscarAlumno({ elegir }) {
       <Filtros>
         <Buscador valor={q} cambiar={setQ} placeholder="Apellido, nombre o documento del alumno" />
       </Filtros>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       {lista && lista.length === 0 && <p className="tenue">Nadie con ese nombre o documento.</p>}
       {lista && lista.length > 0 && (
         <ul className="lista-alumnos">
@@ -230,7 +230,7 @@ function CobrarAlumno({ id, comprobantes, volver, alCobrar }) {
     } catch (err) { setError(err.message) } finally { setEnviando(false) }
   }
 
-  if (!a) return error ? <p className="error">{error}</p> : <p className="tenue">Cargando…</p>
+  if (!a) return error ? <Mensaje tipo="error">{error}</Mensaje> : <Cargando />
   const elegidas = pendientes.filter((c) => montos[c.id] !== undefined)
   return (
     <div className="tarjeta-panel cobrar">
@@ -299,7 +299,7 @@ function CobrarAlumno({ id, comprobantes, volver, alCobrar }) {
               </div>
             </>
           )}
-          {error && <p className="error" role="alert">{error}</p>}
+          {error && <Mensaje tipo="error">{error}</Mensaje>}
         </form>
       )}
     </div>
@@ -323,7 +323,7 @@ function ReciboListo({ pago, cerrar }) {
           <Receipt size={18} aria-hidden="true" /> Descargar recibo</button>
         <button className="enlace" onClick={cerrar}>Listo</button>
       </div>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
     </div>
   )
 }
@@ -378,7 +378,7 @@ function Pagos({ editar }) {
         <Selector etiqueta="Estado" valor={filtros.estado} cambiar={cambiar('estado')}
                   opciones={[['', 'Válidos y anulados'], ['valido', 'Válidos'], ['anulado', 'Anulados']]} />
       </Filtros>
-      {(error || errorLista) && <p className="error" role="alert">{error || errorLista}</p>}
+      {(error || errorLista) && <Mensaje tipo="error">{error || errorLista}</Mensaje>}
       <Tabla etiqueta="Pagos" columnas={columnas} filas={datos?.items} cargando={cargando} claseFila={(p) => (p.anulado ? 'atenuada' : '')}
              vacio={{ icono: Receipt, titulo: 'Sin pagos', texto: 'No hay pagos con esos filtros.' }} />
       {paginacion && <Paginacion {...paginacion} />}
@@ -427,7 +427,7 @@ function ComprobantesConError({ editar }) {
       <Encabezado titulo="Comprobantes con error"
                   descripcion="Boletas y facturas que SUNAT rechazó, y las que no se pudieron enviar o anular tras 5 intentos automáticos. El recibo interno de esos pagos sigue valiendo." />
       {aviso && <p className="tenue" role="status">{aviso}</p>}
-      {(error || errorLista) && <p className="error" role="alert">{error || errorLista}</p>}
+      {(error || errorLista) && <Mensaje tipo="error">{error || errorLista}</Mensaje>}
       <Tabla etiqueta="Comprobantes con error" columnas={columnas} filas={datos?.items} cargando={cargando}
              clave={(c) => `${c.id}-${c.tarea_id ?? 'r'}`}
              vacio={{ icono: FileWarning, titulo: 'Sin comprobantes con error', texto: 'Todo lo enviado está al día.' }} />
@@ -462,7 +462,7 @@ function Cajas() {
         <label className="selector"><span className="solo-lectores">Hasta</span>
           <input type="date" aria-label="Hasta" value={filtros.hasta} onChange={(e) => setFiltros({ ...filtros, hasta: e.target.value })} /></label>
       </Filtros>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       <Tabla etiqueta="Cierres de caja" columnas={columnas} filas={datos?.items} cargando={cargando}
              vacio={{ icono: Wallet, titulo: 'Sin cajas', texto: 'Nadie abrió caja en esas fechas.' }} />
       {paginacion && <Paginacion {...paginacion} />}
@@ -531,7 +531,7 @@ function Gastos({ editar }) {
         <Selector etiqueta="Estado" valor={filtros.estado} cambiar={cambiar('estado')}
                   opciones={[['', 'Válidos y anulados'], ['valido', 'Válidos'], ['anulado', 'Anulados']]} />
       </Filtros>
-      {(error || errorLista) && <p className="error" role="alert">{error || errorLista}</p>}
+      {(error || errorLista) && <Mensaje tipo="error">{error || errorLista}</Mensaje>}
       <Tabla etiqueta="Gastos" columnas={columnas} filas={datos?.items} cargando={cargando} claseFila={(g) => (g.anulado ? 'atenuada' : '')}
              vacio={{ icono: Wallet, titulo: 'Sin gastos', texto: 'No hay gastos con esos filtros.' }} />
       {paginacion && <Paginacion {...paginacion} />}
@@ -579,14 +579,14 @@ function FormGasto({ categorias, cerrar, alGuardar }) {
         <label>Comprobante<input maxLength={30} value={form.comprobante_tipo} onChange={campo('comprobante_tipo')} placeholder="Boleta, factura…" /></label>
         <label>N.° de comprobante<input maxLength={30} value={form.comprobante_numero} onChange={campo('comprobante_numero')} /></label>
         <label>Foto o PDF (hasta 5 MB)
-          <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setArchivo(e.target.files[0] || null)} />
+          <CampoArchivo accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setArchivo(e.target.files[0] || null)} />
         </label>
       </div>
       <div className="acciones">
         <button className="boton">Guardar gasto</button>
         <button type="button" className="enlace" onClick={cerrar}>Cancelar</button>
       </div>
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
     </form>
   )
 }
@@ -623,7 +623,7 @@ function Categorias({ categorias, recargar, cerrar }) {
         <div className="acciones"><button className="boton secundario">Agregar</button>
           <button type="button" className="enlace" onClick={cerrar}>Cerrar</button></div>
       </form>
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
     </div>
   )
 }
@@ -667,7 +667,7 @@ function Reportes() {
         <label className="selector"><span className="solo-lectores">Hasta</span>
           <input type="date" aria-label="Hasta" value={rango.hasta} onChange={(e) => setRango({ ...rango, hasta: e.target.value })} /></label>
       </Filtros>
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       {ingresos && gastos && (
         <Cifras items={[{ etiqueta: 'Ingresos', valor: soles(ingresos.total), tono: 'bien' },
           { etiqueta: 'Gastos', valor: soles(gastos.total), tono: 'falta' },

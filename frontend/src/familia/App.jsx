@@ -1,8 +1,5 @@
 // App de la familia (celular primero): inicio con la tarjeta en vivo, asistencia del mes, cuaderno y perfil.
-import {
-  Bell, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, DoorOpen, Fingerprint, House, LogIn, LogOut, NotebookPen,
-  PenLine, ShieldCheck, Signature, UserRound, Wallet,
-} from 'lucide-react'
+import { Bell, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, DoorOpen, Fingerprint, House, LogIn, LogOut, NotebookPen, PenLine, ShieldCheck, Signature, UserRound, Wallet } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom'
 import { api, CLAVE_TOKEN_FAMILIA, guardarToken, leerToken } from '../api.js'
@@ -12,6 +9,7 @@ import { hora12, LIMA, saludo } from '../tema.js'
 import { ListaCuaderno } from './Cuaderno.jsx'
 import { crearPasskey, hayPasskeys, llaveVapid } from './webauthn.js'
 import './app.css'
+import { Mensaje, Vacio } from '../espacios/comun/index.js'
 
 const tokenFamilia = () => leerToken(CLAVE_TOKEN_FAMILIA)
 const guardar = (t) => guardarToken(t, CLAVE_TOKEN_FAMILIA)
@@ -137,7 +135,7 @@ export function Inicio() {
         <p className="tenue">{fechaLarga()}</p>
         <h1>{saludo()}{yo ? `, ${yo.nombres.split(' ')[0]}` : ''}</h1>
       </div>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       {datos?.pendientes_aprobacion.length > 0 && (
         <p className="aviso">
           Su cuenta en {datos.pendientes_aprobacion.join(', ')} espera la aprobación del colegio.
@@ -155,7 +153,7 @@ export function Inicio() {
       {yo?.modulos?.recojo && yo.estado === 'activo' && hijos.length > 0 && <TarjetaRecojo />}
       <section className="tarjeta-app">
         <h2>Avisos recientes</h2>
-        {avisos.length === 0 ? <p className="tenue">Aún no hay avisos.</p> : (
+        {avisos.length === 0 ? <Vacio icono={Bell} titulo="Aún no hay avisos" texto="Aquí verá cuando su hijo ingrese, salga o el colegio le escriba." /> : (
           <ul className="lista-avisos">
             {avisos.slice(0, 5).map((a) => (
               <li key={a.id}>
@@ -245,7 +243,7 @@ function PorFirmar({ entrada, mas, alFirmar }) {
         <b>{entrada.titulo}</b>
         <span className="tenue">{entrada.alumnos.join(', ')} · {fechaHora(entrada.creado_en)}</span>
       </button>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       <button type="button" className="boton grande" disabled={enviando} onClick={firmar}>
         {BOTON_FIRMA[entrada.tipo] || 'Firmar lectura'}
       </button>
@@ -338,7 +336,7 @@ export function AsistenciaHijo() {
               <ChevronRight aria-hidden="true" />
             </button>
           </div>
-          {error && <p className="error">{error}</p>}
+          {error && <Mensaje tipo="error">{error}</Mensaje>}
           {d && (
             <>
               <div className="resumen-mes">
@@ -346,7 +344,7 @@ export function AsistenciaHijo() {
                   <div key={k} className={`caja-estado ${CLASE_ESTADO[k]}`}><b>{d.resumen[k] || 0}</b><span>{t}</span></div>
                 ))}
               </div>
-              {d.dias.length === 0 ? <p className="tenue">Sin registros en este mes.</p> : (
+              {d.dias.length === 0 ? <Vacio icono={CalendarCheck} titulo="Sin registros en este mes" texto="Cada ingreso y salida de la portería aparecerá aquí." /> : (
                 <ul className="dias-mes">
                   {d.dias.map((x) => (
                     <li key={x.fecha}>
@@ -402,10 +400,10 @@ export function Perfil() {
       </section>
       <section className="tarjeta-app">
         <h2>Avisos recibidos</h2>
-        {avisos.length === 0 ? <p className="tenue">Aún no hay avisos.</p> : (
+        {avisos.length === 0 ? <Vacio icono={Bell} titulo="Aún no hay avisos" texto="Aquí verá cuando su hijo ingrese, salga o el colegio le escriba." /> : (
           <ul className="lista-avisos">
             {avisos.map((a) => (
-              <li key={a.id}><span>{a.cuerpo}</span><time className="tenue">{fechaHora(a.creado_en)}</time></li>
+              <li key={a.id}><span><b className="aviso-titulo">{a.titulo}</b>{a.cuerpo}</span><time className="tenue">{fechaHora(a.creado_en)}</time></li>
             ))}
           </ul>
         )}
@@ -468,7 +466,7 @@ function Notificaciones({ yo, mostrarActivas = false }) {
         <p><b>Reciba un aviso cuando su hijo ingrese, llegue tarde, falte o salga, y cuando el colegio le escriba.</b></p>
         {texto ? <p className="tenue">{texto}</p>
           : <button type="button" className="boton" onClick={activar}>Activar avisos</button>}
-        {error && <p className="error">{error}</p>}
+        {error && <Mensaje tipo="error">{error}</Mensaje>}
       </div>
     </section>
   )
@@ -525,7 +523,7 @@ function Ajustes({ yo, alCambiar }) {
         <button className="boton">Cambiar PIN</button>
       </form>
       {mensaje && <p>{mensaje}</p>}
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
     </section>
   )
 }

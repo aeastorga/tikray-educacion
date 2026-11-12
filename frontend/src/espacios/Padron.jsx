@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom'
 import RecojoAlumno from './RecojoAlumno.jsx'
 import { api, descargar, guardarArchivo } from '../api.js'
-import { Buscador, documento, Encabezado, Filtros, Insignia, MenuAcciones, Paginacion, Persona, plural, Selector, Tabla, useConfirmar, usePaginado } from './comun/index.js'
+import { Buscador, CampoArchivo, Encabezado, Filtros, Insignia, Mensaje, MenuAcciones, Paginacion, Persona, Selector, Tabla, documento, plural, useConfirmar, usePaginado } from './comun/index.js'
 
 const DIAS = [['1', 'Lu'], ['2', 'Ma'], ['3', 'Mi'], ['4', 'Ju'], ['5', 'Vi'], ['6', 'Sá'], ['7', 'Do']]
 const TIPOS_DOC = ['DNI', 'CE', 'PAS', 'OTRO']
@@ -62,7 +62,7 @@ function useCarga(ruta) {
 }
 
 function MensajeError({ texto }) {
-  return texto ? <p className="error">{texto}</p> : null
+  return texto ? <Mensaje tipo="error">{texto}</Mensaje> : null
 }
 
 // --- Año escolar ---------------------------------------------------------------
@@ -160,7 +160,7 @@ function Estructura({ editar }) {
             await api('/api/padron/niveles', { metodo: 'POST', datos: { nombre: nivel, orden: est.niveles.length + 1 } })
             setNivel('')
           })}>
-            <input placeholder="Nuevo nivel (Inicial, Primaria…)" value={nivel} onChange={(e) => setNivel(e.target.value)} required />
+            <input aria-label="Nuevo nivel" placeholder="Nuevo nivel (Inicial, Primaria…)" value={nivel} onChange={(e) => setNivel(e.target.value)} required />
             <button className="boton">Agregar nivel</button>
           </form>
           <form className="fila-form" onSubmit={accion(async () => {
@@ -168,11 +168,11 @@ function Estructura({ editar }) {
             await api('/api/padron/grados', { metodo: 'POST', datos: { ...grado, nivel_id: Number(grado.nivel_id), orden: (n?.grados.length || 0) + 1 } })
             setGrado({ ...grado, nombre: '' })
           })}>
-            <select value={grado.nivel_id} onChange={(e) => setGrado({ ...grado, nivel_id: e.target.value })} required>
+            <select aria-label="Nivel" value={grado.nivel_id} onChange={(e) => setGrado({ ...grado, nivel_id: e.target.value })} required>
               <option value="">Nivel…</option>
               {est.niveles.map((n) => <option key={n.id} value={n.id}>{n.nombre}</option>)}
             </select>
-            <input placeholder="Grado (1°, 3 años…)" value={grado.nombre} onChange={(e) => setGrado({ ...grado, nombre: e.target.value })} required />
+            <input aria-label="Nombre del grado" placeholder="Grado (1°, 3 años…)" value={grado.nombre} onChange={(e) => setGrado({ ...grado, nombre: e.target.value })} required />
             <button className="boton">Agregar grado</button>
           </form>
         </>
@@ -196,7 +196,7 @@ function Estructura({ editar }) {
           await api('/api/padron/turnos', { metodo: 'POST', datos: { ...turno, tolerancia_minutos: Number(turno.tolerancia_minutos) } })
           setTurno({ ...turno, nombre: '' })
         })}>
-          <input placeholder="Nombre (Mañana, Tarde…)" value={turno.nombre} onChange={(e) => setTurno({ ...turno, nombre: e.target.value })} required />
+          <input aria-label="Nombre del turno" placeholder="Nombre (Mañana, Tarde…)" value={turno.nombre} onChange={(e) => setTurno({ ...turno, nombre: e.target.value })} required />
           <label>Entrada<input type="time" value={turno.hora_entrada} onChange={(e) => setTurno({ ...turno, hora_entrada: e.target.value })} required /></label>
           <label>Tolerancia (min)<input type="number" min="0" max="120" value={turno.tolerancia_minutos} onChange={(e) => setTurno({ ...turno, tolerancia_minutos: e.target.value })} /></label>
           <label>Salida<input type="time" value={turno.hora_salida} onChange={(e) => setTurno({ ...turno, hora_salida: e.target.value })} required /></label>
@@ -252,7 +252,7 @@ function Secciones({ editar }) {
              ]} />
       {editar && est && (
         <form className="fila-form" onSubmit={crear}>
-          <select value={form.grado_id} onChange={(e) => setForm({ ...form, grado_id: e.target.value })} required>
+          <select aria-label="Grado" value={form.grado_id} onChange={(e) => setForm({ ...form, grado_id: e.target.value })} required>
             <option value="">Grado…</option>
             {est.niveles.map((n) => (
               <optgroup key={n.id} label={n.nombre}>
@@ -260,11 +260,11 @@ function Secciones({ editar }) {
               </optgroup>
             ))}
           </select>
-          <select value={form.turno_id} onChange={(e) => setForm({ ...form, turno_id: e.target.value })} required>
+          <select aria-label="Turno" value={form.turno_id} onChange={(e) => setForm({ ...form, turno_id: e.target.value })} required>
             <option value="">Turno…</option>
             {est.turnos.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
           </select>
-          <input placeholder="Sección (A, B…)" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required />
+          <input aria-label="Sección" placeholder="Sección (A, B…)" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required />
           <button className="boton">Agregar sección</button>
         </form>
       )}
@@ -298,7 +298,7 @@ function Calendario({ editar }) {
         <form className="fila-form" onSubmit={agregar}>
           <label>Desde<input type="date" value={form.desde} onChange={(e) => setForm({ ...form, desde: e.target.value })} required /></label>
           <label>Hasta (opcional)<input type="date" value={form.hasta} onChange={(e) => setForm({ ...form, hasta: e.target.value })} /></label>
-          <input placeholder="Motivo" value={form.motivo} onChange={(e) => setForm({ ...form, motivo: e.target.value })} required />
+          <input aria-label="Motivo" placeholder="Motivo" value={form.motivo} onChange={(e) => setForm({ ...form, motivo: e.target.value })} required />
           <button className="boton">Agregar</button>
         </form>
       )}
@@ -383,13 +383,14 @@ function Alumnos({ editar, recojo }) {
 function CamposDocumento({ datos, set, tipos = TIPOS_DOC }) {
   return (
     <>
-      <select value={datos.tipo_documento} onChange={(e) => set({ ...datos, tipo_documento: e.target.value })}>
+      <select aria-label="Tipo de documento" value={datos.tipo_documento} onChange={(e) => set({ ...datos, tipo_documento: e.target.value })}>
         {tipos.map((t) => <option key={t}>{t}</option>)}
       </select>
-      <input placeholder="N° documento" value={datos.numero_documento} required
+      <input aria-label="Número de documento" placeholder="N° documento" value={datos.numero_documento} required
+             inputMode={datos.tipo_documento === 'DNI' ? 'numeric' : 'text'}
              onChange={(e) => set({ ...datos, numero_documento: e.target.value })} />
-      <input placeholder="Apellidos" value={datos.apellidos} required onChange={(e) => set({ ...datos, apellidos: e.target.value })} />
-      <input placeholder="Nombres" value={datos.nombres} required onChange={(e) => set({ ...datos, nombres: e.target.value })} />
+      <input aria-label="Apellidos" placeholder="Apellidos" value={datos.apellidos} required onChange={(e) => set({ ...datos, apellidos: e.target.value })} />
+      <input aria-label="Nombres" placeholder="Nombres" value={datos.nombres} required onChange={(e) => set({ ...datos, nombres: e.target.value })} />
     </>
   )
 }
@@ -519,9 +520,9 @@ function FichaAlumno({ id, editar, recojo, secciones, cerrar }) {
           <p className="tenue">Si el apoderado ya existe (por ejemplo, de un hermano), se usa el mismo registro.</p>
           <div className="fila-form sin-margen"><CamposDocumento datos={apo} set={setApo} /></div>
           <div className="fila-form sin-margen">
-            <input placeholder="Parentesco" value={apo.parentesco} onChange={(e) => setApo({ ...apo, parentesco: e.target.value })} required />
-            <input placeholder="Celular" inputMode="tel" value={apo.celular} onChange={(e) => setApo({ ...apo, celular: e.target.value })} />
-            <input placeholder="Correo" type="email" value={apo.correo} onChange={(e) => setApo({ ...apo, correo: e.target.value })} />
+            <input aria-label="Parentesco" placeholder="Parentesco" value={apo.parentesco} onChange={(e) => setApo({ ...apo, parentesco: e.target.value })} required />
+            <input aria-label="Celular" placeholder="Celular" inputMode="tel" value={apo.celular} onChange={(e) => setApo({ ...apo, celular: e.target.value })} />
+            <input aria-label="Correo" placeholder="Correo" type="email" value={apo.correo} onChange={(e) => setApo({ ...apo, correo: e.target.value })} />
           </div>
           <label className="check">
             <input type="checkbox" checked={apo.responsable_pago} onChange={(e) => setApo({ ...apo, responsable_pago: e.target.checked })} />
@@ -589,7 +590,7 @@ function Importar() {
         <li>Llénala y súbela. Primero verás una vista previa con los errores; no se guarda nada hasta confirmar.</li>
       </ol>
       <div className="fila-form">
-        <input key={campo} type="file" accept=".xlsx" onChange={(e) => { setArchivo(e.target.files[0] || null); setInforme(null); setHecho(null) }} />
+        <CampoArchivo suelto texto="Elegir Excel" aria-label="Archivo Excel" key={campo} accept=".xlsx" onChange={(e) => { setArchivo(e.target.files[0] || null); setInforme(null); setHecho(null) }} />
         <button className="boton" disabled={!archivo || ocupado} onClick={() => enviar('vista-previa')}>Revisar</button>
       </div>
       <MensajeError texto={error} />
@@ -600,7 +601,7 @@ function Importar() {
           <Resumen resumen={informe.resumen} />
           {informe.total_errores > 0 ? (
             <>
-              <p className="error">{informe.total_errores === 1 ? 'Hay 1 error' : `Hay ${plural(informe.total_errores, 'error', 'errores')}`}. Corrígelos en el Excel y vuelve a subirlo.</p>
+              <Mensaje tipo="error">{informe.total_errores === 1 ? 'Hay 1 error' : `Hay ${plural(informe.total_errores, 'error', 'errores')}`}. Corrígelos en el Excel y vuelve a subirlo.</Mensaje>
               <Tabla etiqueta="Errores del Excel" filas={informe.errores.map((e, i) => ({ ...e, id: i }))}
                      columnas={[
                        { id: 'problema', titulo: 'Problema', claseCelda: () => 'error-celda', celda: (e) => e.mensaje },

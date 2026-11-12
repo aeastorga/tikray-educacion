@@ -4,7 +4,7 @@ import { ArrowLeft, BadgePercent, CalendarClock, FileSpreadsheet, Plus, Receipt,
 import { useCallback, useEffect, useState } from 'react'
 import { Link, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { api, descargar } from '../api.js'
-import { Buscador, Cifras, Encabezado, fechaCorta, fechaHora, Filtros, Insignia, MenuAcciones, Paginacion, Persona, plural, Selector, soles, Tabla, useConfirmar, usePaginado } from './comun/index.js'
+import { Buscador, Cargando, Cifras, Encabezado, Filtros, Insignia, Mensaje, MenuAcciones, Paginacion, Persona, Selector, Tabla, fechaCorta, fechaHora, plural, soles, useConfirmar, usePaginado } from './comun/index.js'
 import './configuracion.css'
 import './pensiones.css'
 
@@ -71,7 +71,7 @@ function Alumnos() {
         <Selector etiqueta="Situación" valor={estado} cambiar={setEstado}
                   opciones={[['', 'Todos'], ['con_deuda_vencida', 'Con deuda vencida'], ['al_dia', 'Al día']]} />
       </Filtros>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       <Tabla etiqueta="Cuotas por alumno" columnas={columnas} filas={datos?.items} cargando={cargando}
              alFila={(a) => navegar(`alumno/${a.id}`)}
              vacio={{ icono: Wallet, titulo: q || estado || seccion ? 'Nadie con esos filtros' : 'Aún no hay cuotas',
@@ -138,8 +138,8 @@ function DetalleAlumno({ editar }) {
   const cargar = useCallback(() => api(`/api/pensiones/alumnos/${id}`).then(setD).catch((e) => setError(e.message)), [id])
   useEffect(() => { cargar() }, [cargar])
 
-  if (error && !d) return <p className="error">{error}</p>
-  if (!d) return <p className="tenue">Cargando…</p>
+  if (error && !d) return <Mensaje tipo="error">{error}</Mensaje>
+  if (!d) return <Cargando />
   const vivas = d.cuotas.filter((c) => c.estado !== 'anulada')
   const suma = (lista, campo) => lista.reduce((t, c) => t + Math.round(Number(c[campo]) * 100), 0) / 100
   return (
@@ -173,7 +173,7 @@ function DetalleAlumno({ editar }) {
           </ul>
         </>
       )}
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
     </div>
   )
 }
@@ -227,7 +227,7 @@ function FormDescuento({ alumno, cerrar, alGuardar }) {
         <button className="boton">Guardar descuento</button>
         <button type="button" className="enlace" onClick={cerrar}>Cancelar</button>
       </div>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
     </form>
   )
 }
@@ -269,7 +269,7 @@ function Descuentos({ editar }) {
       <Filtros total={datos && plural(datos.total, 'descuento', 'descuentos')}>
         <Buscador valor={q} cambiar={setQ} placeholder="Buscar por alumno" />
       </Filtros>
-      {(error || errorLista) && <p className="error">{error || errorLista}</p>}
+      {(error || errorLista) && <Mensaje tipo="error">{error || errorLista}</Mensaje>}
       <Tabla etiqueta="Descuentos y becas" columnas={columnas} filas={datos?.items} cargando={cargando}
              claseFila={(x) => (x.anulado ? 'atenuada' : '')}
              vacio={{ icono: BadgePercent, titulo: q ? 'Nadie con ese nombre' : 'Sin descuentos', texto: q ? 'Prueba con otro nombre.'
@@ -307,7 +307,7 @@ function Morosidad() {
         <Selector etiqueta="Sección" valor={seccion} cambiar={setSeccion}
                   opciones={[['', 'Todas las secciones'], ...secciones.map((s) => [String(s.id), s.nombre])]} />
       </Filtros>
-      {(error || errorLista) && <p className="error">{error || errorLista}</p>}
+      {(error || errorLista) && <Mensaje tipo="error">{error || errorLista}</Mensaje>}
       <Tabla etiqueta="Morosidad" columnas={columnas} filas={datos?.items} cargando={cargando} clave={(f) => f.alumno_id}
              alFila={(f) => navegar(`/panel/pensiones/alumno/${f.alumno_id}`)}
              vacio={{ icono: Wallet, titulo: 'Nadie con deuda vencida', texto: 'Todos los alumnos están al día.' }} />
@@ -342,7 +342,7 @@ function Configurar({ editar }) {
     if (await llamar(() => api('/api/pensiones/conceptos', { metodo: 'POST', datos: { ...nuevo, igv: nuevo.igv || null } }), 'Concepto creado')) setNuevo(null)
   }
 
-  if (!d) return error ? <p className="error">{error}</p> : <p className="tenue">Cargando…</p>
+  if (!d) return error ? <Mensaje tipo="error">{error}</Mensaje> : <Cargando />
   return (
     <>
       <Encabezado titulo={`Conceptos y cronograma ${d.anio.anio}`}
@@ -353,8 +353,8 @@ function Configurar({ editar }) {
                         <Plus size={18} aria-hidden="true" /> Concepto</button>
                       <button className="boton" onClick={generar}>Generar cuotas</button>
                     </>)} />
-      {mensaje && <p className="tenue" role="status">{mensaje}</p>}
-      {error && <p className="error" role="alert">{error}</p>}
+      <Mensaje tipo="ok">{mensaje}</Mensaje>
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       {nuevo && (
         <form className="tarjeta-panel form-pensiones" onSubmit={crear}>
           <h3>Nuevo concepto</h3>
@@ -612,7 +612,7 @@ function ConfigMora({ editar }) {
         <p className="tenue">El recordatorio llega por la app al responsable de pago, junta todas sus cuotas en un solo aviso, y otro el día que vence. Respeta el horario sin molestar. Se apaga en Configuración › Avisos.</p>
         {editar && <div className="acciones"><button className="boton">Guardar</button></div>}
       </fieldset>
-      {mensaje && <p className={mensaje.error ? 'error' : 'tenue'} role="status">{mensaje.texto}</p>}
+      {mensaje && <Mensaje tipo={mensaje.error ? 'error' : 'ok'}>{mensaje.texto}</Mensaje>}
     </form>
   )
 }

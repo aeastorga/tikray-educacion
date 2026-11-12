@@ -5,7 +5,7 @@ import { ChevronLeft } from 'lucide-react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import { api } from '../api.js'
 import { CamposPersona, FotoProtegida, PERSONA_VACIA, SubirFoto } from '../espacios/RecojoAlumno.jsx'
-import { useConfirmar } from '../espacios/comun/index.js'
+import { Cargando, Mensaje, useConfirmar } from '../espacios/comun/index.js'
 
 const fechaTexto = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -34,8 +34,8 @@ export default function RecojoFamilia() {
         <p className="tenue">Quién puede recoger a sus hijos. Usted y los demás apoderados siempre pueden; la portería
           verifica a las demás personas con su documento.</p>
       </div>
-      {error && <p className="error">{error}</p>}
-      {!d && !error && <p className="tenue">Cargando…</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
+      {!d && !error && <Cargando />}
       {d?.hijos.length === 0 && <p className="tenue">No hay alumnos vinculados a su cuenta en este colegio.</p>}
       {d?.hijos.map((h) => <RecojoHijo key={h.id} h={h} d={d} varios={d.hijos.length > 1} recargar={cargar} />)}
     </>
@@ -165,7 +165,7 @@ function RecojoHijo({ h, d, varios, recargar }) {
         </form>
       )}
 
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
     </section>
   )
 }

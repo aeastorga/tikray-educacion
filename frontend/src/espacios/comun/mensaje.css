@@ -1,0 +1,17 @@
+/* Mensajes de estado: el mismo diseño en todo el sistema (claro y oscuro con los tokens del tema). */
+.mensaje {
+  display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px;
+  border-radius: var(--radio-chico); font-weight: 600; line-height: 1.4; overflow-wrap: anywhere;
+}
+.mensaje > svg { flex: none; margin-top: 1px; }
+.mensaje-ok { background: var(--bien-fondo); color: var(--bien-texto); }
+.mensaje-error { background: var(--falta-fondo); color: var(--falta-texto); }
+.mensaje-sin-conexion { background: var(--tarde-fondo); color: var(--tarde-texto); }
+
+.cargando {
+  display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; min-height: 160px;
+  color: var(--tenue);
+}
+.cargando > svg { animation: cargando-gira 1s linear infinite; }
+@keyframes cargando-gira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cargando > svg { animation: none; } }

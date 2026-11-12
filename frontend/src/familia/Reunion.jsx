@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api, CLAVE_TOKEN_FAMILIA, guardarToken } from '../api.js'
 import Cabecera from '../espacios/Cabecera.jsx'
 import '../espacios/reunion.css'
+import { Cargando, Mensaje } from '../espacios/comun/index.js'
 
 // Modo reunión, lado del padre: escanea el QR del aula, escribe el DNI de su hijo, llena su
 // ficha y espera a que el tutor la apruebe; si el tutor activa su cuenta, crea su PIN aquí.
@@ -58,7 +59,7 @@ export default function Reunion({ colegio }) {
       </main>
     )
   }
-  if (!info) return <main className="centro"><p className="tenue">Cargando…</p></main>
+  if (!info) return <main className="centro"><Cargando /></main>
   return <Llenar colegio={colegio} token={token} info={info} quiosco={quiosco} terminar={terminar} />
 }
 
@@ -133,7 +134,7 @@ function Llenar({ colegio, token, info, quiosco, terminar }) {
             <input value={documento} inputMode="numeric" required autoComplete="off"
                    onChange={(e) => setDocumento(e.target.value)} />
           </label>
-          {error && <p className="error">{error}</p>}
+          {error && <Mensaje tipo="error">{error}</Mensaje>}
           <button className="boton" disabled={enviando}>Continuar</button>
           {quiosco && <p className="tenue">Tablet del aula: no se guarda nada en este equipo.</p>}
         </form>
@@ -169,7 +170,7 @@ function Llenar({ colegio, token, info, quiosco, terminar }) {
           </label>
         </div>
         <p className="tenue">El tutor revisará tu ficha en la reunión. Nada cambia hasta que la apruebe.</p>
-        {error && <p className="error">{error}</p>}
+        {error && <Mensaje tipo="error">{error}</Mensaje>}
         <div className="acciones">
           <button className="boton" disabled={enviando || !acepto}>Enviar ficha</button>
           <button type="button" className="enlace" onClick={reiniciar}>Empezar de nuevo</button>
@@ -260,7 +261,7 @@ function Espera({ colegio, codigo, corregir }) {
     navegar('/familia', { replace: true })
   }
 
-  let cuerpo = <p className="tenue">Cargando…</p>
+  let cuerpo = <Cargando />
   if (estado?.estado === 'pendiente') {
     cuerpo = (
       <>
@@ -319,7 +320,7 @@ function Espera({ colegio, codigo, corregir }) {
       <div className="tarjeta">
         <Cabecera colegio={colegio} />
         {cuerpo}
-        {error && <p className="error">{error}</p>}
+        {error && <Mensaje tipo="error">{error}</Mensaje>}
       </div>
     </main>
   )
