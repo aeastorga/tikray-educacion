@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarDays, FileDown, School } from 'lucide-react'
+import { ArrowLeft, CalendarDays, ClipboardCheck, FileDown, School, UserCheck } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { api, descargar } from '../api.js'
@@ -222,10 +222,10 @@ function EnVivo({ colegio, editar }) {
             {editar && (
               <div className="acciones apiladas">
                 <a className="boton secundario" href={urlReunion(r.token, true)} target="_blank" rel="noreferrer">
-                  Abrir en la tablet (modo quiosco)</a>
-                <button className="enlace" onClick={async () => { if (await confirmar({ titulo: 'Generar otro QR', texto: 'El QR actual dejará de servir.', accion: 'Generar otro', peligro: true })) accion('/nuevo-qr') }}>
+                  Modo quiosco (tablet)</a>
+                <button type="button" className="boton secundario" onClick={async () => { if (await confirmar({ titulo: 'Generar otro QR', texto: 'El QR actual dejará de servir.', accion: 'Generar otro', peligro: true })) accion('/nuevo-qr') }}>
                   Generar otro QR</button>
-                <button className="enlace" onClick={async () => { if (await confirmar({ titulo: 'Cerrar la reunión', texto: 'El QR dejará de servir.', accion: 'Cerrar reunión', peligro: true })) accion('/cerrar') }}>
+                <button type="button" className="boton secundario" onClick={async () => { if (await confirmar({ titulo: 'Cerrar la reunión', texto: 'El QR dejará de servir.', accion: 'Cerrar reunión', peligro: true })) accion('/cerrar') }}>
                   Cerrar reunión</button>
               </div>
             )}
@@ -353,8 +353,14 @@ function Persona({ titulo, datos, cambios }) {
   )
 }
 
+// Sin cuenta todavía (o con el enlace enviado y sin usar): el tutor puede mandarle su enlace.
+const SIN_CUENTA = ['sin_cuenta', 'invitado']
+const sinCuenta = (p) => SIN_CUENTA.includes(p.estado)
+const necesitaAccion = (a) => a.apoderados.some(sinCuenta)
+
 function Faltan({ id, colegio, editar }) {
   const [lista, setLista] = useState(null)
+  const [filtro, setFiltro] = useState('todos')
   const [enlace, setEnlace] = useState(null)
   const [error, setError] = useState(null)
 
@@ -369,28 +375,54 @@ function Faltan({ id, colegio, editar }) {
   }
 
   if (!lista) return (error ? <Mensaje tipo="error">{error}</Mensaje> : <Cargando />)
+  if (!lista.length) return <Vacio icono={ClipboardCheck} titulo="Todos los alumnos tienen su ficha" texto="Nadie de esta sección faltó a la reunión." />
+  // Primero los que necesitan algo (algún apoderado sin cuenta); dentro de cada grupo, el orden por apellido de la lista.
+  const ordenada = [...lista.filter(necesitaAccion), ...lista.filter((a) => !necesitaAccion(a))]
+  const visibles = filtro === 'sin_cuenta' ? ordenada.filter(necesitaAccion) : ordenada
+  const apoderadosSinCuenta = lista.reduce((n, a) => n + a.apoderados.filter(sinCuenta).length, 0)
   return (
-    <div>
+    <div className="faltan">
       {error && <Mensaje tipo="error">{error}</Mensaje>}
       {enlace && <EnlaceGenerado enlace={enlace} colegio={colegio} cerrar={() => setEnlace(null)} />}
-      {!lista.length && <p>Todos los alumnos tienen su ficha.</p>}
-      <ul className="lista-faltan">
-        {lista.map((a) => (
-          <li key={a.id}>
-            <b>{a.nombre}</b>
-            {!a.apoderados.length && <span className="tenue">Sin apoderados en el padrón</span>}
-            {a.apoderados.map((p) => (
-              <div key={p.id} className="faltan-apoderado">
-                <span>{p.nombre} <span className="tenue">({p.parentesco})</span></span>
-                <Insignia tono={TONO_CUENTA[p.estado] || 'neutro'}>{CUENTA[p.estado] || p.estado.replace('_', ' ')}</Insignia>
-                {editar && p.estado !== 'activo' && p.estado !== 'bloqueado' && (
-                  <button className="enlace" onClick={() => invitar(p)}>Enviar su enlace</button>
-                )}
-              </div>
-            ))}
-          </li>
-        ))}
-      </ul>
+      <div className="faltan-cabeza">
+        <p className="faltan-resumen">
+          <b>{plural(lista.length, 'alumno sin ficha', 'alumnos sin ficha')}</b>
+          {' · '}{plural(apoderadosSinCuenta, 'apoderado sin cuenta', 'apoderados sin cuenta')}
+        </p>
+        <div className="filtro-chips" role="group" aria-label="Mostrar">
+          <button type="button" aria-pressed={filtro === 'todos'} onClick={() => setFiltro('todos')}>Todos</button>
+          <button type="button" aria-pressed={filtro === 'sin_cuenta'} onClick={() => setFiltro('sin_cuenta')}>Sin cuenta</button>
+        </div>
+      </div>
+      {!visibles.length ? (
+        <Vacio icono={UserCheck} titulo="Todos tienen cuenta" texto="Los apoderados de los alumnos que faltaron ya tienen su cuenta." />
+      ) : (
+        <ul className="lista-faltan">
+          {visibles.map((a) => (
+            <li key={a.id} className="faltan-alumno">
+              <h3>{a.nombre}</h3>
+              {!a.apoderados.length ? <p className="tenue">Sin apoderados en el padrón</p> : (
+                <ul className="faltan-apoderados">
+                  {a.apoderados.map((p) => (
+                    <li key={p.id} className="faltan-apoderado">
+                      <span className="faltan-nombre">{p.nombre}</span>
+                      <span className="faltan-parentesco tenue">{p.parentesco}</span>
+                      <span className="faltan-estado">
+                        <Insignia tono={TONO_CUENTA[p.estado] || 'neutro'}>{CUENTA[p.estado] || p.estado.replace('_', ' ')}</Insignia>
+                      </span>
+                      <span className="faltan-accion">
+                        {editar && p.estado !== 'activo' && p.estado !== 'bloqueado' && (
+                          <button type="button" className="boton secundario chico" onClick={() => invitar(p)}>Enviar enlace</button>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

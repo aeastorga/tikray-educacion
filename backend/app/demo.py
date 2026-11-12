@@ -44,9 +44,12 @@ NOMBRES = ["Lucía", "Mateo", "Valentina", "Santiago", "Camila", "Sebastián", "
            "Mía", "Liam", "Ximena", "Leonardo", "Isabella", "Adrián", "Renata", "Diego", "Antonella", "Matías",
            "Luana", "Joaquín", "Fernanda", "Gabriel", "Daniela", "Alonso", "Mariana", "Rodrigo", "Ariana", "Nicolás",
            "Kiara", "Fabricio", "Romina", "Emiliano", "Alessia", "Bruno", "Abigail", "Piero", "Nayeli", "Josué"]
-ADULTOS = ["Rosa", "Juan", "María", "Carlos", "Ana", "José", "Carmen", "Luis", "Elena", "Jorge", "Patricia", "Miguel",
-           "Gladys", "Víctor", "Silvia", "Pedro", "Norma", "César", "Maribel", "Raúl", "Julia", "Walter", "Yolanda",
-           "Hugo", "Lourdes", "Óscar", "Teresa", "Alberto", "Marlene", "Wilber"]
+# Nombres de adultos separados por género: "Madre", "Tía", "Abuela"… llevan uno de mujer; "Padre", "Tío"… de hombre.
+MUJERES = ["Rosa", "María", "Ana", "Carmen", "Elena", "Patricia", "Gladys", "Silvia", "Norma", "Maribel", "Julia",
+           "Yolanda", "Lourdes", "Teresa", "Marlene"]
+HOMBRES = ["Juan", "Carlos", "José", "Luis", "Jorge", "Miguel", "Víctor", "Pedro", "César", "Raúl", "Walter", "Hugo",
+           "Óscar", "Alberto", "Wilber"]
+ADULTOS = MUJERES + HOMBRES  # docentes y personal: cualquiera
 APELLIDOS = ["Quispe", "Flores", "Sánchez", "Rodríguez", "García", "Mamani", "Huamán", "Chávez", "Rojas", "Vásquez",
              "Ramírez", "Torres", "Mendoza", "Castillo", "Díaz", "Gutiérrez", "Espinoza", "Ramos", "Vargas", "Condori",
              "Paredes", "Huanca", "Salazar", "Cruz", "Romero", "Aguilar", "Medina", "Silva", "Ccama", "Apaza"]
@@ -233,7 +236,7 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
         for parentesco, apellido in (("Madre", apellido_madre), ("Padre", apellido_padre))[:rnd.choice((1, 2, 2))]:
             n_apo += 1
             ap = Apoderado(colegio_id=cid, tipo_documento="OTRO", numero_documento=_doc_apoderado(cid, n_apo),
-                           nombres=rnd.choice(ADULTOS), apellidos=f"{apellido} {rnd.choice(APELLIDOS)}",
+                           nombres=nombre_segun(rnd, parentesco), apellidos=f"{apellido} {rnd.choice(APELLIDOS)}",
                            celular=f"9{rnd.randint(10000000, 99999999)}")
             db.add(ap)
             apoderados.append(ap)
@@ -340,7 +343,18 @@ def _calendario(db: Session, cid: int, anio: AnioEscolar, autora: Usuario, secci
     evento(22, "Aniversario del colegio", "actuacion", time(10, 0))
 
 
-PARIENTES = ["Tía", "Tío", "Abuela", "Abuelo", "Vecina", "Vecino", "Madrina", "Padrino", "Hermana mayor", "Prima"]
+PARIENTES_MUJER = ["Tía", "Abuela", "Vecina", "Madrina", "Hermana mayor", "Prima"]
+PARIENTES_HOMBRE = ["Tío", "Abuelo", "Vecino", "Padrino"]
+PARIENTES = PARIENTES_MUJER + PARIENTES_HOMBRE
+
+
+def nombre_segun(rnd: random.Random, parentesco: str) -> str:
+    """Un nombre que coincide con el parentesco (Madre, Tía… de mujer; Padre, Tío… de hombre)."""
+    if parentesco == "Madre" or parentesco in PARIENTES_MUJER:
+        return rnd.choice(MUJERES)
+    if parentesco == "Padre" or parentesco in PARIENTES_HOMBRE:
+        return rnd.choice(HOMBRES)
+    return rnd.choice(ADULTOS)
 
 
 def _recojo(db: Session, rnd: random.Random, cid: int, secretaria: Usuario, portero: Usuario, secciones: list,
@@ -369,9 +383,10 @@ def _recojo(db: Session, rnd: random.Random, cid: int, secretaria: Usuario, port
         propios = apoderados_de.get(a.id, [])
         for _ in range(rnd.randint(1, 3)):
             de_familia = propios and rnd.random() < 0.4
-            x = AutorizadoRecojo(colegio_id=cid, alumno_id=a.id, nombres=rnd.choice(ADULTOS),
+            parentesco = rnd.choice(PARIENTES)
+            x = AutorizadoRecojo(colegio_id=cid, alumno_id=a.id, nombres=nombre_segun(rnd, parentesco),
                                  apellidos=f"{rnd.choice(APELLIDOS)} {rnd.choice(APELLIDOS)}", tipo_documento="OTRO",
-                                 numero_documento=documento(), parentesco=rnd.choice(PARIENTES),
+                                 numero_documento=documento(), parentesco=parentesco,
                                  celular=f"9{rnd.randint(10000000, 99999999)}", activo=True,
                                  origen="familia" if de_familia else "colegio",
                                  creado_por_apoderado_id=propios[0][0].id if de_familia else None,
@@ -381,7 +396,7 @@ def _recojo(db: Session, rnd: random.Random, cid: int, secretaria: Usuario, port
     hijo = alumnos[0][0]
     if propios := apoderados_de.get(hijo.id):
         db.add(AutorizacionRecojoDia(colegio_id=cid, alumno_id=hijo.id, apoderado_id=propios[0][0].id, fecha=hoy,
-                                     nombres=rnd.choice(ADULTOS), apellidos=f"{rnd.choice(APELLIDOS)} {rnd.choice(APELLIDOS)}",
+                                     nombres=nombre_segun(rnd, "Tía"), apellidos=f"{rnd.choice(APELLIDOS)} {rnd.choice(APELLIDOS)}",
                                      tipo_documento="OTRO", numero_documento=documento(), parentesco="Tía"))
     db.flush()
 
@@ -402,8 +417,10 @@ def _recojo(db: Session, rnd: random.Random, cid: int, secretaria: Usuario, port
                 "recibido_en": momento + timedelta(seconds=rnd.randint(5, 40)), "fuera_de_lista": False,
                 "apoderado_id": None, "autorizado_id": None, "autorizacion_dia_id": None}
         if i in fuera:
-            fila |= {"tipo": "otro", "fuera_de_lista": True, "nombre": f"{rnd.choice(ADULTOS)} {rnd.choice(APELLIDOS)}",
-                     "tipo_documento": "OTRO", "numero_documento": documento(), "parentesco": rnd.choice(PARIENTES)}
+            parentesco = rnd.choice(PARIENTES)
+            fila |= {"tipo": "otro", "fuera_de_lista": True,
+                     "nombre": f"{nombre_segun(rnd, parentesco)} {rnd.choice(APELLIDOS)}",
+                     "tipo_documento": "OTRO", "numero_documento": documento(), "parentesco": parentesco}
         elif autorizados.get(al) and (rnd.random() < 0.4 or not apoderados_de.get(al)):
             x = rnd.choice(autorizados[al])
             fila |= {"tipo": "autorizado", "autorizado_id": x.id, "nombre": f"{x.nombres} {x.apellidos}",
