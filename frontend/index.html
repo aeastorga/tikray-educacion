@@ -6,11 +6,11 @@
     <meta name="theme-color" content="#1F4E79" />
     <link rel="icon" href="/icono.svg" />
     <script>
-      // Apariencia antes de pintar (sin parpadeo). Claro si no se eligió otra cosa.
+      // Apariencia antes de pintar (sin parpadeo). Automático (lo que diga el equipo) si no se eligió otra cosa.
       (function () {
-        var t = 'claro'
-        try { t = localStorage.getItem('tikray-tema') || 'claro' } catch (e) {}
-        if (t !== 'oscuro' && t !== 'auto') t = 'claro'
+        var t = 'auto'
+        try { t = localStorage.getItem('tikray-tema') || 'auto' } catch (e) {}
+        if (t !== 'claro' && t !== 'oscuro') t = 'auto'
         document.documentElement.setAttribute('data-tema', t)
         var oscuro = t === 'oscuro' || (t === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches)
         if (oscuro) document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0B0F17')

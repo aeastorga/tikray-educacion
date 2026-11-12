@@ -77,6 +77,7 @@ def enviar(db) -> list[str]:
 
 # --- Portería: quién lo recogió y el aviso -------------------------------------------------------------
 
+@pytest.mark.usefixtures("a_las_10")  # marca "hace N minutos": mismo día de Lima a cualquier hora
 def test_salida_con_apoderado_aviso_al_instante_y_la_familia_lo_ve(client, db):
     e = preparar(db, "alfa")
     h = auth("alfa", token(client, "alfa"))
@@ -114,6 +115,7 @@ def test_salida_con_apoderado_aviso_al_instante_y_la_familia_lo_ve(client, db):
         ("Ape0, Niño0", "Primaria · 1° A", "Dir alfa", "Rosa Mamani")]
 
 
+@pytest.mark.usefixtures("a_las_10")  # marca "hace N minutos": mismo día de Lima a cualquier hora
 def test_fuera_de_lista_no_bloquea_la_salida(client, db):
     e = preparar(db, "alfa")
     h = auth("alfa", token(client, "alfa"))
@@ -138,6 +140,7 @@ def test_fuera_de_lista_no_bloquea_la_salida(client, db):
     assert r2.status_code == 422
 
 
+@pytest.mark.usefixtures("a_las_10")  # marca "hace N minutos": mismo día de Lima a cualquier hora
 def test_autorizado_permanente_y_desactivado(client, db):
     e = preparar(db, "alfa")
     crear_personal(db, e.colegio, "20000000", {"recojo": "editar", "padron": "ver"})
@@ -207,6 +210,7 @@ def test_maximo_cinco_autorizados_activos(client, db):
         "Rosa Mamani (apoderado)"
 
 
+@pytest.mark.usefixtures("a_las_10")  # marca "hace N minutos": mismo día de Lima a cualquier hora
 def test_no_hay_salio_solo(client, db):
     e = preparar(db, "alfa")
     h = auth("alfa", token(client, "alfa"))
@@ -272,6 +276,7 @@ def test_autorizacion_del_dia_vale_solo_esa_fecha_en_lima(client, db):
         "fuera_de_lista"] is True
 
 
+@pytest.mark.usefixtures("a_las_10")  # marca "hace N minutos": mismo día de Lima a cualquier hora
 def test_porteria_sin_internet_conserva_quien_lo_recogio(client, db):
     e = preparar(db, "alfa")
     h = auth("alfa", token(client, "alfa"))
@@ -293,6 +298,7 @@ def test_porteria_sin_internet_conserva_quien_lo_recogio(client, db):
     assert recoger(client, h, "no-existe-123", "apoderado", persona_id=e.padre.id)["estado"] == "esperando"
 
 
+@pytest.mark.usefixtures("a_las_10")  # marca "hace N minutos": mismo día de Lima a cualquier hora
 def test_marcacion_responde_en_menos_de_300_ms_con_recojo(client, db):
     e = preparar(db, "alfa")
     # 25 alumnos con dos autorizados cada uno.
@@ -324,6 +330,7 @@ def test_marcacion_responde_en_menos_de_300_ms_con_recojo(client, db):
 
 # --- Módulo apagado -------------------------------------------------------------------------------------
 
+@pytest.mark.usefixtures("a_las_10")  # marca "hace N minutos": mismo día de Lima a cualquier hora
 def test_modulo_apagado_403_y_porteria_como_siempre(client, db):
     e = preparar(db, "alfa")
     e.colegio.modulos_contratados = [*INCLUIDOS]  # sin recojo
@@ -358,6 +365,7 @@ def test_modulo_apagado_403_y_porteria_como_siempre(client, db):
     assert client.get(f"/api/recojo/alumnos/{e.a1.id}", headers=h).status_code == 403
 
 
+@pytest.mark.usefixtures("a_las_10")  # marca "hace N minutos": mismo día de Lima a cualquier hora
 def test_permisos_de_secretaria_y_porteria(client, db):
     e = preparar(db, "alfa")
     crear_personal(db, e.colegio, "20000000", {"recojo": "editar"})
@@ -387,6 +395,7 @@ def test_permisos_de_secretaria_y_porteria(client, db):
 
 # --- Aislamiento ----------------------------------------------------------------------------------------
 
+@pytest.mark.usefixtures("a_las_10")  # marca "hace N minutos": mismo día de Lima a cualquier hora
 def test_aislamiento_entre_colegios(client, db):
     a, b = preparar(db, "alfa"), preparar(db, "beta", dni_madre="45555555")
     ha, hb = auth("alfa", token(client, "alfa")), auth("beta", token(client, "beta"))

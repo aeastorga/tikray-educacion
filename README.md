@@ -29,7 +29,7 @@ cd frontend && npm install && npm run dev
 `render.yaml` crea un servicio web (Docker: el backend sirve también la PWA compilada) y un PostgreSQL, los dos en plan gratis. La dirección del servicio, `<nombre>.onrender.com`, es el subdominio del colegio demo (`DOMINIO_BASE=onrender.com`).
 
 - **Migraciones**: `backend/iniciar.sh` corre `alembic upgrade head` antes de levantar uvicorn en cada despliegue; si falla, la versión nueva no recibe tráfico.
-- **Secretos**: `SECRET_KEY` la genera Render; `VAPID_CLAVE_PRIVADA` y `VAPID_CLAVE_PUBLICA` se cargan en el panel (Render las pide al crear el Blueprint). Nada en el repositorio.
+- **Secretos**: `SECRET_KEY` y `FACTURACION_CLAVE` las genera Render (256 bits en base64, 44 caracteres; el sistema pide 32 o más); `VAPID_CLAVE_PRIVADA` y `VAPID_CLAVE_PUBLICA` se cargan en el panel (Render las pide al crear el Blueprint). Nada en el repositorio.
 - **IP real**: el contenedor solo recibe tráfico del proxy de Render por su red privada; `PROXIES_CONFIANZA` acepta `X-Forwarded-For` de esas redes y toma la IP de más a la derecha que no sea de ellas. `https://<nombre>.onrender.com/salud/ip` muestra lo que llega, para comprobarlo.
 - **Plan gratis**: el servicio se suspende tras 15 minutos sin visitas (tarda hasta un minuto en despertar) y mientras duerme no salen avisos ni faltas automáticas; no hay Shell (el colegio demo se crea desde tu computadora con la URL externa de la base); los archivos subidos se pierden al redesplegar; la base vence a los 30 días. Para quitar la suspensión: `plan: free` → `plan: starter` en el servicio.
 
