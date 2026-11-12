@@ -22,6 +22,8 @@ services:
           property: connectionString
       - key: SECRET_KEY
         generateValue: true      # la genera Render; no está en el repositorio
+      - key: FACTURACION_CLAVE
+        generateValue: true      # cifra el token del proveedor de comprobantes; 44 caracteres (256 bits en base64)
       - key: VAPID_CLAVE_PRIVADA
         sync: false              # secreta: Render la pide al crear el Blueprint
       - key: VAPID_CLAVE_PUBLICA

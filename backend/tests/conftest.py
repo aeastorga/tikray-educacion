@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
 from app.db import Base, get_engine, get_sessionmaker  # noqa: E402
-from app.fechas import hoy_lima  # noqa: E402
+from app.fechas import LIMA, hoy_lima  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import (AdminPlataforma, Alumno, AlumnoApoderado, Apoderado, Colegio, CuentaFamilia,  # noqa: E402
                         PermisoRol, Rol, Usuario)
@@ -66,6 +66,16 @@ def fijar_hoy():
     _hoy = hoy_lima()
     yield
     _hoy = None
+
+
+@pytest.fixture
+def a_las_10():
+    """El reloj a las 10:00 de Lima de hoy(), y sigue corriendo desde ahí. Para las pruebas que marcan "hace N
+    minutos" y esperan que todo caiga en el mismo día de Lima: sin esto fallan si se corren pasada la medianoche."""
+    import time_machine
+
+    with time_machine.travel(datetime.combine(hoy(), time(10, 0), LIMA), tick=True):
+        yield
 
 
 def hoy() -> date:

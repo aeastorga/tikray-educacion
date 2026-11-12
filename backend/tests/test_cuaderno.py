@@ -315,6 +315,7 @@ def test_lo_que_registra_el_colegio_ya_queda_aprobado(client, db, e, h):
     assert db.get(EntradaCuaderno, r.json()["id"]).estado == "aprobada"
 
 
+@pytest.mark.usefixtures("a_las_10")  # marca "hace 60 minutos": mismo día de Lima a cualquier hora
 def test_permiso_de_salida_en_la_porteria(client, db, e, h, hf):
     r = client.post("/api/familia/cuaderno/permisos-salida", headers=hf, json={
         "alumno_id": e.a1.id, "fecha": str(hoy()), "hora": "10:30", "recoge": "Rosa Mamani (madre)",
@@ -340,9 +341,6 @@ def test_permiso_de_salida_en_la_porteria(client, db, e, h, hf):
             {"id_cliente": uuid.uuid4().hex, "alumno_id": e.a1.id, "momento": momento}]}).json()["resultados"][0]
 
     entrada, salida = marca(60), marca(0)
-    if hoy() != (__import__("datetime").datetime.now(__import__("app.fechas", fromlist=["LIMA"]).LIMA)
-               - timedelta(minutes=60)).date():
-        pytest.skip("Corre justo después de medianoche")
     assert entrada["resultado"] == "entrada" and "permiso_salida" not in entrada
     assert salida["resultado"] == "salida"
     assert salida["permiso_salida"]["recoge"] == "Rosa Mamani (madre)"

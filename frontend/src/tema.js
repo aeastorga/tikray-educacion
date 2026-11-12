@@ -53,7 +53,7 @@ export function paraFondoOscuro(color) {
 
 const FONDO_OSCURO = '#0B0F17'
 
-// --- Apariencia: claro, oscuro o automático (lo que diga el celular). Se guarda en el equipo. ---
+// --- Apariencia: claro, oscuro o automático (lo que diga el celular; por defecto). Se guarda en el equipo. ---
 
 export const TEMAS = ['claro', 'oscuro', 'auto']
 const CLAVE_TEMA = 'tikray-tema'
@@ -61,9 +61,9 @@ const CLAVE_TEMA = 'tikray-tema'
 export function temaGuardado() {
   try {
     const t = localStorage.getItem(CLAVE_TEMA)
-    return TEMAS.includes(t) ? t : 'claro'
+    return TEMAS.includes(t) ? t : 'auto'
   } catch {
-    return 'claro'
+    return 'auto'
   }
 }
 
@@ -85,7 +85,7 @@ function pintarBarra() {
 }
 
 export function elegirTema(tema) {
-  const t = TEMAS.includes(tema) ? tema : 'claro'
+  const t = TEMAS.includes(tema) ? tema : 'auto'
   try {
     localStorage.setItem(CLAVE_TEMA, t)
   } catch {
