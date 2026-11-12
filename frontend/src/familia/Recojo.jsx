@@ -5,6 +5,7 @@ import { ChevronLeft } from 'lucide-react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import { api } from '../api.js'
 import { CamposPersona, FotoProtegida, PERSONA_VACIA, SubirFoto } from '../espacios/RecojoAlumno.jsx'
+import { useConfirmar } from '../espacios/comun/index.js'
 
 const fechaTexto = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -42,6 +43,7 @@ export default function RecojoFamilia() {
 }
 
 function RecojoHijo({ h, d, varios, recargar }) {
+  const { confirmar } = useConfirmar()
   const [form, setForm] = useState(null)
   const [dia, setDia] = useState(null)
   const [verInactivos, setVerInactivos] = useState(false)
@@ -69,8 +71,8 @@ function RecojoHijo({ h, d, varios, recargar }) {
       : api(`/api/familia/recojo/hijos/${h.id}/autorizados`, { metodo: 'POST', datos: cuerpo }), () => setForm(null))
   }
 
-  function cambiarActivo(x) {
-    if (x.activo && !confirm(`¿Quitar a ${x.nombres} de la lista? Ya no podrá recoger a ${nombre}.`)) return
+  async function cambiarActivo(x) {
+    if (x.activo && !await confirmar({ titulo: 'Quitar de la lista', texto: `${x.nombres} ya no podrá recoger a ${nombre}.`, accion: 'Quitar' })) return
     hacer(api(`/api/familia/recojo/autorizados/${x.id}`, { metodo: 'PUT', datos: datosDe(x, { activo: !x.activo }) }))
   }
 
@@ -80,8 +82,8 @@ function RecojoHijo({ h, d, varios, recargar }) {
     hacer(api(`/api/familia/recojo/hijos/${h.id}/del-dia`, { metodo: 'POST', datos }), () => setDia(null))
   }
 
-  function anular(x) {
-    if (!confirm(`¿Anular el permiso de ${x.nombres} para el ${fechaTexto(x.fecha)}?`)) return
+  async function anular(x) {
+    if (!await confirmar({ titulo: 'Anular permiso', texto: `${x.nombres} ya no podrá recogerlo el ${fechaTexto(x.fecha)}.`, accion: 'Anular', peligro: true })) return
     hacer(api(`/api/familia/recojo/del-dia/${x.id}/anular`, { metodo: 'POST' }))
   }
 

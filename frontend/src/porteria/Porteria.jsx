@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ScanLine } from 'lucide-react'
 import { api, ErrorApi, leerToken } from '../api.js'
-import { Insignia, Persona, Tabla } from '../espacios/comun/index.js'
+import { Insignia, Persona, Tabla, useConfirmar } from '../espacios/comun/index.js'
 import { datos, nuevoId, pendientes, recojos } from './almacen.js'
 import Camara from './Camara.jsx'
 import Recojo, { nombreElegido } from './Recojo.jsx'
@@ -22,6 +22,7 @@ function listaDelDia(padron, alumnoId) {
 }
 
 export default function Porteria({ yo }) {
+  const { confirmar } = useConfirmar()
   const [padron, setPadron] = useState(null)
   const [enLinea, setEnLinea] = useState(navigator.onLine)
   const [porEnviar, setPorEnviar] = useState(0)
@@ -198,8 +199,8 @@ export default function Porteria({ yo }) {
     lector.current?.focus()
   }
 
-  function manual(p) {
-    if (!confirm(`¿Marcar a ${p.nombre} sin carnet?`)) return
+  async function manual(p) {
+    if (!await confirmar({ titulo: 'Marcar sin carnet', texto: p.nombre, accion: 'Marcar' })) return
     registrar(p, p.tipo === 'alumno' ? { alumno_id: p.id } : { usuario_id: p.id })
     setBusqueda('')
     lector.current?.focus()

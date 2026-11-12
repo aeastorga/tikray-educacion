@@ -1,4 +1,5 @@
 export { default as Cifras } from './Cifras.jsx'
+export { ProveedorDialogos, useConfirmar, Ventana } from './Dialogo.jsx'
 export { default as Encabezado } from './Encabezado.jsx'
 export { Buscador, default as Filtros, Selector } from './Filtros.jsx'
 export { default as Insignia } from './Insignia.jsx'

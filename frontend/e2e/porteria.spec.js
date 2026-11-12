@@ -56,8 +56,8 @@ test('marca sin internet y envía al volver la conexión', async ({ page, contex
   await expect(page.locator('.porteria-tarjeta')).toContainText('Entrada')
   // Sin carnet, buscando por nombre.
   await page.getByPlaceholder('Busca por apellido o nombre').fill('huaman')
-  page.once('dialog', (d) => d.accept())
   await page.locator('.porteria-busqueda li', { hasText: diego.nombre }).getByRole('button', { name: 'Marcar' }).click()
+  await page.getByRole('alertdialog', { name: 'Marcar sin carnet' }).getByRole('button', { name: 'Marcar' }).click()  // un toque
   await expect(page.getByText('2 por enviar')).toBeVisible()
   expect((await almacen(page)).pendientes).toBe(2)
 

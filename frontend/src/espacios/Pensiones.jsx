@@ -4,10 +4,7 @@ import { ArrowLeft, BadgePercent, CalendarClock, FileSpreadsheet, Plus, Receipt,
 import { useCallback, useEffect, useState } from 'react'
 import { Link, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { api, descargar } from '../api.js'
-import {
-  Buscador, Cifras, Encabezado, fechaCorta, fechaHora, Filtros, Insignia, MenuAcciones, Paginacion, Persona, plural,
-  Selector, soles, Tabla, usePaginado,
-} from './comun/index.js'
+import { Buscador, Cifras, Encabezado, fechaCorta, fechaHora, Filtros, Insignia, MenuAcciones, Paginacion, Persona, plural, Selector, soles, Tabla, useConfirmar, usePaginado } from './comun/index.js'
 import './configuracion.css'
 import './pensiones.css'
 
@@ -236,13 +233,15 @@ function FormDescuento({ alumno, cerrar, alGuardar }) {
 }
 
 function Descuentos({ editar }) {
+  const { pedirMotivo } = useConfirmar()
   const navegar = useNavigate()
   const [q, setQ] = useState('')
   const [error, setError] = useState(null)
   const { datos, error: errorLista, cargando, recargar, paginacion } = usePaginado('/api/pensiones/descuentos', { q: q.trim() })
 
   async function anular(x) {
-    const motivo = prompt(`¿Por qué se anula el descuento de ${x.alumno}?`)
+    const motivo = await pedirMotivo({ titulo: 'Anular descuento', texto: `De ${x.alumno}. Queda visible como anulado.`, etiqueta: 'Motivo de la anulación',
+      accion: 'Anular descuento', peligro: true, minimo: 3, maximo: 200 })
     if (!motivo) return
     setError(null)
     try { await api(`/api/pensiones/descuentos/${x.id}/anular`, { metodo: 'POST', datos: { motivo } }); recargar() }
@@ -393,6 +392,7 @@ function Configurar({ editar }) {
 }
 
 function Concepto({ c, niveles, anio, editar, llamar }) {
+  const { confirmar } = useConfirmar()
   const [montos, setMontos] = useState(null)
   const [serie, setSerie] = useState(null)
   const [linea, setLinea] = useState(null)
@@ -426,7 +426,7 @@ function Concepto({ c, niveles, anio, editar, llamar }) {
   }
 
   async function borrarLinea(x) {
-    if (confirm(`¿Quitar la cuota ${x.numero} (${x.mes}) del cronograma?`)) {
+    if (await confirmar({ titulo: 'Quitar cuota', texto: `Se quita la cuota ${x.numero} (${x.mes}) del cronograma.`, accion: 'Quitar', peligro: true })) {
       await llamar(() => api(`/api/pensiones/cronograma/${x.id}`, { metodo: 'DELETE' }), 'Cuota quitada')
     }
   }
@@ -437,7 +437,7 @@ function Concepto({ c, niveles, anio, editar, llamar }) {
   }
 
   async function borrar() {
-    if (confirm(`¿Borrar el concepto «${c.nombre}»?`)) await llamar(() => api(`/api/pensiones/conceptos/${c.id}`, { metodo: 'DELETE' }), 'Concepto borrado')
+    if (await confirmar({ titulo: 'Borrar concepto', texto: `Se borra el concepto «${c.nombre}».`, accion: 'Borrar', peligro: true })) await llamar(() => api(`/api/pensiones/conceptos/${c.id}`, { metodo: 'DELETE' }), 'Concepto borrado')
   }
 
   const nombreMonto = (x) => {

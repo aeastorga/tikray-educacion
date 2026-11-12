@@ -7,7 +7,7 @@ import { NavLink, Route, Routes } from 'react-router-dom'
 import { api } from '../api.js'
 import { aplicarImagen } from '../App.jsx'
 import { LIMA } from '../tema.js'
-import { Encabezado, fechaHora as fechaHoraComun, Insignia, Paginacion, Tabla, usePaginado } from './comun/index.js'
+import { Encabezado, fechaHora as fechaHoraComun, Insignia, Paginacion, Tabla, useConfirmar, usePaginado } from './comun/index.js'
 import './configuracion.css'
 
 const TIPOS_AVISO = [
@@ -352,6 +352,7 @@ function Avisos({ editar }) {
 const PLANTILLA_VACIA = { nombre: '', titulo: '', cuerpo: '' }
 
 function Plantillas({ editar }) {
+  const { confirmar } = useConfirmar()
   const [lista, setLista] = useState(null)
   const [form, setForm] = useState(null) // null: cerrado; {id?}: nueva o editando
   const [mensaje, guardar] = useGuardar()
@@ -368,7 +369,7 @@ function Plantillas({ editar }) {
   }
 
   async function borrar(p) {
-    if (!window.confirm(`¿Borrar la plantilla «${p.nombre}»?`)) return
+    if (!await confirmar({ titulo: 'Borrar plantilla', texto: `Se borra la plantilla «${p.nombre}».`, accion: 'Borrar', peligro: true })) return
     await guardar(() => api(`/api/configuracion/plantillas/${p.id}`, { metodo: 'DELETE' }), 'Plantilla borrada')
     cargar()
   }
@@ -423,6 +424,7 @@ function Plantillas({ editar }) {
 // --- Categorías de incidencias ---------------------------------------------------------------
 
 function Categorias({ editar }) {
+  const { confirmar } = useConfirmar()
   const [lista, setLista] = useState(null)
   const [editando, setEditando] = useState(null)
   const [mensaje, guardar] = useGuardar()
@@ -444,7 +446,7 @@ function Categorias({ editar }) {
   }
 
   async function borrar(c) {
-    if (!window.confirm(`¿Borrar la categoría «${c.nombre}»?`)) return
+    if (!await confirmar({ titulo: 'Borrar categoría', texto: `Se borra la categoría «${c.nombre}».`, accion: 'Borrar', peligro: true })) return
     await guardar(() => api(`/api/configuracion/categorias/${c.id}`, { metodo: 'DELETE' }), 'Categoría borrada')
     cargar()
   }

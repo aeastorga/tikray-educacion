@@ -4,9 +4,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, descargar } from '../api.js'
-import {
-  Buscador, Encabezado, fechaHora as fechaHoraTabla, Filtros, Insignia, Paginacion, plural, Selector, Tabla, usePaginado,
-} from './comun/index.js'
+import { Buscador, Encabezado, fechaHora as fechaHoraTabla, Filtros, Insignia, Paginacion, plural, Selector, Tabla, useConfirmar, usePaginado } from './comun/index.js'
 import './cuaderno.css'
 
 export const TIPOS = {
@@ -162,6 +160,7 @@ function Bandeja() {
 // --- Detalle -----------------------------------------------------------------------------
 
 function Detalle({ editar }) {
+  const { confirmar, pedirMotivo } = useConfirmar()
   const { id } = useParams()
   const navegar = useNavigate()
   const [e, setE] = useState(null)
@@ -183,16 +182,17 @@ function Detalle({ editar }) {
   }
 
   async function anular() {
-    const motivo = prompt(e.tipo === 'justificacion'
-      ? 'Motivo de la anulación (las faltas que justificaba vuelven a ser faltas):' : 'Motivo de la anulación:')
-    if (!motivo?.trim()) return
+    const motivo = await pedirMotivo({ titulo: e.tipo === 'justificacion' ? 'Anular justificación' : 'Anular permiso',
+      texto: e.tipo === 'justificacion' ? 'Las faltas que justificaba vuelven a ser faltas.' : 'El permiso deja de valer en la portería.',
+      etiqueta: 'Motivo de la anulación', accion: 'Anular', peligro: true, maximo: 300 })
+    if (!motivo) return
     setError(null)
     try { await api(`/api/cuaderno/entradas/${id}/anular`, { metodo: 'POST', datos: { motivo } }); cargar() }
     catch (err) { setError(err.message) }
   }
 
   async function cancelar() {
-    if (!window.confirm('¿Cancelar este comunicado? No saldrá y se borra.')) return
+    if (!await confirmar({ titulo: 'Cancelar comunicado', texto: 'No saldrá y se borra.', accion: 'Borrar comunicado', peligro: true })) return
     setError(null)
     try { await api(`/api/cuaderno/entradas/${id}/cancelar`, { metodo: 'POST' }); navegar('/panel/cuaderno') }
     catch (err) { setError(err.message) }

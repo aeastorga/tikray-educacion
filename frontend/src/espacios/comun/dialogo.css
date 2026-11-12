@@ -1,0 +1,40 @@
+/* Ventanas propias (confirmar, pedir motivo y las de formulario). Todo con los tokens del tema. */
+.ventana-fondo {
+  position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px;
+  background: rgba(8, 12, 20, .55); animation: ventana-aparece .15s ease-out;
+}
+.ventana {
+  width: min(440px, 100%); max-height: calc(100dvh - 32px); overflow: auto; outline: none;
+  background: var(--superficie); color: var(--texto); border: 1px solid var(--borde); border-radius: var(--radio);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .28); padding: 22px 22px 20px; display: flex; flex-direction: column; gap: 12px;
+}
+.ventana.ancha { width: min(680px, 100%); }
+.ventana-titulo { margin: 0; font-family: var(--letra-titulo); font-size: 1.15rem; line-height: 1.25; }
+.ventana-forma { display: flex; flex-direction: column; gap: 14px; }
+.ventana-texto { margin: 0; color: var(--tenue); line-height: 1.45; }
+.ventana-campo { display: grid; gap: 6px; font-weight: 600; }
+.ventana-campo textarea { min-height: 88px; resize: vertical; font-weight: 400; }
+.ventana-campo small { font-weight: 400; text-align: right; font-variant-numeric: tabular-nums; }
+.ventana-botones { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+
+/* Acción que no se puede deshacer: rojo (contraste 4.5:1 o más con el texto blanco, en claro y oscuro). */
+.boton.peligro { background: #B91C1C; color: #fff; }
+.boton.peligro:hover:not(:disabled) { background: #991B1B; filter: none; }
+
+@keyframes ventana-aparece { from { opacity: 0; } }
+@keyframes ventana-sube { from { transform: translateY(100%); } }
+
+/* Celular: sube desde abajo, a todo el ancho, botones grandes uno debajo del otro con la acción arriba. */
+@media (max-width: 600px) {
+  .ventana-fondo { place-items: end stretch; padding: 0; }
+  .ventana, .ventana.ancha {
+    width: 100%; max-height: 92dvh; border-radius: var(--radio) var(--radio) 0 0; border-bottom: 0;
+    padding: 20px 16px calc(16px + env(safe-area-inset-bottom)); animation: ventana-sube .2s ease-out;
+  }
+  .ventana-botones { flex-direction: column-reverse; align-items: stretch; }
+  .ventana-botones .boton { min-height: 48px; width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ventana-fondo, .ventana { animation: none !important; }
+}

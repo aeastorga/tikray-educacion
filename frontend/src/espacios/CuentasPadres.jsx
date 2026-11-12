@@ -2,10 +2,7 @@ import { ArrowLeft, Bell, History, Link2, UsersRound } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
-import {
-  Buscador, Cifras, documento, Encabezado, fechaHora, Filtros, hace, Insignia, MenuAcciones, Paginacion, Persona,
-  plural, Selector, Tabla, usePaginado,
-} from './comun/index.js'
+import { Buscador, Cifras, documento, Encabezado, fechaHora, Filtros, hace, Insignia, MenuAcciones, Paginacion, Persona, plural, Selector, Tabla, useConfirmar, usePaginado } from './comun/index.js'
 import { Interruptor } from './Configuracion.jsx'
 import './configuracion.css'
 import './familia.css'
@@ -42,6 +39,7 @@ function Hijos({ hijos }) {
 }
 
 function Lista({ colegio, editar, reglas }) {
+  const { confirmar } = useConfirmar()
   const navegar = useNavigate()
   const [url, setUrl] = useSearchParams()
   const [q, setQ] = useState(url.get('q') || '')
@@ -70,8 +68,9 @@ function Lista({ colegio, editar, reglas }) {
     } catch (err) { setError(err.message) }
   }
 
-  function bloquear(a) {
-    if (confirm(`¿Bloquear el acceso de ${a.nombre}? Se cierran sus sesiones y se anula su enlace.`)) accion(a, 'bloquear')
+  async function bloquear(a) {
+    if (await confirmar({ titulo: 'Bloquear acceso', texto: `${a.nombre} no podrá entrar a la app: se cierran sus sesiones y se anula su enlace.`,
+      accion: 'Bloquear', peligro: true })) accion(a, 'bloquear')
   }
 
   async function cambiarActivacion(conAprobacion) {
