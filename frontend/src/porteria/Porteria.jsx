@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ScanLine } from 'lucide-react'
 import { api, ErrorApi, leerToken } from '../api.js'
-import { Insignia, Persona, Tabla, useConfirmar } from '../espacios/comun/index.js'
+import { Insignia, Mensaje, Persona, Tabla, useConfirmar } from '../espacios/comun/index.js'
 import { datos, nuevoId, pendientes, recojos } from './almacen.js'
 import Camara from './Camara.jsx'
 import Recojo, { nombreElegido } from './Recojo.jsx'
@@ -208,7 +208,7 @@ export default function Porteria({ yo }) {
 
   if (error) {
     return <>
-      <p className="error">{error}</p>
+      <Mensaje tipo="error">{error}</Mensaje>
       {sesionVencida && <Link className="boton" to="/personal?volver=/panel/asistencia/porteria">Ingresar de nuevo</Link>}
     </>
   }
@@ -252,7 +252,7 @@ export default function Porteria({ yo }) {
       </div>
 
       <h3>Marcar sin carnet</h3>
-      <input className="porteria-buscar" placeholder="Busca por apellido o nombre" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+      <input aria-label="Buscar por apellido o nombre" className="porteria-buscar" placeholder="Busca por apellido o nombre" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
       {resultados.length > 0 && (
         <ul className="porteria-busqueda">
           {resultados.map((p) => (

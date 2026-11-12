@@ -205,7 +205,7 @@ def test_pin_nuevo_en_otro_colegio_deja_pendiente_y_avisa(client, db):
     avisos.procesar_cola(db, push, ahora=pronto())
     assert len(push.enviados) == 1
     endpoint, m = push.enviados[0]
-    assert endpoint == "https://push.example/celular" and m["titulo"] == "Colegio beta"
+    assert endpoint == "https://push.example/celular" and m["titulo"] == "Tu cuenta · Colegio beta"
     assert "PIN nuevo" in m["cuerpo"] and "En Colegio alfa tu acceso queda pendiente" in m["cuerpo"]
     # Alfa lo aprueba y vuelve a verlo todo.
     client.post(f"/api/familias/apoderados/{ap_a.id}/aprobar", headers=auth("alfa", token(client, "alfa")))
@@ -260,7 +260,7 @@ def test_pin_se_bloquea_un_dia_tras_diez_fallidos(client, db, monkeypatch):
     # Se le avisa por push (por el colegio donde se bloqueó).
     push = Push()
     avisos.procesar_cola(db, push, ahora=pronto())
-    assert [m["titulo"] for _, m in push.enviados] == ["Colegio alfa"]
+    assert [m["titulo"] for _, m in push.enviados] == ["Tu cuenta · Colegio alfa"]
     assert "10 intentos fallidos" in push.enviados[0][1]["cuerpo"]
     # Con huella sí entra.
     db.add(PasskeyFamilia(cuenta_id=cuenta.id, credencial_id="Y3JlZC0x", clave_publica=b"llave",

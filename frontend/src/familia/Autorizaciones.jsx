@@ -1,11 +1,11 @@
 // Autorizaciones en la app de la familia: lo que el colegio pide autorizar, con las pendientes arriba. Por cada hijo,
 // "Autorizo" o "No autorizo" y un comentario opcional. Se puede cambiar hasta la fecha límite; responde el apoderado
 // que recibe los avisos de ese hijo.
-import { Paperclip } from 'lucide-react'
+import { Paperclip, Signature } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { api, descargar } from '../api.js'
-import { fechaCorta, fechaHora } from '../espacios/comun/index.js'
+import { Cargando, Mensaje, Vacio, fechaCorta, fechaHora } from '../espacios/comun/index.js'
 
 export default function AutorizacionesFamilia() {
   const { yo } = useOutletContext()
@@ -25,9 +25,9 @@ export default function AutorizacionesFamilia() {
         <p className="tenue">{pendientes ? `Tiene ${pendientes === 1 ? '1 pendiente' : `${pendientes} pendientes`} por responder.`
           : 'Lo que el colegio le pide autorizar para sus hijos.'}</p>
       </div>
-      {error && <p className="error">{error}</p>}
-      {!lista && !error && <p className="tenue">Cargando…</p>}
-      {lista?.length === 0 && <section className="tarjeta-app"><p className="tenue">No hay autorizaciones por ahora.</p></section>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
+      {!lista && !error && <Cargando />}
+      {lista?.length === 0 && <section className="tarjeta-app"><Vacio icono={Signature} titulo="No hay autorizaciones por ahora" texto="Cuando el colegio le pida permiso para un paseo o actividad, lo verá aquí para responder." /></section>}
       <div className="lista-autorizaciones">
         {lista?.map((a) => <Tarjeta key={a.id} a={a} actualizar={actualizar} />)}
       </div>
@@ -58,7 +58,7 @@ function Tarjeta({ a, actualizar }) {
       {a.adjunto && <button type="button" className="enlace icono-texto" onClick={adjunto}>
         <Paperclip size={16} aria-hidden="true" /> {a.adjunto.nombre}</button>}
       {a.estado === 'anulada' && <p className="aviso-anulada-familia">El colegio la anuló: {a.anulado_motivo}</p>}
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       <ul className="hijos-autorizacion">
         {a.hijos.map((h) => <Hijo key={h.alumno_id} a={a} h={h} actualizar={actualizar} />)}
       </ul>
@@ -116,7 +116,7 @@ function Hijo({ a, h, actualizar }) {
       {!h.puede_responder && a.estado === 'publicada' && (
         <p className="tenue detalle-respuesta">Responde el apoderado que recibe los avisos de {h.nombre}.</p>
       )}
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
     </li>
   )
 }

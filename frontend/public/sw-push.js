@@ -4,8 +4,11 @@ self.addEventListener('push', (evento) => {
   let m = {}
   try { m = evento.data ? evento.data.json() : {} } catch { m = { cuerpo: evento.data?.text() } }
   evento.waitUntil((async () => {
+    // Ícono: el logo del colegio (o el de la app, en PNG: Android no muestra SVG). Insignia: la silueta blanca
+    // de la barra de estado. La misma etiqueta reemplaza en vez de repetir.
     await self.registration.showNotification(m.titulo || 'Aviso del colegio', {
-      body: m.cuerpo || '', tag: m.etiqueta, icon: '/icono.svg', badge: '/icono.svg', data: { url: m.url || '/familia' },
+      body: m.cuerpo || '', tag: m.etiqueta, lang: 'es-PE', icon: m.icono || '/icono-192.png',
+      badge: m.insignia || '/insignia-96.png', timestamp: m.momento || Date.now(), data: { url: m.url || '/familia' },
     })
     // Si la app está abierta, que refresque la tarjeta en vivo.
     for (const c of await self.clients.matchAll({ type: 'window' })) c.postMessage({ tipo: 'aviso' })

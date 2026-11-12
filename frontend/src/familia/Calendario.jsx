@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { api } from '../api.js'
 import { DetalleDia, ListaProximos, MesCalendario, NavegarMes } from '../espacios/CalendarioMes.jsx'
+import { Cargando, Mensaje, Vacio } from '../espacios/comun/index.js'
 
 export default function CalendarioFamilia() {
   const { yo } = useOutletContext()
@@ -28,9 +29,9 @@ function Proximos() {
   const [d, setD] = useState(null)
   const [error, setError] = useState(null)
   useEffect(() => { api('/api/familia/calendario/proximos').then(setD).catch((e) => setError(e.message)) }, [])
-  if (error) return <p className="error">{error}</p>
-  if (!d) return <p className="tenue">Cargando…</p>
-  return <ListaProximos eventos={d.eventos} sinClases={d.sin_clases} hijos vacio="No hay eventos en los próximos meses." />
+  if (error) return <Mensaje tipo="error">{error}</Mensaje>
+  if (!d) return <Cargando />
+  return <ListaProximos eventos={d.eventos} sinClases={d.sin_clases} hijos vacio={{ titulo: 'No hay eventos próximos', texto: 'Cuando el colegio publique una actuación, reunión o día sin clases, aparecerá aquí.' }} />
 }
 
 function Mes() {
@@ -43,8 +44,8 @@ function Mes() {
       .catch((e) => setError(e.message))
   }, [mes])
   useEffect(() => { cargar() }, [cargar])
-  if (error) return <p className="error">{error}</p>
-  if (!d) return <p className="tenue">Cargando…</p>
+  if (error) return <Mensaje tipo="error">{error}</Mensaje>
+  if (!d) return <Cargando />
   return (
     <section className="tarjeta-app calendario-familia">
       <NavegarMes mes={d.mes} hoy={d.hoy} cambiar={(m) => { setMes(m); setDia(null) }} />

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api, guardarToken } from '../api.js'
+import { Mensaje } from './comun/index.js'
 
 export default function CambiarClave({ alTerminar, obligatorio }) {
   const [actual, setActual] = useState('')
@@ -42,7 +43,7 @@ export default function CambiarClave({ alTerminar, obligatorio }) {
                autoComplete="new-password" required />
       </label>
       <p className="tenue">Al menos 8 caracteres, con mayúscula, minúscula y número.</p>
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
       {motivos.length > 0 && <ul className="error">{motivos.map((m) => <li key={m}>{m}</li>)}</ul>}
       <button className="boton">Guardar</button>
     </form>

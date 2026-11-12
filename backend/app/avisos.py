@@ -61,18 +61,42 @@ def _primer_nombre(a: Alumno) -> str:
     return a.nombres.split()[0] if a.nombres else a.apellidos
 
 
+# Título de la notificación: el tipo primero, para que si el nombre del colegio es largo se corte el nombre.
+TITULO_TIPO = {"ingreso": "Ingreso", "tarde": "Llegó tarde", "salida": "Salida", "falta": "Falta",
+               "cuaderno": "Cuaderno", "cobro": "Pagos", "calendario": "Calendario", "autorizar": "Autorización",
+               "cuenta": "Tu cuenta"}
+LARGO_NOMBRE = 40
+# Ícono si el colegio no tiene logo (Android no muestra SVG en las notificaciones). Insignia: la barra de estado.
+ICONO_DEFECTO = "/icono-192.png"
+INSIGNIA = "/insignia-96.png"
+
+
+def titulo_aviso(tipo: str, colegio: Colegio) -> str:
+    nombre = colegio.nombre.strip()
+    if len(nombre) > LARGO_NOMBRE:
+        nombre = nombre[:LARGO_NOMBRE - 1].rstrip() + "…"
+    return f"{TITULO_TIPO[tipo]} · {nombre}"
+
+
+def icono_aviso(colegio: Colegio) -> str:
+    """El logo del colegio (público en /archivos) o el ícono de la app."""
+    from app.almacenamiento import get_almacenamiento
+
+    return get_almacenamiento().url(colegio.logo_clave) if colegio.logo_clave else ICONO_DEFECTO
+
+
 def mensaje(aviso: ColaAviso, colegio: Colegio, alumno: Alumno | None) -> dict:
     hora = aviso.datos.get("hora")
     if aviso.tipo == "cuenta":
-        titulo, cuerpo = colegio.nombre, aviso.datos.get("mensaje", "Hubo un cambio en tu cuenta.")
+        cuerpo = aviso.datos.get("mensaje", "Hubo un cambio en tu cuenta.")
     elif aviso.tipo == "cuaderno":
-        titulo, cuerpo = colegio.nombre, aviso.datos.get("mensaje", "Tienes una novedad en el cuaderno.")
+        cuerpo = aviso.datos.get("mensaje", "Tienes una novedad en el cuaderno.")
     elif aviso.tipo == "cobro":
-        titulo, cuerpo = colegio.nombre, aviso.datos.get("mensaje", "Tienes cuotas por pagar.")
+        cuerpo = aviso.datos.get("mensaje", "Tienes cuotas por pagar.")
     elif aviso.tipo == "calendario":
-        titulo, cuerpo = colegio.nombre, aviso.datos.get("mensaje", "Hay una novedad en el calendario.")
+        cuerpo = aviso.datos.get("mensaje", "Hay una novedad en el calendario.")
     elif aviso.tipo == "autorizar":
-        titulo, cuerpo = colegio.nombre, aviso.datos.get("mensaje", "El colegio te pide una autorización.")
+        cuerpo = aviso.datos.get("mensaje", "El colegio te pide una autorización.")
     else:
         n = _primer_nombre(alumno)
         cuerpo = {
@@ -81,11 +105,12 @@ def mensaje(aviso: ColaAviso, colegio: Colegio, alumno: Alumno | None) -> dict:
             "salida": f"{n} salió del colegio a las {hora}.",
             "falta": f"{n} no ha llegado hoy al colegio.",
         }[aviso.tipo]
-        titulo = colegio.nombre
+    momento = aviso.momento or aviso.creado_en
+    comun = {"titulo": titulo_aviso(aviso.tipo, colegio), "cuerpo": cuerpo, "icono": icono_aviso(colegio),
+             "insignia": INSIGNIA, "momento": int(momento.timestamp() * 1000) if momento else None}
     if aviso.tipo in ESPERAN_SILENCIO:  # cada novedad del cuaderno y cada recordatorio es su propia notificación
-        return {"titulo": titulo, "cuerpo": cuerpo, "url": aviso.datos.get("url", "/familia"),
-                "etiqueta": f"{aviso.tipo}-{aviso.id}"}
-    return {"titulo": titulo, "cuerpo": cuerpo, "url": "/familia",
+        return {**comun, "url": aviso.datos.get("url", "/familia"), "etiqueta": f"{aviso.tipo}-{aviso.id}"}
+    return {**comun, "url": "/familia",
             "etiqueta": f"{aviso.tipo}-{aviso.alumno_id or aviso.apoderado_id}-{aviso.fecha}"}
 
 

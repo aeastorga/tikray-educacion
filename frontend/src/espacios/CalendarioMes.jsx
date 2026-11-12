@@ -1,8 +1,9 @@
 // Piezas del calendario escolar que comparten el panel y la app de la familia: la cuadrícula del mes (lunes a
 // domingo, con los días sin clases), la lista de próximos y el detalle de un evento. Fechas de Lima (AAAA-MM-DD).
-import { ChevronLeft, ChevronRight, Clock, Users } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Clock, Users } from 'lucide-react'
 import { useMemo } from 'react'
 import './calendario.css'
+import { Vacio } from './comun/index.js'
 
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre',
@@ -150,12 +151,12 @@ export function DetalleDia({ dia, eventos, sinClases, accionesDe, hijos, vacio =
 }
 
 // Próximos: eventos y días sin clases, en orden de fecha y agrupados por mes.
-export function ListaProximos({ eventos, sinClases, accionesDe, hijos, vacio = 'No hay eventos próximos.' }) {
+export function ListaProximos({ eventos, sinClases, accionesDe, hijos, vacio = { titulo: 'No hay eventos próximos', texto: 'Cuando el colegio publique uno, aparecerá aquí.' } }) {
   const items = [
     ...eventos.map((e) => ({ fecha: e.inicio, e })),
     ...sinClases.map((s) => ({ fecha: s.fecha, libre: s })),
   ].sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.libre ? -1 : 1))
-  if (items.length === 0) return <p className="tenue">{vacio}</p>
+  if (items.length === 0) return <Vacio icono={CalendarDays} {...vacio} />
   const grupos = []
   for (const it of items) {
     const mes = it.fecha.slice(0, 7)

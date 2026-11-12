@@ -7,7 +7,7 @@ import Asistencia from './Asistencia.jsx'
 import Caja from './Caja.jsx'
 import Autorizaciones from './Autorizaciones.jsx'
 import Calendario from './Calendario.jsx'
-import { documento, Encabezado, Insignia, MenuAcciones, Paginacion, Persona, Tabla, useConfirmar, usePaginaLocal } from './comun/index.js'
+import { Cargando, Encabezado, Insignia, Mensaje, MenuAcciones, Paginacion, Persona, Tabla, documento, useConfirmar, usePaginaLocal } from './comun/index.js'
 import CambiarClave from './CambiarClave.jsx'
 import Configuracion, { Historial } from './Configuracion.jsx'
 import Menu from './Menu.jsx'
@@ -42,7 +42,7 @@ export default function PanelColegio({ colegio, setColegio }) {
   }, [navegar])
 
   if (!leerToken()) return <Navigate to="/personal" replace />
-  if (!yo) return <main className="centro"><p className="tenue">Cargando…</p></main>
+  if (!yo) return <main className="centro"><Cargando /></main>
   if (yo.debe_cambiar_clave) {
     return <main className="centro"><CambiarClave obligatorio alTerminar={cargar} /></main>
   }
@@ -180,25 +180,25 @@ function Personal({ yo }) {
       {pagina.paginacion && <Paginacion {...pagina.paginacion} />}
       {editar && roles.length > 0 && (
         <form className="fila-form" onSubmit={crear}>
-          <select value={nuevo.tipo_documento} onChange={(e) => setNuevo({ ...nuevo, tipo_documento: e.target.value })}>
+          <select aria-label="Tipo de documento" value={nuevo.tipo_documento} onChange={(e) => setNuevo({ ...nuevo, tipo_documento: e.target.value })}>
             <option value="DNI">DNI</option>
             <option value="CE">Carné de extranjería</option>
           </select>
-          <input placeholder="N° de documento" value={nuevo.numero_documento} required
+          <input aria-label="Número de documento" placeholder="N° de documento" value={nuevo.numero_documento} required
                  inputMode={nuevo.tipo_documento === 'DNI' ? 'numeric' : 'text'}
                  pattern={nuevo.tipo_documento === 'DNI' ? '\\d{8}' : '[A-Za-z0-9]{9,12}'}
                  onChange={(e) => setNuevo({ ...nuevo, numero_documento: e.target.value })} />
-          <input placeholder="Nombres" value={nuevo.nombres} required
+          <input aria-label="Nombres" placeholder="Nombres" value={nuevo.nombres} required
                  onChange={(e) => setNuevo({ ...nuevo, nombres: e.target.value })} />
-          <input placeholder="Apellidos" value={nuevo.apellidos} required
+          <input aria-label="Apellidos" placeholder="Apellidos" value={nuevo.apellidos} required
                  onChange={(e) => setNuevo({ ...nuevo, apellidos: e.target.value })} />
-          <select value={nuevo.rol_id} required onChange={(e) => setNuevo({ ...nuevo, rol_id: e.target.value })}>
+          <select aria-label="Rol" value={nuevo.rol_id} required onChange={(e) => setNuevo({ ...nuevo, rol_id: e.target.value })}>
             <option value="">Rol…</option>
             {roles.filter((r) => !r.es_administrador || yo.es_administrador).map((r) =>
               <option key={r.id} value={r.id}>{r.nombre}</option>)}
           </select>
           <button className="boton">Agregar</button>
-          {error && <p className="error">{error}</p>}
+          {error && <Mensaje tipo="error">{error}</Mensaje>}
         </form>
       )}
     </section>
@@ -282,7 +282,7 @@ function Roles({ yo }) {
                    onChange={(e) => setEditando({ ...editando, puede_anular_caja: e.target.checked })} />
             Puede anular pagos de caja cerrada y gastos de días anteriores
           </label>
-          {error && <p className="error">{error}</p>}
+          {error && <Mensaje tipo="error">{error}</Mensaje>}
           <div className="acciones">
             <button className="boton">Guardar</button>
             <button type="button" className="enlace" onClick={() => setEditando(null)}>Cancelar</button>

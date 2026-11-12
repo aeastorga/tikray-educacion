@@ -1,9 +1,9 @@
 // Recojo seguro en la ficha del alumno: quién puede recogerlo. Los apoderados siempre pueden; la lista de
 // autorizados (máximo 5 activos) la llenan la secretaría y el apoderado desde la app. Nada se borra: se desactiva.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Camera } from 'lucide-react'
+import { Camera, UserRound } from 'lucide-react'
 import { api, leerToken } from '../api.js'
-import { Insignia, useConfirmar } from './comun/index.js'
+import { Insignia, Mensaje, useConfirmar } from './comun/index.js'
 import './recojo.css'
 
 const TIPOS_DOC = ['DNI', 'CE', 'PAS', 'OTRO']
@@ -43,7 +43,7 @@ export function FotoProtegida({ ruta, nombre, version }) {
       .catch(() => {})
     return () => { vivo = false; if (creada) URL.revokeObjectURL(creada) }
   }, [ruta, version])
-  return url ? <img className="recojo-foto" src={url} alt={`Foto de ${nombre}`} /> : <span className="recojo-foto sin-foto" aria-hidden="true" />
+  return url ? <img className="recojo-foto" src={url} alt={`Foto de ${nombre}`} /> : <span className="recojo-foto sin-foto" aria-hidden="true"><UserRound size={24} /></span>
 }
 
 export function SubirFoto({ ruta, alSubir, setError }) {
@@ -74,7 +74,7 @@ export default function RecojoAlumno({ alumnoId, editar }) {
   const cargar = useCallback(() => api(`/api/recojo/alumnos/${alumnoId}`).then(setD).catch((e) => setError(e.message)), [alumnoId])
   useEffect(() => { cargar() }, [cargar])
 
-  if (!d) return error ? <p className="error">{error}</p> : null
+  if (!d) return error ? <Mensaje tipo="error">{error}</Mensaje> : null
   const activos = d.autorizados.filter((x) => x.activo).length
 
   async function guardar(e) {
@@ -110,7 +110,7 @@ export default function RecojoAlumno({ alumnoId, editar }) {
       <ul className="lista recojo-personas">
         {d.apoderados.map((p) => (
           <li key={`a${p.id}`}>
-            <span className="recojo-foto sin-foto" aria-hidden="true" />
+            <span className="recojo-foto sin-foto" aria-hidden="true"><UserRound size={24} /></span>
             <span><b>{p.apellidos}, {p.nombres}</b> · {p.parentesco} · {p.tipo_documento} {p.numero_documento}
               {' '}<Insignia tono="info">Apoderado</Insignia></span>
           </li>
@@ -118,7 +118,7 @@ export default function RecojoAlumno({ alumnoId, editar }) {
         {d.autorizados.map((x) => (
           <li key={x.id} className={x.activo ? undefined : 'inactivo'}>
             {x.foto ? <FotoProtegida ruta={`/api/recojo/autorizados/${x.id}/foto`} nombre={x.nombres} version={version} />
-              : <span className="recojo-foto sin-foto" aria-hidden="true" />}
+              : <span className="recojo-foto sin-foto" aria-hidden="true"><UserRound size={24} /></span>}
             <span>
               <b>{x.apellidos}, {x.nombres}</b> · {x.parentesco} · {x.tipo_documento} {x.numero_documento}
               {x.celular && <> · {x.celular}</>}
@@ -163,7 +163,7 @@ export default function RecojoAlumno({ alumnoId, editar }) {
           </div>
         </form>
       )}
-      {error && <p className="error">{error}</p>}
+      {error && <Mensaje tipo="error">{error}</Mensaje>}
     </section>
   )
 }

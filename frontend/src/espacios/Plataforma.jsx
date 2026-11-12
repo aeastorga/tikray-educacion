@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, guardarToken, leerToken } from '../api.js'
 import { School } from 'lucide-react'
-import { Encabezado, Insignia, MenuAcciones, plural, Tabla, useConfirmar, Ventana } from './comun/index.js'
+import { Encabezado, Insignia, Mensaje, MenuAcciones, Tabla, Ventana, plural, useConfirmar } from './comun/index.js'
 import { CamposPerfil, FormFacturacion } from './Configuracion.jsx'
 import './configuracion.css'
 
@@ -38,7 +38,7 @@ function Ingreso({ entrar }) {
         <h1>Tikray Labs</h1>
         <label>Correo<input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} autoComplete="username" required /></label>
         <label>Clave<input type="password" value={clave} onChange={(e) => setClave(e.target.value)} autoComplete="current-password" required /></label>
-        {error && <p className="error">{error}</p>}
+        {error && <Mensaje tipo="error">{error}</Mensaje>}
         <button className="boton">Ingresar</button>
       </form>
     </main>
@@ -195,24 +195,25 @@ function Colegios({ salir }) {
           <p><button className="boton secundario" onClick={() => demo(null)}>Crear colegio demo con datos ficticios</button></p>
         )}
         <h2>Nuevo colegio</h2>
-        <form className="fila-form" onSubmit={crear}>
-          <input placeholder="Nombre del colegio" required {...campo('nombre')} />
-          <input placeholder="subdominio" required pattern="[a-z0-9]([a-z0-9\-]*[a-z0-9])?" {...campo('subdominio')} />
-          <select {...campo('estado')}>
+        <form className="fila-form nuevo-colegio" onSubmit={crear}>
+          <input aria-label="Nombre del colegio" placeholder="Nombre del colegio" required {...campo('nombre')} />
+          <input aria-label="Subdominio" placeholder="subdominio" required pattern="[a-z0-9]([a-z0-9\-]*[a-z0-9])?" {...campo('subdominio')} />
+          <select aria-label="Estado" {...campo('estado')}>
             {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
           <label>Vence
             <input type="date" required={nuevo.estado === 'prueba'} {...campo('vence_en')} />
           </label>
-          <select {...campo('tipo_documento')}>
+          <select aria-label="Tipo de documento" {...campo('tipo_documento')}>
             <option value="DNI">DNI</option>
             <option value="CE">Carné de extranjería</option>
           </select>
-          <input placeholder="Documento del administrador" required {...campo('numero_documento')} />
-          <input placeholder="Nombres del administrador" required {...campo('nombres')} />
-          <input placeholder="Apellidos del administrador" required {...campo('apellidos')} />
+          <input aria-label="Documento del administrador" placeholder="Documento del administrador" required {...campo('numero_documento')}
+                 inputMode={nuevo.tipo_documento === 'DNI' ? 'numeric' : 'text'} />
+          <input aria-label="Nombres del administrador" placeholder="Nombres del administrador" required {...campo('nombres')} />
+          <input aria-label="Apellidos del administrador" placeholder="Apellidos del administrador" required {...campo('apellidos')} />
           <button className="boton">Crear</button>
-          {error && <p className="error">{error}</p>}
+          {error && <Mensaje tipo="error">{error}</Mensaje>}
         </form>
       </main>
     </div>
@@ -261,7 +262,7 @@ function EditarColegio({ colegio, cerrar, alGuardar }) {
                  onChange={(e) => setMaximo(e.target.value)} />
         </label>
         <p className="tenue sin-margen">Cuentan los usuarios activos, incluido el administrador; los padres no. Vacío = sin límite. Si lo bajas de los activos, nadie se desactiva: solo no podrán agregar más.</p>
-        {error && <p className="error">{error}</p>}
+        {error && <Mensaje tipo="error">{error}</Mensaje>}
         <div className="acciones">
           <button className="boton">Guardar</button>
           <button type="button" className="boton secundario" onClick={cerrar}>Cancelar</button>
@@ -306,7 +307,7 @@ function ActivarColegio({ colegio, cerrar, alActivar }) {
           <input value={confirmar} onChange={(e) => setConfirmar(e.target.value)} autoComplete="off" autoFocus
                  spellCheck={false} autoCapitalize="none" />
         </label>
-        {error && <p className="error">{error}</p>}
+        {error && <Mensaje tipo="error">{error}</Mensaje>}
         <div className="acciones">
           <button className="boton" disabled={!coincide || enviando}>{enviando ? 'Activando…' : 'Activar colegio'}</button>
           <button type="button" className="boton secundario" onClick={cerrar}>Cancelar</button>

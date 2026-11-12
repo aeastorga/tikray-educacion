@@ -2,7 +2,7 @@ import { ArrowLeft, Bell, History, Link2, UsersRound } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
-import { Buscador, Cifras, documento, Encabezado, fechaHora, Filtros, hace, Insignia, MenuAcciones, Paginacion, Persona, plural, Selector, Tabla, useConfirmar, usePaginado } from './comun/index.js'
+import { Buscador, Cargando, Cifras, Encabezado, Filtros, Insignia, Mensaje, MenuAcciones, Paginacion, Persona, Selector, Tabla, documento, fechaHora, hace, plural, useConfirmar, usePaginado } from './comun/index.js'
 import { Interruptor } from './Configuracion.jsx'
 import './configuracion.css'
 import './familia.css'
@@ -152,7 +152,7 @@ function Lista({ colegio, editar, reglas }) {
         <Selector etiqueta="Avisos" valor={avisos} cambiar={(v) => filtrar('avisos', v)}
                   opciones={[['', 'Todos los avisos'], ...Object.entries(FILTRO_AVISOS)]} />
       </Filtros>
-      {(error || errorLista) && <p className="error">{error || errorLista}</p>}
+      {(error || errorLista) && <Mensaje tipo="error">{error || errorLista}</Mensaje>}
       <Tabla etiqueta="Apoderados" columnas={columnas} filas={datos?.filas} cargando={cargando}
              alFila={(a) => navegar(`${a.id}`)}
              vacio={{ icono: UsersRound, titulo: q || estado || avisos ? 'Nadie con esos filtros' : 'Aún no hay apoderados',
@@ -180,7 +180,7 @@ export function EnlaceGenerado({ enlace, colegio, cerrar, vence = 'Vence en 7 d�
     <div className="aviso enlace-generado">
       <b>Enlace para {enlace.nombre}</b>
       <span className="tenue">Envíalo desde el WhatsApp del colegio. Solo se muestra ahora; si lo pierdes, genera otro.</span>
-      <input readOnly value={url} onFocus={(e) => e.target.select()} />
+      <input aria-label="Enlace de activación" readOnly value={url} onFocus={(e) => e.target.select()} />
       <div className="acciones">
         {wa ? <a className="boton" href={wa} target="_blank" rel="noreferrer">Enviar por WhatsApp</a>
           : <span className="tenue">No tiene celular registrado: copia el mensaje o imprime su carta.</span>}
@@ -202,8 +202,8 @@ function Detalle() {
     try { await api(`/api/familias/apoderados/${id}/cerrar-sesiones`, { metodo: 'POST' }); cargar() } catch (e) { setError(e.message) }
   }
 
-  if (error) return <p className="error">{error}</p>
-  if (!d) return <p className="tenue">Cargando…</p>
+  if (error) return <Mensaje tipo="error">{error}</Mensaje>
+  if (!d) return <Cargando />
   return (
     <div className="detalle-apoderado">
       <div>
@@ -215,7 +215,7 @@ function Detalle() {
           {d.dispositivos > 0 && <span className="tenue"> en {plural(d.dispositivos, 'celular', 'celulares')}</span>}
         </p>
         <p className="tenue">
-          Celular: {d.celular || '—'}{d.activado_en && ` · Activó su cuenta el ${fechaHora(d.activado_en)}`}
+          Celular: {d.celular || '—'}{d.activado_en && ` · Cuenta activada: ${fechaHora(d.activado_en)}`}
         </p>
         {d.estado !== 'sin_cuenta' && <button className="boton secundario chico" onClick={cerrarSesiones}>Cerrar sus sesiones</button>}
       </div>
@@ -224,7 +224,7 @@ function Detalle() {
         <Tabla etiqueta="Avisos" filas={d.avisos} clave={(a) => a.creado_en + a.cuerpo}
                vacio={{ icono: Bell, titulo: 'Sin avisos', texto: 'Aún no hay avisos para este apoderado.' }}
                columnas={[
-                 { id: 'aviso', titulo: 'Aviso', celda: (a) => a.cuerpo },
+                 { id: 'aviso', titulo: 'Aviso', celda: (a) => <><b className="aviso-titulo">{a.titulo}</b> {a.cuerpo}</> },
                  { id: 'fecha', titulo: 'Fecha', nowrap: true, celda: (a) => fechaHora(a.creado_en) },
                  { id: 'estado', titulo: 'Estado', celda: (a) => <Insignia tono={TONO_ENTREGA[a.estado]}>{ENTREGA[a.estado]}</Insignia> },
                ]} />

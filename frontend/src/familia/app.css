@@ -89,6 +89,7 @@
 .lista-avisos li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--borde); }
 .lista-avisos li:last-child { border-bottom: 0; }
 .lista-avisos time { white-space: nowrap; font-size: .8rem; }
+.lista-avisos .aviso-titulo { display: block; font-size: .85rem; }
 
 .mes { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 .mes h2 { margin: 0; text-align: center; }
