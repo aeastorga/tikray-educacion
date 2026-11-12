@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { api, descargar } from '../api.js'
 import { EnlaceGenerado } from './CuentasPadres.jsx'
-import { Encabezado, fechaHora, Insignia, plural, Tabla, Vacio } from './comun/index.js'
+import { Encabezado, fechaHora, Insignia, plural, Tabla, useConfirmar, Vacio } from './comun/index.js'
 import './reunion.css'
 
 // Modo reunión, lado del tutor: abre la reunión de su aula, muestra el QR, ve llegar las fichas
@@ -141,6 +141,7 @@ function Inicio({ editar }) {
 }
 
 function EnVivo({ colegio, editar }) {
+  const { confirmar, pedirMotivo } = useConfirmar()
   const { id } = useParams()
   const [r, setR] = useState(null)
   const [vista, setVista] = useState('fichas')
@@ -183,7 +184,8 @@ function EnVivo({ colegio, editar }) {
   }
 
   async function rechazar(f) {
-    const motivo = prompt('¿Por qué no se aprueba? El padre lo verá en su celular.')
+    const motivo = await pedirMotivo({ titulo: 'No aprobar la ficha', texto: 'El padre verá el motivo en su celular.', etiqueta: 'Motivo',
+      accion: 'No aprobar', maximo: 200 })
     if (motivo) await accion(`/fichas/${f.id}/rechazar`, { motivo })
   }
 
@@ -221,9 +223,9 @@ function EnVivo({ colegio, editar }) {
               <div className="acciones apiladas">
                 <a className="boton secundario" href={urlReunion(r.token, true)} target="_blank" rel="noreferrer">
                   Abrir en la tablet (modo quiosco)</a>
-                <button className="enlace" onClick={() => confirm('El QR actual dejará de servir. ¿Generar otro?') && accion('/nuevo-qr')}>
+                <button className="enlace" onClick={async () => { if (await confirmar({ titulo: 'Generar otro QR', texto: 'El QR actual dejará de servir.', accion: 'Generar otro', peligro: true })) accion('/nuevo-qr') }}>
                   Generar otro QR</button>
-                <button className="enlace" onClick={() => confirm('¿Cerrar la reunión? El QR dejará de servir.') && accion('/cerrar')}>
+                <button className="enlace" onClick={async () => { if (await confirmar({ titulo: 'Cerrar la reunión', texto: 'El QR dejará de servir.', accion: 'Cerrar reunión', peligro: true })) accion('/cerrar') }}>
                   Cerrar reunión</button>
               </div>
             )}

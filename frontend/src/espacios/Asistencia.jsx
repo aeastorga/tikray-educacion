@@ -4,7 +4,7 @@ import { api, descargar } from '../api.js'
 import Porteria from '../porteria/Porteria.jsx'
 import { fechaLima } from '../porteria/reglas.js'
 import { CalendarOff, Users } from 'lucide-react'
-import { Cifras, Encabezado, Insignia, MenuAcciones, Paginacion, Persona, plural, Tabla, usePaginaLocal } from './comun/index.js'
+import { Cifras, Encabezado, Insignia, MenuAcciones, Paginacion, Persona, plural, Tabla, useConfirmar, usePaginaLocal } from './comun/index.js'
 import './asistencia.css'
 
 const ESTADOS = { presente: 'A tiempo', tarde: 'Tarde', falta: 'Falta', justificada: 'Justificada', licencia: 'Licencia' }
@@ -177,6 +177,7 @@ function Recojos({ fecha }) {
 }
 
 function Personal({ licencias: editar }) {
+  const { confirmar } = useConfirmar()
   const [fecha, setFecha] = useState(fechaLima(new Date()))
   const [dia, error, recargar] = useDia(`/api/asistencia/personal/dia?fecha=${fecha}`)
   const [lista, , recargarLicencias] = useDia('/api/asistencia/licencias')
@@ -198,7 +199,7 @@ function Personal({ licencias: editar }) {
   const personal = usePaginaLocal(dia?.personal)
 
   async function borrar(l) {
-    if (!confirm(`¿Quitar la licencia de ${l.nombre}?`)) return
+    if (!await confirmar({ titulo: 'Quitar licencia', texto: `Se quita la licencia de ${l.nombre}.`, accion: 'Quitar' })) return
     try { await api(`/api/asistencia/licencias/${l.id}`, { metodo: 'DELETE' }); recargar(); recargarLicencias() }
     catch (err) { setErrorForm(err.message) }
   }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, guardarToken, leerToken } from '../api.js'
 import { School } from 'lucide-react'
-import { Encabezado, Insignia, MenuAcciones, plural, Tabla } from './comun/index.js'
+import { Encabezado, Insignia, MenuAcciones, plural, Tabla, useConfirmar, Ventana } from './comun/index.js'
 import { CamposPerfil, FormFacturacion } from './Configuracion.jsx'
 import './configuracion.css'
 
@@ -52,6 +52,7 @@ const VACIO = {
 const ESTADOS = { prueba: 'Prueba', activo: 'Activo', suspendido: 'Suspendido' }
 
 function Colegios({ salir }) {
+  const { confirmar } = useConfirmar()
   const [lista, setLista] = useState([])
   const [nuevo, setNuevo] = useState(VACIO)
   const [creado, setCreado] = useState(null)
@@ -91,7 +92,7 @@ function Colegios({ salir }) {
   async function demo(c) {
     const texto = c ? `¿Reiniciar ${c.nombre}? Se borra todo lo que se cargó y vuelven los datos ficticios.`
       : '¿Crear el colegio demo (subdominio "demo") con datos ficticios?'
-    if (!confirm(texto)) return
+    if (!await confirmar({ titulo: c ? 'Reiniciar demo' : 'Crear colegio demo', texto, accion: c ? 'Reiniciar' : 'Crear', peligro: !!c })) return
     setError(null)
     try {
       const r = await api(c ? `/plataforma/colegios/${c.id}/reiniciar-demo` : '/plataforma/demo', { metodo: 'POST', datos: c ? undefined : {} })
@@ -101,7 +102,7 @@ function Colegios({ salir }) {
   }
 
   async function cambiar(c, datos) {
-    if (datos.estado === 'suspendido' && !confirm(`¿Suspender ${c.nombre}? Nadie del colegio podrá entrar.`)) return
+    if (datos.estado === 'suspendido' && !await confirmar({ titulo: 'Suspender colegio', texto: `Nadie de ${c.nombre} podrá entrar.`, accion: 'Suspender', peligro: true })) return
     setError(null)
     try { await api(`/plataforma/colegios/${c.id}`, { metodo: 'PATCH', datos }) } catch (err) { setError(err.message) }
     cargar()
@@ -218,19 +219,9 @@ function Colegios({ salir }) {
   )
 }
 
+// Las ventanas con formulario usan la misma ventana que confirmar y pedir motivo (espacios/comun/Dialogo.jsx).
 function Dialogo({ titulo, cerrar, children }) {
-  useEffect(() => {
-    const esc = (e) => { if (e.key === 'Escape') cerrar() }
-    window.addEventListener('keydown', esc)
-    return () => window.removeEventListener('keydown', esc)
-  }, [cerrar])
-  return (
-    <div className="dialogo-fondo" onClick={(e) => { if (e.target === e.currentTarget) cerrar() }}>
-      <div className="tarjeta ancho dialogo" role="dialog" aria-modal="true" aria-label={titulo}>
-        {children}
-      </div>
-    </div>
-  )
+  return <Ventana titulo={titulo} mostrarTitulo={false} ancha cerrar={cerrar}>{children}</Ventana>
 }
 
 function EditarColegio({ colegio, cerrar, alGuardar }) {

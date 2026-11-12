@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Camera } from 'lucide-react'
 import { api, leerToken } from '../api.js'
-import { Insignia } from './comun/index.js'
+import { Insignia, useConfirmar } from './comun/index.js'
 import './recojo.css'
 
 const TIPOS_DOC = ['DNI', 'CE', 'PAS', 'OTRO']
@@ -66,6 +66,7 @@ export function SubirFoto({ ruta, alSubir, setError }) {
 }
 
 export default function RecojoAlumno({ alumnoId, editar }) {
+  const { confirmar } = useConfirmar()
   const [d, setD] = useState(null)
   const [form, setForm] = useState(null) // { id?, ...persona }
   const [error, setError] = useState(null)
@@ -90,7 +91,7 @@ export default function RecojoAlumno({ alumnoId, editar }) {
   }
 
   async function cambiarActivo(x) {
-    if (x.activo && !confirm(`¿Desactivar a ${x.nombres} ${x.apellidos}? Ya no podrá recogerlo.`)) return
+    if (x.activo && !await confirmar({ titulo: 'Desactivar autorizado', texto: `${x.nombres} ${x.apellidos} ya no podrá recogerlo. Se puede volver a activar.`, accion: 'Desactivar' })) return
     setError(null)
     try {
       await api(`/api/recojo/autorizados/${x.id}`, { metodo: 'PUT', datos: {

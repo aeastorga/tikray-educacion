@@ -7,10 +7,7 @@ import { ArrowLeft, FileSpreadsheet, FileWarning, Lock, Paperclip, Plus, Receipt
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 import { api, descargar } from '../api.js'
-import {
-  Buscador, Cifras, Encabezado, fechaCorta, fechaHora, Filtros, Insignia, MenuAcciones, Paginacion, Persona, plural,
-  Selector, soles, Tabla, usePaginado,
-} from './comun/index.js'
+import { Buscador, Cifras, Encabezado, fechaCorta, fechaHora, Filtros, Insignia, MenuAcciones, Paginacion, Persona, plural, Selector, soles, Tabla, useConfirmar, usePaginado } from './comun/index.js'
 import { MEDIO, TablaCuotas } from './Pensiones.jsx'
 import './configuracion.css'
 import './pensiones.css'
@@ -334,13 +331,15 @@ function ReciboListo({ pago, cerrar }) {
 // --- Pagos ----------------------------------------------------------------------------------
 
 function Pagos({ editar }) {
+  const { pedirMotivo } = useConfirmar()
   const [filtros, setFiltros] = useState({ q: '', medio: '', estado: '', cajero_id: '', desde: primeroDeMes(), hasta: hoyLima() })
   const [error, setError] = useState(null)
   const { datos, error: errorLista, cargando, recargar, paginacion } = usePaginado('/api/caja/pagos', { ...filtros, q: filtros.q.trim() })
   const cambiar = (k) => (v) => setFiltros({ ...filtros, [k]: v })
 
   async function anular(p) {
-    const motivo = prompt(`¿Por qué se anula el recibo ${p.recibo} de ${p.alumno}? Las cuotas recuperan su saldo.`)
+    const motivo = await pedirMotivo({ titulo: `Anular el recibo ${p.recibo}`, texto: `De ${p.alumno}. Las cuotas recuperan su saldo y el recibo queda visible como anulado.`,
+      etiqueta: 'Motivo de la anulación', accion: 'Anular recibo', peligro: true, minimo: 3, maximo: 200 })
     if (!motivo) return
     setError(null)
     try { await api(`/api/caja/pagos/${p.id}/anular`, { metodo: 'POST', datos: { motivo } }); recargar() }
@@ -474,6 +473,7 @@ function Cajas() {
 // --- Gastos ---------------------------------------------------------------------------------
 
 function Gastos({ editar }) {
+  const { pedirMotivo } = useConfirmar()
   const [filtros, setFiltros] = useState({ q: '', categoria_id: '', estado: '', desde: primeroDeMes(), hasta: hoyLima() })
   const [categorias, setCategorias] = useState([])
   const [nuevo, setNuevo] = useState(false)
@@ -485,7 +485,8 @@ function Gastos({ editar }) {
   const cambiar = (k) => (v) => setFiltros({ ...filtros, [k]: v })
 
   async function anular(g) {
-    const motivo = prompt(`¿Por qué se anula el gasto «${g.descripcion}»?`)
+    const motivo = await pedirMotivo({ titulo: 'Anular gasto', texto: `«${g.descripcion}». Queda visible como anulado.`,
+      etiqueta: 'Motivo de la anulación', accion: 'Anular gasto', peligro: true, minimo: 3, maximo: 200 })
     if (!motivo) return
     setError(null)
     try { await api(`/api/caja/gastos/${g.id}/anular`, { metodo: 'POST', datos: { motivo } }); recargar() }

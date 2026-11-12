@@ -2,7 +2,9 @@
 
 .app-familia { min-height: 100dvh; padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
 .app-cabecera {
-  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  /* En PC el logo y el nombre se alinean con la columna de 560 px (que tiene 16 px de margen adentro). */
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px;
+  padding: 10px max(16px, calc((100% - 560px) / 2 + 16px));
   background: var(--superficie); border-bottom: 1px solid var(--borde);
 }
 .app-logo { width: 36px; height: 36px; border-radius: 10px; font-size: .85rem; }

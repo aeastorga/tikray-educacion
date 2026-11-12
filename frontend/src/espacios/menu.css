@@ -3,7 +3,8 @@
 /* El menú queda fijo a la izquierda, de arriba abajo, con su propio scroll; el contenido empieza justo
    al lado (sin hueco) y se limita a un ancho cómodo de lectura. */
 .marco { min-height: 100dvh; padding-left: 264px; }
-.marco > .contenido { width: 100%; max-width: 1400px; margin: 0; padding: 28px 32px; }
+/* Llena el ancho al lado del menú; desde 1600 px se queda en 1600 px, centrado en ese espacio. */
+.marco > .contenido { width: 100%; max-width: 1600px; margin: 0 auto; padding: 28px clamp(16px, 2.5vw, 40px); }
 
 .menu {
   --menu-fondo: #111827; --menu-texto: #E5E7EB; --menu-titulo: #9CA3AF; --menu-hover: rgba(255, 255, 255, .06);
@@ -88,7 +89,7 @@
 @media (max-width: 900px) and (prefers-reduced-motion: reduce) { .menu { transition: none; } }
 
 /* Configuración */
-.configuracion { display: flex; flex-direction: column; gap: 16px; max-width: 820px; }
+.configuracion { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .tarjeta-panel { background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); padding: 20px 22px; margin: 0; }
 .tarjeta-panel h2 { margin: 0 0 6px; font-size: 1.1rem; }
 .tarjeta-panel legend { padding: 0; float: left; width: 100%; }

@@ -3,10 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom'
 import RecojoAlumno from './RecojoAlumno.jsx'
 import { api, descargar, guardarArchivo } from '../api.js'
-import {
-  Buscador, documento, Encabezado, Filtros, Insignia, MenuAcciones, Paginacion, Persona, plural, Selector, Tabla,
-  usePaginado,
-} from './comun/index.js'
+import { Buscador, documento, Encabezado, Filtros, Insignia, MenuAcciones, Paginacion, Persona, plural, Selector, Tabla, useConfirmar, usePaginado } from './comun/index.js'
 
 const DIAS = [['1', 'Lu'], ['2', 'Ma'], ['3', 'Mi'], ['4', 'Ju'], ['5', 'Vi'], ['6', 'Sá'], ['7', 'Do']]
 const TIPOS_DOC = ['DNI', 'CE', 'PAS', 'OTRO']
@@ -214,6 +211,7 @@ function Estructura({ editar }) {
 // --- Secciones ----------------------------------------------------------------
 
 function Secciones({ editar }) {
+  const { confirmar } = useConfirmar()
   const [secciones, cargar, error, setError] = useCarga('/api/padron/secciones')
   const [est] = useCarga('/api/padron/estructura')
   const [form, setForm] = useState({ grado_id: '', turno_id: '', nombre: '' })
@@ -229,7 +227,7 @@ function Secciones({ editar }) {
   }
 
   async function borrar(s) {
-    if (!confirm(`¿Borrar la sección ${s.etiqueta}?`)) return
+    if (!await confirmar({ titulo: 'Borrar sección', texto: `Se borra la sección ${s.etiqueta}.`, accion: 'Borrar', peligro: true })) return
     try { await api(`/api/padron/secciones/${s.id}`, { metodo: 'DELETE' }); cargar() } catch (err) { setError(err.message) }
   }
 
@@ -437,6 +435,7 @@ function FormAlumno({ alumno, secciones, cerrar }) {
 }
 
 function FichaAlumno({ id, editar, recojo, secciones, cerrar }) {
+  const { confirmar } = useConfirmar()
   const [a, setA] = useState(null)
   const [editando, setEditando] = useState(false)
   const [apo, setApo] = useState(null)
@@ -473,13 +472,13 @@ function FichaAlumno({ id, editar, recojo, secciones, cerrar }) {
   }
 
   async function quitarApo(p) {
-    if (!confirm(`¿Quitar a ${p.nombres} ${p.apellidos} como apoderado?`)) return
+    if (!await confirmar({ titulo: 'Quitar apoderado', texto: `${p.nombres} ${p.apellidos} deja de ser apoderado de este alumno.`, accion: 'Quitar' })) return
     await api(`/api/padron/alumnos/${id}/apoderados/${p.id}`, { metodo: 'DELETE' })
     cargar()
   }
 
   async function nuevoCodigo() {
-    if (!confirm('El carnet actual dejará de servir. ¿Generar un código nuevo?')) return
+    if (!await confirmar({ titulo: 'Generar carnet nuevo', texto: 'El carnet actual dejará de servir en la portería.', accion: 'Generar otro', peligro: true })) return
     await api(`/api/padron/alumnos/${id}/nuevo-codigo`, { metodo: 'POST' })
     cargar()
   }

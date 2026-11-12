@@ -45,10 +45,11 @@ test.describe('en pantalla ancha', () => {
     await mas.click()
     const bloquear = menu.getByRole('menuitem', { name: 'Bloquear' })
     await expect(menu.getByRole('menuitem').last()).toHaveText('Bloquear')  // la peligrosa, al final
-    let pregunta = null
-    page.once('dialog', (d) => { pregunta = d.message(); d.dismiss() })
     await bloquear.click()
-    await expect.poll(() => pregunta).toMatch(/Bloquear/)
+    const ventana = page.getByRole('alertdialog', { name: 'Bloquear acceso' })
+    await expect(ventana).toBeVisible()
+    await ventana.getByRole('button', { name: 'Cancelar' }).click()
+    await expect(ventana).toBeHidden()
     await expect(menu).toBeHidden()
     await expect(fila.getByText('Sin cuenta')).toBeVisible()  // no se bloqueó: se canceló
   })

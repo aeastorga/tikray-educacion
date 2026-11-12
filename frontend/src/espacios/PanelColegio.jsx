@@ -7,9 +7,7 @@ import Asistencia from './Asistencia.jsx'
 import Caja from './Caja.jsx'
 import Autorizaciones from './Autorizaciones.jsx'
 import Calendario from './Calendario.jsx'
-import {
-  documento, Encabezado, Insignia, MenuAcciones, Paginacion, Persona, Tabla, usePaginaLocal,
-} from './comun/index.js'
+import { documento, Encabezado, Insignia, MenuAcciones, Paginacion, Persona, Tabla, useConfirmar, usePaginaLocal } from './comun/index.js'
 import CambiarClave from './CambiarClave.jsx'
 import Configuracion, { Historial } from './Configuracion.jsx'
 import Menu from './Menu.jsx'
@@ -89,6 +87,7 @@ export default function PanelColegio({ colegio, setColegio }) {
 }
 
 function Personal({ yo }) {
+  const { confirmar } = useConfirmar()
   const [lista, setLista] = useState([])
   const [roles, setRoles] = useState([])
   const [turnos, setTurnos] = useState([])
@@ -138,7 +137,7 @@ function Personal({ yo }) {
   const pagina = usePaginaLocal(lista)
 
   async function reiniciar(p) {
-    if (!confirm(`¿Reiniciar la clave de ${p.nombres} ${p.apellidos}?`)) return
+    if (!await confirmar({ titulo: 'Reiniciar clave', texto: `${p.nombres} ${p.apellidos} recibe una clave temporal y su clave actual deja de servir.`, accion: 'Reiniciar clave' })) return
     const r = await api(`/api/personal/${p.id}/reiniciar-clave`, { metodo: 'POST' })
     setClave({ quien: `${p.nombres} ${p.apellidos}`, usuario: p.usuario, clave: r.clave_temporal })
   }
@@ -207,6 +206,7 @@ function Personal({ yo }) {
 }
 
 function Roles({ yo }) {
+  const { confirmar } = useConfirmar()
   const [roles, setRoles] = useState([])
   const [modulos, setModulos] = useState({})
   const [editando, setEditando] = useState(null)
@@ -231,7 +231,7 @@ function Roles({ yo }) {
   }
 
   async function borrar(r) {
-    if (!confirm(`¿Borrar el rol ${r.nombre}?`)) return
+    if (!await confirmar({ titulo: 'Borrar rol', texto: `Se borra el rol ${r.nombre}.`, accion: 'Borrar', peligro: true })) return
     try { await api(`/api/roles/${r.id}`, { metodo: 'DELETE' }); cargar() } catch (err) { setError(err.message) }
   }
 
