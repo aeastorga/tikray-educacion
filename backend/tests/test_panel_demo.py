@@ -220,3 +220,39 @@ def test_demo_trae_recojo_y_autorizaciones_sin_avisos(db):
     # Ningún aviso por estos datos: nada de autorizaciones y nada de días pasados (la demo solo simula hoy).
     assert not db.scalar(select(func.count()).select_from(ColaAviso).where(
         ColaAviso.colegio_id == cid, (ColaAviso.tipo == "autorizar") | (ColaAviso.fecha < hoy)))
+
+
+def test_demo_nombres_segun_el_parentesco(db):
+    """"Madre" y "Tía" con nombre de mujer; "Padre" y "Tío" con nombre de hombre (apoderados y recojo)."""
+    from app.models import AlumnoApoderado, AutorizacionRecojoDia, AutorizadoRecojo, Recojo
+
+    cid = demo.crear_o_reiniciar(db, "demo", alumnos_por_seccion=6).colegio_id
+    mujer = {"Madre", *demo.PARIENTES_MUJER}
+    hombre = {"Padre", *demo.PARIENTES_HOMBRE}
+
+    def revisar(parentesco: str, nombres: str, quien: str):
+        primero = nombres.split()[0]
+        if parentesco in mujer:
+            assert primero not in demo.HOMBRES, f"{quien}: {nombres} ({parentesco})"
+            assert primero in demo.MUJERES, f"{quien}: {nombres} ({parentesco})"
+        elif parentesco in hombre:
+            assert primero not in demo.MUJERES, f"{quien}: {nombres} ({parentesco})"
+            assert primero in demo.HOMBRES, f"{quien}: {nombres} ({parentesco})"
+
+    assert not set(demo.MUJERES) & set(demo.HOMBRES)
+    vinculos = db.execute(select(AlumnoApoderado.parentesco, Apoderado.nombres).join(
+        Apoderado, (Apoderado.colegio_id == AlumnoApoderado.colegio_id) & (Apoderado.id == AlumnoApoderado.apoderado_id))
+        .where(AlumnoApoderado.colegio_id == cid)).all()
+    assert {p for p, _ in vinculos} >= {"Madre", "Padre"}
+    for parentesco, nombres in vinculos:
+        revisar(parentesco, nombres, "apoderado")
+    autorizados = db.scalars(select(AutorizadoRecojo).where(AutorizadoRecojo.colegio_id == cid)).all()
+    assert autorizados
+    for x in autorizados:
+        revisar(x.parentesco, x.nombres, "autorizado")
+    for x in db.scalars(select(AutorizacionRecojoDia).where(AutorizacionRecojoDia.colegio_id == cid)):
+        revisar(x.parentesco, x.nombres, "autorizado por un día")
+    fuera = db.scalars(select(Recojo).where(Recojo.colegio_id == cid, Recojo.fuera_de_lista)).all()
+    assert fuera
+    for x in fuera:
+        revisar(x.parentesco, x.nombre, "fuera de la lista")

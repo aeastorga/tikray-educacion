@@ -18,8 +18,11 @@
 
 .reunion-cuerpo { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 24px; align-items: start; }
 @media (max-width: 760px) { .reunion-cuerpo { grid-template-columns: minmax(0, 1fr); } }
-.reunion-qr { background: var(--superficie); border: 1px solid var(--borde); border-radius: 12px; padding: 16px; text-align: center;
-  position: sticky; top: 16px; }
+.reunion-qr { background: var(--superficie); border: 1px solid var(--borde); border-radius: 12px; padding: 16px; text-align: center; }
+/* En PC el QR queda a la vista aunque la lista sea larga; en celular va arriba y se desplaza con la página. */
+@media (min-width: 761px) { .reunion-qr { position: sticky; top: 16px; } }
+.reunion-qr .acciones.apiladas { gap: 8px; }
+.reunion-qr .acciones.apiladas .boton { width: 100%; justify-content: center; white-space: nowrap; }
 .qr-reunion { width: 100%; max-width: 260px; aspect-ratio: 1; background: #fff; border-radius: 8px; padding: 8px; display: block; margin: 0 auto; }
 .qr-reunion.vacio { background: var(--fondo); }
 .acciones.apiladas { flex-direction: column; align-items: stretch; }
@@ -51,8 +54,40 @@
 
 .fichas-revisadas, .lista-faltan { list-style: none; padding: 0; margin: 0; }
 .fichas-revisadas li { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--borde); }
-.lista-faltan li { padding: 10px 0; border-bottom: 1px solid var(--borde); }
-.faltan-apoderado { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+
+/* Quién faltó: resumen y filtros arriba; cada alumno en una tarjeta y sus apoderados en filas de la misma altura
+   con columnas alineadas (nombre, parentesco, cuenta y el botón a la derecha). */
+.faltan-cabeza { display: flex; justify-content: space-between; align-items: center; gap: 10px 16px; flex-wrap: wrap; margin: 0 0 12px; }
+.faltan-resumen { margin: 0; }
+.filtro-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.filtro-chips button {
+  min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--borde); background: var(--superficie);
+  color: var(--tenue); font: inherit; font-weight: 600; cursor: pointer;
+}
+.filtro-chips button[aria-pressed="true"] { background: var(--acento-fuerte); border-color: var(--acento-fuerte); color: #fff; }
+.lista-faltan { display: flex; flex-direction: column; gap: 12px; }
+.faltan-alumno { background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); padding: 14px 16px; }
+.faltan-alumno h3 { margin: 0 0 6px; font-size: 1rem; }
+.faltan-alumno > p { margin: 0; }
+.faltan-apoderados { list-style: none; padding: 0; margin: 0; }
+.faltan-apoderado {
+  display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 120px 150px; align-items: center; gap: 12px;
+  min-height: 52px; padding: 6px 0; border-top: 1px solid var(--borde);
+}
+.faltan-apoderado:first-child { border-top: 0; }
+.faltan-nombre { min-width: 0; overflow-wrap: anywhere; }
+.faltan-accion { justify-self: end; }
+@media (max-width: 600px) {
+  .filtro-chips button { min-height: 44px; }
+  .faltan-apoderado {
+    grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "nombre parentesco" "estado accion";
+    gap: 8px 12px; min-height: 104px; padding: 10px 0;
+  }
+  .faltan-nombre { grid-area: nombre; font-weight: 600; }
+  .faltan-parentesco { grid-area: parentesco; justify-self: end; }
+  .faltan-estado { grid-area: estado; }
+  .faltan-accion { grid-area: accion; }
+}
 .activacion-reunion .qr-reunion { max-width: 200px; margin: 8px 0; }
 
 /* Ficha (padre y "ficha en papel") */
