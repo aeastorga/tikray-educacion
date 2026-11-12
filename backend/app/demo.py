@@ -20,12 +20,14 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app import autorizaciones as reglas_autorizacion
 from app import codigos, configuracion
 from app.almacenamiento import get_almacenamiento_privado
 from app.db import Base
 from app.fechas import LIMA, hoy_lima
 from app.models import (AdjuntoCuaderno, Alumno, AlumnoApoderado, AnioEscolar, Apoderado, AsistenciaAlumno,
-                        AsistenciaPersonal, Autorizacion, AutorizadoRecojo, CategoriaIncidencia, Colegio, ConfigFamilias, CuentaFamilia,
+                        AsistenciaPersonal, Autorizacion, AutorizacionRecojoDia, AutorizadoRecojo, AlumnoAutorizacion,
+                        CategoriaIncidencia, DestinoAutorizacion, Marcacion, Recojo, RespuestaAutorizacion, Colegio, ConfigFamilias, CuentaFamilia,
                         DestinoCuaderno, DestinoEvento, DiaNoLectivo, EntradaCuaderno, EventoCalendario, Grado, LicenciaPersonal, Matricula,
                         MensajeCuaderno, Nivel, PermisoRol, PlantillaComunicado, Rol, Seccion, SeccionDocente, Turno,
                         Usuario)
@@ -300,6 +302,9 @@ def sembrar(db: Session, colegio: Colegio, alumnos_por_seccion: int = 24, semill
     _pensiones(db, rnd, cid, anio, secretaria, administrador, hoy)
     # --- Calendario ---
     _calendario(db, cid, anio, secretaria, secciones, hoy)
+    # --- Recojo seguro y autorizaciones ---
+    _recojo(db, rnd, cid, secretaria, portero, secciones, alumnos, filas, dias, hoy)
+    _autorizaciones(db, rnd, cid, anio, secretaria, secciones, alumnos, hoy)
     return res
 
 
@@ -333,6 +338,177 @@ def _calendario(db: Session, cid: int, anio: AnioEscolar, autora: Usuario, secci
     evento(15, "Feria de ciencias", "otro", time(10, 0), niveles_ids=[niveles["Secundaria"]],
            anulado="Se pasa al próximo mes por obras en el patio")
     evento(22, "Aniversario del colegio", "actuacion", time(10, 0))
+
+
+PARIENTES = ["Tía", "Tío", "Abuela", "Abuelo", "Vecina", "Vecino", "Madrina", "Padrino", "Hermana mayor", "Prima"]
+
+
+def _recojo(db: Session, rnd: random.Random, cid: int, secretaria: Usuario, portero: Usuario, secciones: list,
+            alumnos: list, filas: list[dict], dias: list[date], hoy: date) -> None:
+    """Autorizados permanentes de unos 30 alumnos de inicial y primaria (con el hijo de la familia de prueba), una
+    autorización por un día para hoy y quién los recogió en las salidas de los días pasados. Sin fotos y sin avisos.
+    Cada recojo necesita su marcación de salida: se crea una por cada salida que la demo ya tiene, a la misma hora."""
+    niveles_recojo = {s.id for s, etiqueta, _ in secciones if not etiqueta.endswith("Secundaria")}
+    candidatos = [a for a, s in alumnos[1:] if s.id in niveles_recojo]
+    elegidos = [alumnos[0][0], *rnd.sample(candidatos, min(29, len(candidatos)))]
+    apoderados_de: dict[int, list[tuple[Apoderado, str]]] = {}
+    for v, ap in db.execute(select(AlumnoApoderado, Apoderado).join(
+            Apoderado, (Apoderado.colegio_id == AlumnoApoderado.colegio_id) & (Apoderado.id == AlumnoApoderado.apoderado_id))
+            .where(AlumnoApoderado.colegio_id == cid, AlumnoApoderado.alumno_id.in_([a.id for a in elegidos]))):
+        apoderados_de.setdefault(v.alumno_id, []).append((ap, v.parentesco))
+
+    n = 0
+
+    def documento() -> str:
+        nonlocal n
+        n += 1
+        return f"D{cid:03d}R{n:05d}"
+
+    autorizados: dict[int, list[AutorizadoRecojo]] = {}
+    for a in elegidos:
+        propios = apoderados_de.get(a.id, [])
+        for _ in range(rnd.randint(1, 3)):
+            de_familia = propios and rnd.random() < 0.4
+            x = AutorizadoRecojo(colegio_id=cid, alumno_id=a.id, nombres=rnd.choice(ADULTOS),
+                                 apellidos=f"{rnd.choice(APELLIDOS)} {rnd.choice(APELLIDOS)}", tipo_documento="OTRO",
+                                 numero_documento=documento(), parentesco=rnd.choice(PARIENTES),
+                                 celular=f"9{rnd.randint(10000000, 99999999)}", activo=True,
+                                 origen="familia" if de_familia else "colegio",
+                                 creado_por_apoderado_id=propios[0][0].id if de_familia else None,
+                                 creado_por_usuario_id=None if de_familia else secretaria.id)
+            db.add(x)
+            autorizados.setdefault(a.id, []).append(x)
+    hijo = alumnos[0][0]
+    if propios := apoderados_de.get(hijo.id):
+        db.add(AutorizacionRecojoDia(colegio_id=cid, alumno_id=hijo.id, apoderado_id=propios[0][0].id, fecha=hoy,
+                                     nombres=rnd.choice(ADULTOS), apellidos=f"{rnd.choice(APELLIDOS)} {rnd.choice(APELLIDOS)}",
+                                     tipo_documento="OTRO", numero_documento=documento(), parentesco="Tía"))
+    db.flush()
+
+    # Quién los recogió en los días pasados: la mayoría apoderados o autorizados; tres "fuera de la lista" el último día.
+    salidas = {(f["alumno_id"], f["fecha"]): f["salida"] for f in filas if f.get("salida")}
+    ids = {a.id for a in elegidos}
+    recojos = [(al, d, momento) for (al, d), momento in sorted(salidas.items(), key=lambda x: (x[0][1], x[0][0]))
+               if al in ids and rnd.random() < 0.6]
+    ultimo_dia = [i for i, (_, d, _) in enumerate(recojos) if d == dias[-1]]
+    fuera = set(rnd.sample(ultimo_dia, min(3, len(ultimo_dia))))
+    marcaciones, filas_recojo = [], []
+    for i, (al, d, momento) in enumerate(recojos):
+        clave = f"demo-{d}-a{al}-s"
+        marcaciones.append({"colegio_id": cid, "id_cliente": clave, "alumno_id": al, "momento": momento, "fecha": d,
+                            "origen": "qr", "equipo": "Puerta principal", "resultado": "salida",
+                            "registrado_por_id": portero.id, "recibido_en": momento})
+        fila = {"colegio_id": cid, "alumno_id": al, "fecha": d, "momento": momento, "registrado_por_id": portero.id,
+                "recibido_en": momento + timedelta(seconds=rnd.randint(5, 40)), "fuera_de_lista": False,
+                "apoderado_id": None, "autorizado_id": None, "autorizacion_dia_id": None}
+        if i in fuera:
+            fila |= {"tipo": "otro", "fuera_de_lista": True, "nombre": f"{rnd.choice(ADULTOS)} {rnd.choice(APELLIDOS)}",
+                     "tipo_documento": "OTRO", "numero_documento": documento(), "parentesco": rnd.choice(PARIENTES)}
+        elif autorizados.get(al) and (rnd.random() < 0.4 or not apoderados_de.get(al)):
+            x = rnd.choice(autorizados[al])
+            fila |= {"tipo": "autorizado", "autorizado_id": x.id, "nombre": f"{x.nombres} {x.apellidos}",
+                     "tipo_documento": x.tipo_documento, "numero_documento": x.numero_documento,
+                     "parentesco": x.parentesco}
+        else:
+            ap, parentesco = rnd.choice(apoderados_de[al])
+            fila |= {"tipo": "apoderado", "apoderado_id": ap.id, "nombre": f"{ap.nombres} {ap.apellidos}",
+                     "tipo_documento": ap.tipo_documento, "numero_documento": ap.numero_documento,
+                     "parentesco": parentesco}
+        filas_recojo.append(fila)
+    if not marcaciones:
+        return
+    ids_marcacion = dict(db.execute(insert(Marcacion).returning(Marcacion.id_cliente, Marcacion.id), marcaciones).all())
+    for fila, m in zip(filas_recojo, marcaciones):
+        fila["marcacion_id"] = ids_marcacion[m["id_cliente"]]
+    db.execute(insert(Recojo), filas_recojo)
+
+
+def _autorizaciones(db: Session, rnd: random.Random, cid: int, anio: AnioEscolar, autora: Usuario, secciones: list,
+                    alumnos: list, hoy: date) -> None:
+    """Una publicada (con respuestas variadas; el hijo de la familia de prueba sin responder), una cerrada, un
+    borrador y una anulada. Los alumnos se fijan como al publicar y responden solo los apoderados que reciben avisos
+    y tienen la cuenta activa (A6). Sin avisos."""
+    ahora = datetime.now(UTC)
+    niveles = {n.nombre: n.id for n in db.scalars(select(Nivel).where(Nivel.colegio_id == cid))}
+    seccion = {etiqueta: s.id for s, etiqueta, _ in secciones}
+    hijo = alumnos[0][0].id
+
+    def crear(titulo: str, limite: date, *, niveles_ids=(), secciones_ids=(), actividad: date | None = None,
+              descripcion: str | None = None, publicada: datetime | None = None, anulada: str | None = None
+              ) -> tuple[Autorizacion, list[int]]:
+        alcance = "niveles" if niveles_ids else "secciones" if secciones_ids else "colegio"
+        a = Autorizacion(colegio_id=cid, anio_id=anio.id, titulo=titulo, descripcion=descripcion,
+                         fecha_actividad=actividad, fecha_limite=limite, alcance=alcance, creado_por_id=autora.id,
+                         estado="borrador")
+        db.add(a)
+        db.flush()
+        db.add_all([DestinoAutorizacion(colegio_id=cid, autorizacion_id=a.id, nivel_id=n) for n in niveles_ids]
+                   + [DestinoAutorizacion(colegio_id=cid, autorizacion_id=a.id, seccion_id=s) for s in secciones_ids])
+        db.flush()
+        if publicada is None:
+            return a, []
+        alumnos_a = reglas_autorizacion.alumnos_de(db, a)  # se fijan como al publicar (sin encolar el aviso)
+        db.execute(insert(AlumnoAutorizacion), [{"colegio_id": cid, "autorizacion_id": a.id, "alumno_id": al,
+                                                 "seccion_id": sec} for al, sec in alumnos_a.items()])
+        a.estado, a.publicada_en = "publicada", publicada
+        a.recordatorio_en = publicada  # la demo no manda recordatorios
+        if anulada:
+            a.estado, a.anulado_motivo, a.anulado_por_id = "anulada", anulada, autora.id
+            a.anulado_en = publicada + timedelta(days=1)
+        return a, sorted(alumnos_a)
+
+    def responder(a: Autorizacion, alumno_ids: list[int], hasta: datetime, si: float, no: float,
+                  cambio: bool = False, sin: tuple[int, ...] = ()) -> None:
+        quienes: dict[int, list[Apoderado]] = {}
+        for v, ap in db.execute(select(AlumnoApoderado, Apoderado).join(
+                Apoderado, (Apoderado.colegio_id == AlumnoApoderado.colegio_id) & (Apoderado.id == AlumnoApoderado.apoderado_id))
+                .where(AlumnoApoderado.colegio_id == cid, AlumnoApoderado.alumno_id.in_(alumno_ids or [-1]),
+                       AlumnoApoderado.recibe_avisos, Apoderado.estado_acceso == "activo")):
+            quienes.setdefault(v.alumno_id, []).append(ap)
+        filas = []
+        for al in alumno_ids:
+            r = rnd.random()
+            if al in sin or al not in quienes or r >= si + no:
+                continue
+            ap = rnd.choice(quienes[al])
+            cuando = hora_familia(rnd, a.publicada_en, hasta)
+            if cuando is None:
+                continue
+            fila = {"colegio_id": cid, "autorizacion_id": a.id, "alumno_id": al, "apoderado_id": ap.id,
+                    "apoderado_nombre": f"{ap.nombres} {ap.apellidos}", "apoderado_documento": ap.numero_documento}
+            autoriza = r < si
+            if cambio:  # primero dijo que no y después cambió de opinión: dos filas en el historial
+                filas.append(fila | {"autoriza": False, "respondido_en": cuando,
+                                     "comentario": "Lo consulto con su papá y les confirmo"})
+                cuando, autoriza, cambio = min(cuando + timedelta(hours=rnd.randint(2, 20)), hasta), True, False
+            filas.append(fila | {"autoriza": autoriza, "respondido_en": cuando,
+                                 "comentario": None if autoriza else rnd.choice(COMENTARIOS_NO)})
+        if filas:
+            db.execute(insert(RespuestaAutorizacion), filas)
+
+    paseo, alumnos_paseo = crear(
+        "Paseo al Parque de las Leyendas", hoy + timedelta(days=5), niveles_ids=[niveles["Inicial"], niveles["Primaria"]],
+        actividad=hoy + timedelta(days=7), publicada=ahora - timedelta(days=2),
+        descripcion="Salida 8:30 y regreso 13:00.\nTraer lonchera, gorro y bloqueador. Costo: S/ 15 (se paga en tesorería).")
+    responder(paseo, alumnos_paseo, ahora, si=0.55, no=0.12, cambio=True, sin=(hijo,))
+
+    cierre = datetime.combine(hoy - timedelta(days=3), time(23, 59), LIMA).astimezone(UTC)
+    museo, alumnos_museo = crear(
+        "Visita al Museo de Historia Natural", hoy - timedelta(days=3), secciones_ids=[seccion["2° A Primaria"]],
+        actividad=hoy - timedelta(days=1), publicada=ahora - timedelta(days=10),
+        descripcion="Salida en movilidad del colegio a las 9:00. Regreso a la hora de salida.")
+    responder(museo, alumnos_museo, cierre, si=0.88, no=0.1)
+
+    crear("Uso de fotos en redes del colegio", hoy + timedelta(days=14),
+          descripcion="Fotos de actividades del colegio en la página y las redes sociales, sin nombres de los alumnos.")
+    crear("Visita a una planta potabilizadora", hoy + timedelta(days=4), secciones_ids=[seccion["5° B Primaria"]],
+          actividad=hoy + timedelta(days=6), publicada=ahora - timedelta(days=3),
+          anulada="Se suspende: la planta no recibe visitas este mes")
+    db.flush()
+
+
+COMENTARIOS_NO = ["Ese día tiene cita médica", "Prefiero que no salga del colegio", "No puede comer fuera por su dieta",
+                  "Ese día viajamos", None]
 
 
 def hora_escolar(rnd: random.Random, dia: date, ahora: datetime) -> datetime:

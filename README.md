@@ -21,7 +21,7 @@ cp .env.example .env            # y completa SECRET_KEY y DATABASE_URL
 cd frontend && npm install && npm run dev
 ```
 
-- Panel de Tikray Labs: http://plataforma.localhost:5173 (ahí se crean los colegios y su director).
+- Panel de Tikray Labs: http://plataforma.localhost:5173 (ahí se crean los colegios y su administrador).
 - Cada colegio: http://<subdominio>.localhost:5173
 
 ## En Render (pruebas)
@@ -42,7 +42,7 @@ cd backend
 TEST_DATABASE_URL=postgresql+psycopg://usuario:clave@localhost/tikray_test .venv/bin/pytest
 ```
 
-Pruebas de navegador (Playwright) de la portería y del cuaderno: levantan su propio backend (puerto 8001) y Vite (5174) contra otra base, que se borra y se siembra con datos ficticios en cada corrida (su nombre debe terminar en `e2e`):
+Pruebas de navegador (Playwright) de todos los módulos: levantan su propio backend (puerto 8001) y Vite (5174) contra otra base, que se borra y se siembra con datos ficticios en cada corrida (su nombre debe terminar en `e2e`):
 
 ```bash
 cd frontend
@@ -79,7 +79,7 @@ E2E_DATABASE_URL=postgresql+psycopg://usuario:clave@localhost/tikray_e2e npm run
 
 - **Portería** (`/panel/asistencia/porteria`): lee el carnet con la cámara del celular (QR) o con un lector USB, y permite marcar sin carnet buscando por nombre. Funciona sin internet: guarda el padrón (código, nombre, sección y turno; sin DNI) y las marcaciones en el celular, decide al instante entrada, salida, tardanza o doble marcación, y envía lo pendiente cuando vuelve la conexión.
 - **Receptor único** `POST /api/asistencia/marcaciones` (lotes de hasta 500): portería, marcación manual y, en la fase 2, los equipos de huella o facial. Cada marcación trae un `id_cliente` generado en el dispositivo: un reenvío no la duplica. Solo guarda y responde (unos 10 ms en local; hay una prueba que exige menos de 300 ms) y deja el aviso a la familia en `cola_aviso`, que se envía en segundo plano (paso 3).
-- **Reglas**: tardanza según la hora de entrada y tolerancia del turno de la sección (o del turno asignado a cada persona del personal); doble marcación dentro de N minutos (10 por defecto); falta automática N minutos después de la hora de entrada (90 por defecto), solo en días lectivos. El director cambia ambos valores en Asistencia → Reglas.
+- **Reglas**: tardanza según la hora de entrada y tolerancia del turno de la sección (o del turno asignado a cada persona del personal); doble marcación dentro de N minutos (10 por defecto); falta automática N minutos después de la hora de entrada (90 por defecto), solo en días lectivos. El administrador cambia ambos valores en Asistencia → Reglas.
 - **Personal**: carnet con QR propio (`TK1P:XXXXXXXX`), turno, licencias (la licencia reemplaza la falta, también si se registra después).
 - **Reportes**: resumen del día por sección y detalle por alumno; personal del día; registro mensual en Excel (una hoja por sección) para alumnos y para el personal.
 
@@ -92,7 +92,7 @@ Las faltas automáticas las marca un hilo del servidor cada minuto (`TAREAS_EN_F
 ## Familias y avisos (paso 3)
 
 - **Cuentas de padres** (`/panel/familias`, módulo "Cuentas de padres"): el colegio genera un enlace personal de un solo uso y lo envía con el botón de WhatsApp (`wa.me` con el mensaje prellenado, desde el WhatsApp del propio colegio). El enlace vence en 7 días, se bloquea tras 5 intentos y se anula si se genera otro, si cambia el celular del apoderado o si se le bloquea. Solo se guarda su hash.
-- **Activación** (`/familia/activar#…`): el padre escribe el DNI de su hijo y el suyo, acepta el consentimiento (Ley 29733; se guarda la versión, la fecha y la IP) y crea un PIN de 6 números. Si ya tiene cuenta por otro colegio, escribe su PIN de siempre: la cuenta es una por DNI y une a sus hijos de todos los colegios. El director elige si la activación es automática o si cada cuenta espera su aprobación.
+- **Activación** (`/familia/activar#…`): el padre escribe el DNI de su hijo y el suyo, acepta el consentimiento (Ley 29733; se guarda la versión, la fecha y la IP) y crea un PIN de 6 números. Si ya tiene cuenta por otro colegio, escribe su PIN de siempre: la cuenta es una por DNI y une a sus hijos de todos los colegios. El administrador elige si la activación es automática o si cada cuenta espera su aprobación.
 - **Ingreso**: DNI + PIN, o huella o rostro del celular (passkey, atada al dominio del colegio; cada reto sirve una sola vez). Desde el panel se puede bloquear, desbloquear, cerrar sus sesiones o enviarle un enlace para crear un PIN nuevo.
 - **Bloqueo del PIN**: tras 10 PIN fallidos seguidos en un documento (en cualquier colegio), el ingreso con PIN queda bloqueado 24 horas; con huella sí puede entrar. Se guarda en la base y se le avisa por push. Un PIN correcto reinicia la cuenta y un enlace de PIN nuevo quita el bloqueo.
 - **PIN nuevo con el enlace de un colegio**: cierra sus sesiones en todos los colegios y, en los otros donde estaba activo, su acceso queda pendiente (con registro en "Cambios de datos") hasta que ese colegio lo apruebe o el padre use un enlace de ese colegio. Se le avisa por push en todos sus celulares.
@@ -137,15 +137,15 @@ Para la reunión de padres: el padre actualiza sus datos y da su consentimiento 
 
 ## Cierre del MVP (paso 5)
 
-- **Panel del director** (`/panel`, Inicio): asistencia de hoy (porcentaje, puntuales, tardanzas, faltas, justificadas, sin marcar), los últimos 10 días de clase, secciones con más faltas, personal; cuaderno (por aprobar, hilos con respuesta de la familia, firmas de los últimos comunicados y citaciones); familias (cuentas activas, con notificaciones, avisos de hoy y en cola). Cada bloque sale solo con permiso de ver ese módulo; se refresca cada minuto. `GET /api/panel/resumen`.
-- **Demo con datos ficticios** que se reinicia: 25 secciones (inicial, primaria, secundaria; mañana y tarde), alumnos, apoderados (60 % con cuenta), docentes por sección, 10 días de asistencia, licencias y cuaderno. Documentos ficticios (`D…`), nunca DNI reales. Solo funciona sobre un colegio marcado `es_demo`: nunca borra uno real.
+- **Panel del administrador** (`/panel`, Inicio): asistencia de hoy (porcentaje, puntuales, tardanzas, faltas, justificadas, sin marcar), los últimos 10 días de clase, secciones con más faltas, personal; cuaderno (por aprobar, hilos con respuesta de la familia, firmas de los últimos comunicados y citaciones); familias (cuentas activas, con notificaciones, avisos de hoy y en cola). Cada bloque sale solo con permiso de ver ese módulo; se refresca cada minuto. `GET /api/panel/resumen`.
+- **Demo con datos ficticios** que se reinicia: 25 secciones (inicial, primaria, secundaria; mañana y tarde), alumnos, apoderados (60 % con cuenta), docentes por sección, 10 días de asistencia, licencias y cuaderno, y datos de pensiones, calendario, recojo y autorizaciones. Documentos ficticios (`D…`), nunca DNI reales. Solo funciona sobre un colegio marcado `es_demo`: nunca borra uno real.
 
   ```bash
   .venv/bin/python -m app.cli demo demo                          # crea o reinicia demo.<dominio>
   .venv/bin/python -m app.cli demo demo --alumnos-por-seccion 40 # 1000 alumnos
   ```
 
-  También desde el panel de Tikray Labs: "Crear colegio demo" y "Reiniciar demo" en cada colegio demo. Claves: personal `Demo2026Tikray` (director 90000001, portería 90000004), familia PIN `135790`.
+  También desde el panel de Tikray Labs: "Crear colegio demo" y "Reiniciar demo" en cada colegio demo. Claves: personal `Demo2026Tikray` (administrador 90000001, portería 90000004), familia PIN `135790`.
 - **Prueba de carga**: 1000 marcaciones en 10 minutos desde 4 porterías, una petición por lectura, contra el colegio demo. Falla (código 1) si hay errores o el p95 pasa de 300 ms.
 
   ```bash
@@ -154,3 +154,53 @@ Para la reunión de padres: el padre actualiza sus datos y da su consentimiento 
   ```
 
   Resultado en local (WSL2, PostgreSQL 16, un solo proceso uvicorn), 3 de noviembre de 2026, colegio demo con 1000 alumnos: 1000 marcaciones en 599 s desde 4 porterías, **p50 21 ms · p95 34 ms · p99 37 ms · máximo 70 ms**, 0 errores. Los 1549 avisos que generaron salieron de la cola en segundo plano (ninguno quedó pendiente). Sin esperas (`--rapido`), unas 95 marcaciones por segundo con p95 de 51 ms.
+
+## Administrador y límite de usuarios
+
+- El usuario principal de cada colegio es el **administrador** (rol marcado `es_administrador`; antes se llamaba "Director"). Lo crea Tikray Labs al crear el colegio.
+- Tiene todos los permisos. Su rol no se modifica ni se borra, y solo otro administrador da o quita ese rol (también en la carga de Excel).
+- Solo él ve y cambia la configuración de comprobantes SUNAT y ve el historial de actividad.
+- **Límite de usuarios** (`colegio.max_usuarios`, vacío = sin límite): lo fija solo Tikray Labs según el plan. Cuentan los usuarios del personal activos, incluido el administrador; los padres no.
+- Un usuario desactivado libera su cupo. Si el límite baja por debajo de los activos, no se desactiva a nadie: solo no se pueden agregar más (409) hasta bajar.
+
+## Pensiones y caja
+
+- **Pensiones** (`/panel/pensiones`): conceptos (matrícula, pensión, otro), montos, cronograma, generación de cuotas por alumno, descuentos y becas, retiro y reporte de morosidad. Mora opcional (fija o porcentaje, con tope).
+- **Caja** (`/panel/caja`): la caja del día de cada cajero, cobros con recibo interno (efectivo, Yape, Plin, transferencia o tarjeta), cierre, gastos y reportes de ingresos y gastos.
+- Módulos contratables aparte (`pensiones` y `caja`): apagados en colegios nuevos y encendidos en la demo. Con el módulo apagado todo responde 403.
+- **Dinero**: montos en `Numeric(10, 2)`, nunca float. Nada se borra: pagos, cuotas, descuentos y gastos solo se anulan con motivo. El saldo de una cuota nunca queda negativo. Anular un pago de caja cerrada o un gasto de un día anterior pide ser administrador o un rol con "puede anular".
+- **Familia**: el apoderado responsable de pago ve las cuotas de cada hijo, los pagos y su recibo. Recibe un aviso de cobro N días antes del vencimiento (3 por defecto) y el día que vence, por la cola. Sin pago en línea.
+- La deuda nunca bloquea nada fuera de este módulo (asistencia, avisos, cuaderno, acceso de la familia).
+
+## Comprobantes SUNAT
+
+- Boleta o factura electrónica de los pagos de caja, lista para conectar a un proveedor. Sin proveedor (`FacturadorNinguno`, por defecto) el colegio sigue solo con el recibo interno, que se entrega siempre.
+- La configuración la editan solo el administrador y Tikray Labs. El token del proveedor se guarda cifrado (`FACTURACION_CLAVE`) y nunca vuelve al navegador ni al historial.
+- El cobro crea el comprobante en "pendiente" y responde sin esperar al proveedor: se emite en segundo plano desde `cola_comprobante`. Si el proveedor falla, se reintenta hasta 5 veces y después queda en "Comprobantes con error" con el botón "Reintentar".
+- Número correlativo por serie y colegio, sin saltos. Nada se borra: anular el pago encola la anulación del comprobante ante el proveedor.
+
+## Recojo seguro
+
+- Quién puede recoger a cada alumno: sus apoderados (siempre), hasta 5 **autorizados permanentes** activos y los **autorizados del día** que da el apoderado para una fecha (vencen solos).
+- El colegio (permiso `recojo`) y la familia arman la lista; lo que agrega el apoderado entra activo de inmediato. Nada se borra: un autorizado se desactiva.
+- **Portería**: al marcar la salida muestra quién puede recogerlo hoy (documento con los últimos 4 dígitos) y registra quién se lo llevó. Nunca bloquea la salida: si no está en la lista, queda como "fuera de la lista", que Asistencia puede filtrar. No manda un segundo aviso.
+- El recojo guarda una copia del nombre y documento: el reporte no cambia si después se edita al autorizado.
+- Módulo contratable aparte (`recojo`): apagado en colegios nuevos y encendido en la demo. Ley 29733: el documento y la foto de quien recoge se usan solo para esto.
+
+## Calendario escolar
+
+- Eventos por año escolar (actuación, reunión de padres, examen, feriado, salida, otro) para todo el colegio, uno o varios niveles o una o varias secciones. Vista de mes y PDF del mes.
+- Los días sin clases siguen en Estructura (`dia_no_lectivo`); el calendario solo los muestra.
+- Un evento no se borra: se anula con motivo y queda visible como anulado.
+- La familia ve solo los eventos que tocan a sus hijos y los días sin clases.
+- Si se marca "avisar a las familias", sale un aviso al publicar y un recordatorio el día anterior, por la cola (respetan el horario sin molestar y se apagan en Configuración › Avisos).
+- Módulo contratable aparte (`calendario`): apagado en colegios nuevos y encendido en la demo.
+
+## Autorizaciones
+
+- El colegio pide permiso para un paseo, el uso de fotos o una actividad, a todo el colegio, niveles, secciones o alumnos sueltos. Estados: borrador, publicada, cerrada y anulada; nada se borra.
+- La familia, en su pestaña "Autorizaciones" (pendientes arriba), responde "Autorizo" o "No autorizo" por cada hijo, con un comentario opcional. Basta un apoderado y vale la última respuesta; se puede cambiar hasta la fecha límite. Después ya no se responde y "sin respuesta" no cuenta como autorizado.
+- Responde solo el apoderado que recibe los avisos de ese hijo y tiene la cuenta activa. Cada respuesta queda con fecha, hora y quién respondió (Ley 29733).
+- Seguimiento con cifras, lista por sección, "Recordar a los que faltan" y lista en PDF y Excel. Un docente con "solo sus secciones" solo ve y crea para sus secciones.
+- Avisos por la cola al publicar y el día antes de la fecha límite solo a los que faltan (respetan el horario sin molestar y se apagan en Configuración › Avisos).
+- Módulo contratable aparte (`autorizaciones`): apagado en colegios nuevos y encendido en la demo.
