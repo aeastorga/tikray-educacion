@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // En local cada colegio entra por <subdominio>.localhost:5173 y el panel de
-// Tikray Labs por plataforma.localhost:5173. El proxy conserva el Host para
+// Aulio (Tikray Labs) por plataforma.localhost:5173. El proxy conserva el Host para
 // que el backend sepa de qué colegio es cada petición.
 const backend = { target: process.env.BACKEND_URL || 'http://127.0.0.1:8000', changeOrigin: false }
 
@@ -13,13 +13,14 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'Tikray Educación',
-        short_name: 'Colegio',
+        name: 'Aulio',
+        description: 'Aulio by Tikray Labs: asistencia, avisos a la familia y cuaderno de control del colegio.',
+        short_name: 'Aulio',
         lang: 'es-PE',
         display: 'standalone',
         start_url: '/',
         background_color: '#ffffff',
-        theme_color: '#1F4E79',
+        theme_color: '#3B32C8',
         // PNG: el iPhone y las notificaciones de Android no usan SVG. Maskable: con margen para el recorte del sistema.
         icons: [
           { src: '/icono-192.png', sizes: '192x192', type: 'image/png' },

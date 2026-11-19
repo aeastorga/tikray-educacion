@@ -1,7 +1,8 @@
 // Color de acento del colegio: el principal que eligió el administrador. Para botones y fondos con texto
 // blanco se oscurece hasta llegar a contraste 4.5:1 (WCAG AA); la versión suave es el mismo color al 9 %.
 
-const POR_DEFECTO = '#1F4E79'
+// Índigo Aulio: el color de un colegio que aún no eligió el suyo.
+const POR_DEFECTO = '#3B32C8'
 
 function rgb(hex) {
   const h = /^#[0-9a-f]{6}$/i.test(hex || '') ? hex.slice(1) : POR_DEFECTO.slice(1)
@@ -80,7 +81,7 @@ export function esOscuro(tema = temaGuardado()) {
 }
 
 function pintarBarra() {
-  const acento = document.documentElement.style.getPropertyValue('--acento-fuerte') || '#1F4E79'
+  const acento = document.documentElement.style.getPropertyValue('--acento-fuerte') || POR_DEFECTO
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', esOscuro() ? FONDO_OSCURO : acento)
 }
 

@@ -1,4 +1,4 @@
-# Tikray Educación en Render, para pruebas: un servicio web (backend + PWA compilada) y PostgreSQL.
+# Aulio (by Tikray Labs) en Render, para pruebas: un servicio web (backend + PWA compilada) y PostgreSQL.
 # Se crea desde el panel de Render: New → Blueprint → este repositorio.
 #
 # Plan: gratis. Para que el servidor no se suspenda (los avisos y las faltas automáticas corren

@@ -1,4 +1,5 @@
 export { default as Cifras } from './Cifras.jsx'
+export { FirmaAulio, Logotipo, Simbolo } from './Marca.jsx'
 export { default as CampoArchivo } from './CampoArchivo.jsx'
 export { ProveedorDialogos, useConfirmar, Ventana } from './Dialogo.jsx'
 export { default as Encabezado } from './Encabezado.jsx'

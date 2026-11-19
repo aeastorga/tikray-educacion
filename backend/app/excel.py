@@ -10,7 +10,7 @@ from openpyxl.styles import Font, PatternFill
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
-def tabla(titulo: str, encabezados: list[str], filas: list[list], nombre: str, color: str = "1F4E79",
+def tabla(titulo: str, encabezados: list[str], filas: list[list], nombre: str, color: str = "3B32C8",
           soles: tuple[int, ...] = ()) -> Response:
     """Título en la fila 1, encabezados en la 2 y las filas debajo. `soles`: índices de columnas con montos
     (se guardan como número con dos decimales, no como texto)."""

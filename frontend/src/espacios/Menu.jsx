@@ -9,6 +9,7 @@ import { api } from '../api.js'
 import { iniciales } from '../tema.js'
 import { Apariencia } from '../Apariencia.jsx'
 import { Logo } from './Acceso.jsx'
+import { FirmaAulio } from './comun/Marca.jsx'
 import './menu.css'
 
 export default function Menu({ colegio, yo, puede, salir }) {
@@ -114,7 +115,7 @@ export default function Menu({ colegio, yo, puede, salir }) {
             </button>
           </div>
           <Apariencia />
-          <small className="menu-tikray">Plataforma de Tikray Labs</small>
+          <small className="menu-tikray"><FirmaAulio /></small>
         </div>
       </aside>
     </>

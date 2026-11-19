@@ -503,7 +503,7 @@ def plantilla(secciones: list[tuple[str, str, str]], roles: list[str]) -> bytes:
     """Plantilla con las dos hojas, y como referencia las secciones y roles que ya existen."""
     libro = Workbook()
     negrita = Font(bold=True, color="FFFFFF")
-    fondo = PatternFill("solid", fgColor="1F4E79")
+    fondo = PatternFill("solid", fgColor="3B32C8")
 
     def hoja(titulo: str, encabezados: list[str], ws=None):
         ws = ws or libro.create_sheet(titulo)

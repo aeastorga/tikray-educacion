@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, guardarToken, leerToken } from '../api.js'
 import { School } from 'lucide-react'
-import { Encabezado, Insignia, Mensaje, MenuAcciones, Tabla, Ventana, plural, useConfirmar } from './comun/index.js'
+import { Encabezado, Insignia, Logotipo, Simbolo, Mensaje, MenuAcciones, Tabla, Ventana, plural, useConfirmar } from './comun/index.js'
 import { CamposPerfil, FormFacturacion } from './Configuracion.jsx'
 import './configuracion.css'
 
@@ -10,7 +10,7 @@ import './configuracion.css'
 export default function Plataforma() {
   const [sesion, setSesion] = useState(Boolean(leerToken()))
   useEffect(() => {
-    document.title = 'Tikray Labs · Plataforma'
+    document.title = 'Aulio · Plataforma de Tikray Labs'
     const cerrar = () => setSesion(false)
     window.addEventListener('sesion-cerrada', cerrar)
     return () => window.removeEventListener('sesion-cerrada', cerrar)
@@ -35,7 +35,7 @@ function Ingreso({ entrar }) {
   return (
     <main className="centro">
       <form className="tarjeta" onSubmit={enviar}>
-        <h1>Tikray Labs</h1>
+        <h1 className="plataforma-marca"><Simbolo /><Logotipo /><span className="solo-lectores"> · </span><small>Plataforma de Tikray Labs</small></h1>
         <label>Correo<input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} autoComplete="username" required /></label>
         <label>Clave<input type="password" value={clave} onChange={(e) => setClave(e.target.value)} autoComplete="current-password" required /></label>
         {error && <Mensaje tipo="error">{error}</Mensaje>}
@@ -113,7 +113,7 @@ function Colegios({ salir }) {
   return (
     <div className="panel">
       <header className="cabecera">
-        <h1>Tikray Labs · Colegios</h1>
+        <h1 className="plataforma-marca"><Simbolo /><Logotipo /><span className="solo-lectores"> · </span><small>Colegios</small></h1>
         <div className="usuario"><button className="enlace" onClick={salir}>Salir</button></div>
       </header>
       <main className="contenido">

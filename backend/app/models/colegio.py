@@ -41,8 +41,8 @@ class Colegio(Base):
     dominio_propio: Mapped[str | None] = mapped_column(String(253), unique=True)
     # Clave del archivo en el almacenamiento (no la URL, que depende del proveedor).
     logo_clave: Mapped[str | None] = mapped_column(String(300))
-    color_primario: Mapped[str] = mapped_column(String(7), default="#1F4E79")
-    color_secundario: Mapped[str] = mapped_column(String(7), default="#F2A900")
+    color_primario: Mapped[str] = mapped_column(String(7), default="#3B32C8")  # Índigo Aulio
+    color_secundario: Mapped[str] = mapped_column(String(7), default="#FF6A4D")  # Coral aviso
     # Menú lateral del panel: oscuro (por defecto) o claro. Lo elige el administrador.
     menu_claro: Mapped[bool] = mapped_column(default=False, server_default="false")
     estado: Mapped[str] = mapped_column(String(12), default="activo")
