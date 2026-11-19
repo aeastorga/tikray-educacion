@@ -1,0 +1,14 @@
+/* Marca Aulio: colores fijos de la marca (no cambian con el color del colegio). */
+.aulio-logotipo { display: block; height: 1em; width: auto; overflow: visible; }
+.aulio-punto { fill: #FF6A4D; }
+.aulio-simbolo { display: block; width: 1em; height: 1em; }
+.aulio-firma { display: inline-flex; align-items: baseline; gap: .4em; white-space: nowrap; }
+.aulio-firma .aulio-logotipo { height: 1.05em; transform: translateY(.14em); }
+.aulio-firma > span { font-weight: 600; }
+
+/* Cabecera del panel de Tikray Labs: símbolo + logotipo + qué panel es. */
+.plataforma-marca { display: flex; align-items: center; gap: 10px; margin: 0; color: var(--texto); }
+.plataforma-marca .aulio-simbolo { width: 32px; height: 32px; }
+.plataforma-marca .aulio-logotipo { height: 26px; }
+.plataforma-marca small { font-family: var(--letra); font-weight: 600; font-size: .85rem; color: var(--tenue); padding-left: 10px; border-left: 1px solid var(--borde-fuerte); }
+.tarjeta > .plataforma-marca { margin-bottom: 8px; flex-wrap: wrap; }

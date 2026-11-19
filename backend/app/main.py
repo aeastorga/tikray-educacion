@@ -37,7 +37,7 @@ def crear_app() -> FastAPI:
         yield
         parar.set()
 
-    app = FastAPI(title="Tikray Educación", lifespan=ciclo)
+    app = FastAPI(title="Aulio", lifespan=ciclo)
 
     # /api: todo lo del colegio del Host. Tres niveles de acceso, cada uno
     # aplicado al router entero para que ninguna ruta nueva se lo salte.

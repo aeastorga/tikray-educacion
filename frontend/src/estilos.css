@@ -1,14 +1,14 @@
 /* Base de toda la app. El acento lo pone tema.js con el color del colegio. */
 :root {
-  --acento: #1F4E79;
-  --acento-fuerte: #1F4E79;
-  --acento-suave: rgba(31, 78, 121, 0.09);
-  --acento-medio: rgba(31, 78, 121, 0.18);
-  --acento-luz: #8FB4DA; /* versión clara del acento para texto sobre fondo oscuro (tema oscuro) */
+  --acento: #3B32C8;       /* Índigo Aulio (docs/marca.md) hasta que llegue el color del colegio */
+  --acento-fuerte: #3B32C8;
+  --acento-suave: rgba(59, 50, 200, 0.09);
+  --acento-medio: rgba(59, 50, 200, 0.18);
+  --acento-luz: #928DE0; /* versión clara del acento para texto sobre fondo oscuro (tema oscuro) */
   --acento-texto: var(--acento-fuerte);   /* texto y enlaces en el color del colegio */
   --acento-grafico: var(--acento-fuerte); /* anillo y barras: 3:1 o más contra la tarjeta */
   --primario: var(--acento-fuerte);
-  --secundario: #F2A900;
+  --secundario: #FF6A4D;
 
   --fondo: #F3F5F9;
   --superficie: #FFFFFF;

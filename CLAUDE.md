@@ -1,10 +1,12 @@
-# Tikray Labs · Sistema para colegios
+# Aulio by Tikray Labs · Sistema para colegios
 
 Contexto para trabajar en local con Claude Code. La fuente completa está en:
 - Propuesta de módulos: https://claude.ai/artifact/DsbSwbZptatzPUsgXTzT5m
 - Plan técnico del MVP: https://claude.ai/artifact/HBcrFpgHt5ETD1FxRmwtdi
 
 ## Qué es
+La marca del producto es **Aulio** ("Aulio by Tikray Labs"); guía en `docs/marca.md`. Dentro del sistema el logo y color del colegio van primero; Aulio solo firma el pie y el panel de Tikray Labs.
+
 Plataforma multi-colegio (particulares y estatales) de Tikray Labs. Eje: que el padre sepa qué pasa con su hijo sin preguntar (asistencia, avisos, cuaderno de control digital). Precio: S/ 2 por alumno al mes + pago inicial por equipos, instalación y capacitación.
 
 ## Reglas que no se rompen

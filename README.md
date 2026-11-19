@@ -1,8 +1,10 @@
-# Tikray Educación
+# Aulio
 
-Plataforma multi-colegio de Tikray Labs: asistencia de alumnos y personal, avisos a padres, cuaderno de control digital y gestión del colegio.
+<img src="frontend/public/marca/aulio-horizontal.svg" alt="Aulio" height="56">
 
-Ver `CLAUDE.md` para las decisiones de diseño y el orden de construcción del MVP.
+**Aulio by Tikray Labs.** Plataforma multi-colegio: asistencia de alumnos y personal, avisos a padres, cuaderno de control digital y gestión del colegio.
+
+Ver `CLAUDE.md` para las decisiones de diseño y `docs/marca.md` para la identidad visual (logo, colores, tipografía) y el orden de construcción del MVP.
 
 ## En local
 
@@ -21,7 +23,7 @@ cp .env.example .env            # y completa SECRET_KEY y DATABASE_URL
 cd frontend && npm install && npm run dev
 ```
 
-- Panel de Tikray Labs: http://plataforma.localhost:5173 (ahí se crean los colegios y su administrador).
+- Panel de Tikray Labs (Aulio): http://plataforma.localhost:5173 (ahí se crean los colegios y su administrador).
 - Cada colegio: http://<subdominio>.localhost:5173
 
 ## En Render (pruebas)

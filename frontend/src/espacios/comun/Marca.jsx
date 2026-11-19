@@ -1,0 +1,44 @@
+// Marca Aulio (by Tikray Labs). Logotipo en trazos (Bricolage Grotesque 800) y símbolo: la "a" de aula con
+// el punto coral de aviso. Guía completa: docs/marca.md. El color del texto sigue a currentColor.
+import './marca.css'
+
+const LETRAS = [
+  [0, 'M186 -14Q142 -14 108.0 3.5Q74 21 55.0 54.5Q36 88 36 136Q36 181 53.5 210.5Q71 240 104.5 257.5Q138 275 185.0 286.5Q232 298 292 307Q321 312 340.5 316.5Q360 321 370.0 331.0Q380 341 380 360Q380 385 362.0 403.0Q344 421 304 421Q276 421 253.5 411.0Q231 401 215.0 382.0Q199 363 191 336L49 378Q62 420 85.5 451.0Q109 482 142.0 502.5Q175 523 217.5 532.5Q260 542 308 542Q388 542 438.5 516.5Q489 491 513.5 437.5Q538 384 538 300V219Q538 183 539.5 146.5Q541 110 543.5 73.5Q546 37 550 0H408Q404 23 400.0 55.5Q396 88 394 122H375Q361 84 334.5 52.5Q308 21 270.5 3.5Q233 -14 186 -14Z M259 100Q277 100 295.5 106.5Q314 113 331.0 124.5Q348 136 362.0 153.0Q376 170 383 190L381 269L403 264Q384 252 361.0 245.0Q338 238 314.5 234.0Q291 230 268.5 225.5Q246 221 228.5 214.0Q211 207 201.0 195.0Q191 183 191 162Q191 134 210.0 117.0Q229 100 259 100Z'],
+  [595, 'M243 -14Q149 -14 101.5 49.5Q54 113 54 243V528H216V264Q216 190 238.0 153.5Q260 117 305 117Q332 117 351.5 130.5Q371 144 384.5 168.5Q398 193 404.5 225.0Q411 257 411 295V528H572V214V0H444L441 163H421Q406 101 383.5 61.5Q361 22 327.0 4.0Q293 -14 243 -14Z'],
+  [1229, 'M62 0V720H220V0Z'],
+  [1512, 'M62 0V528H223V0Z'],
+  [1798, 'M305 -14Q225 -14 163.5 17.0Q102 48 67.0 110.0Q32 172 32 265Q32 358 67.0 419.5Q102 481 164.0 511.5Q226 542 306 542Q386 542 448.0 511.0Q510 480 545.0 418.5Q580 357 580 264Q580 169 544.0 107.0Q508 45 445.5 15.5Q383 -14 305 -14Z M310 103Q346 103 370.0 119.5Q394 136 406.0 170.0Q418 204 418 254Q418 307 405.0 343.5Q392 380 366.5 399.5Q341 419 301 419Q267 419 242.5 402.5Q218 386 206.0 352.0Q194 318 194 267Q194 185 224.5 144.0Q255 103 310 103Z'],
+]
+
+export function Logotipo({ className = '', titulo = 'Aulio' }) {
+  return (
+    <svg className={`aulio-logotipo ${className}`} viewBox="-20 -800 2450 840" role="img" aria-label={titulo}>
+      <g transform="scale(1 -1)" fill="currentColor">
+        {LETRAS.map(([x, d]) => <path key={x} transform={`translate(${x} 0)`} d={d} />)}
+      </g>
+      <circle cx="1655.5" cy="-686.0" r="92" className="aulio-punto" />
+    </svg>
+  )
+}
+
+export function Simbolo({ className = '' }) {
+  return (
+    <svg className={`aulio-simbolo ${className}`} viewBox="0 0 64 64" aria-hidden="true">
+      <rect width="64" height="64" rx="16" fill="#3B32C8" />
+      <circle cx="28" cy="37" r="11" fill="none" stroke="#fff" strokeWidth="7.5" />
+      <rect x="35.5" y="24" width="7.5" height="24.5" rx="3.75" fill="#fff" />
+      <circle cx="47" cy="16" r="8.5" fill="#3B32C8" />
+      <circle cx="47" cy="16" r="5.5" fill="#FF6A4D" />
+    </svg>
+  )
+}
+
+// Firma del pie: "aulio by Tikray Labs". Discreta: dentro del sistema el colegio va primero.
+export function FirmaAulio({ className = '' }) {
+  return (
+    <span className={`aulio-firma ${className}`}>
+      <Logotipo titulo="Aulio" />
+      <span>by Tikray Labs</span>
+    </span>
+  )
+}

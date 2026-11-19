@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { iniciales } from '../tema.js'
+import { FirmaAulio } from './comun/Marca.jsx'
 import './acceso.css'
 
 // Logo del colegio o sus iniciales en un cuadro.
@@ -25,7 +26,7 @@ export default function Acceso({ colegio, children }) {
       <main className="acceso-panel">
         <div className="acceso-contenido">{children}</div>
         <footer className="acceso-pie">
-          <span>Plataforma de Tikray Labs</span>
+          <FirmaAulio />
           <Link to="/privacidad">Privacidad y datos personales</Link>
           <Link to="/ayuda">Ayuda</Link>
         </footer>
